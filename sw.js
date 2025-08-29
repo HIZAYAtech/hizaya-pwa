@@ -1,4 +1,4 @@
-const CACHE = "hizaya-cache-v3"; // <-- bump ici
+const CACHE = "hizaya-cache-v4"; // bump si tu modifies
 const ASSETS = ["./","./index.html","./app.js","./manifest.json"];
 
 self.addEventListener("install", (e) => {
