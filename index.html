@@ -6,11 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0ea5e9" />
     <link rel="manifest" href="manifest.json" />
-    <!-- Icônes PWA (optionnelles mais recommandées) -->
     <link rel="icon" href="favicon.ico">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
 
-    <!-- Tailwind CDN (pour le style) -->
+    <!-- Tailwind (style) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -88,17 +87,14 @@
       </section>
     </main>
 
-    <!-- Paho MQTT: DOIT être avant app.js -->
+    <!-- ⚠️ Charger Paho AVANT app.js -->
     <script src="https://unpkg.com/paho-mqtt@1.1.0/paho-mqtt-min.js"></script>
     <!-- Ton app -->
     <script defer src="app.js"></script>
 
     <script>
-      // PWA: Service Worker
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('sw.js').catch(()=>{});
-        });
+        window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(()=>{}); });
       }
     </script>
   </body>
