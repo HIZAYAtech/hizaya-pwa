@@ -1,7 +1,7 @@
-/* HIZAYA PWA – sans build (Tailwind + Paho via CDN)
+/* HIZAYA PWA – no-build
    - Login mock
-   - MQTT (WSS) Paho
-   - Masters/Slaves : add/rename/delete, scan, pair, led, rename slave
+   - MQTT via Paho (WSS broker.hivemq.com)
+   - Masters/Slaves: add/rename/delete, scan, pair, led, rename slave
    - Persistance localStorage
 */
 
@@ -25,16 +25,19 @@
     broker: load(LS_KEYS.broker) || defaultBroker,
     client: null,
     connected: false,
-    // subscriptions par masterId: { evt: boolean, state: boolean }
     subs: {},
   };
 
   function log(...a){ if(elLog){ elLog.textContent += a.join(" ") + "\n"; elLog.scrollTop = elLog.scrollHeight; } console.log(...a); }
-  function save(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
-  function load(key){ try{ return JSON.parse(localStorage.getItem(key) || "null"); }catch{ return null; } }
-
+  function save(k,v){ localStorage.setItem(k, JSON.stringify(v)); }
+  function load(k){ try{ return JSON.parse(localStorage.getItem(k) || "null"); }catch{ return null; } }
   function id(str){ return (str||"").trim().toUpperCase(); }
-  function short(s){ return (s||"").slice(0,6) + (s && s.length>6 ? "…" : ""); }
+
+  function ensurePaho(){
+    if (window.Paho && window.Paho.MQTT && window.Paho.MQTT.Client) return true;
+    alert("Bibliothèque MQTT (Paho) introuvable. Vérifie la balise <script> paho-mqtt-min.js dans index.html.");
+    return false;
+  }
 
   /* ---------- UI routing ---------- */
   function showMain(){
@@ -51,7 +54,7 @@
     $("#btnLogout").classList.add("hidden");
   }
 
-  /* ---------- Login mock ---------- */
+  /* ---------- Auth (mock) ---------- */
   function initAuth(){
     const savedUser = load(LS_KEYS.user);
     if(savedUser){ state.user = savedUser; showMain(); }
@@ -65,43 +68,36 @@
     $("#btnLogout").onclick = ()=>{
       state.user = null;
       save(LS_KEYS.user, null);
-      // Sécurité: on coupe aussi MQTT (comme décidé)
-      disconnectMQTT();
+      disconnectMQTT(); // sécurité
       showLogin();
     };
   }
 
-  /* ---------- Masters data ---------- */
+  /* ---------- Masters ---------- */
   function initMasters(){
     state.masters = load(LS_KEYS.masters) || [];
     renderMasters();
   }
-
-  function persistMasters(){
-    save(LS_KEYS.masters, state.masters);
-  }
+  function persistMasters(){ save(LS_KEYS.masters, state.masters); }
 
   function addMaster(){
     const mid = id($("#mid").value);
-    if(!mid || mid.length!==12){ alert("Master ID attendu (12 hex sans :)"); return; }
+    if(!mid || mid.length!==12){ alert("MASTER_ID attendu (12 hex sans :)"); return; }
     const name = $("#mname").value.trim() || "Master";
     if(state.masters.some(m=>m.id===mid)){ alert("Ce Master existe déjà"); return; }
     state.masters.unshift({ id: mid, name, online: false, slaves: [], discovered: [] });
     persistMasters();
     renderMasters();
     $("#mid").value=""; $("#mname").value="";
-    // si MQTT connecté, s'abonner direct
     if(state.connected) subscribeMaster(mid);
   }
-
   function removeMaster(mid){
-    if(!confirm("Supprimer ce Master de la liste ?")) return;
+    if(!confirm("Supprimer ce Master ?")) return;
     state.masters = state.masters.filter(m=>m.id!==mid);
     persistMasters();
     renderMasters();
     if(state.connected) unsubscribeMaster(mid);
   }
-
   function updateMaster(mid, patch){
     const i = state.masters.findIndex(m=>m.id===mid);
     if(i<0) return;
@@ -109,14 +105,12 @@
     persistMasters();
     renderMasters();
   }
-
-  function renameMaster(mid, name){
-    updateMaster(mid, { name });
-  }
+  function renameMaster(mid, name){ updateMaster(mid, { name }); }
 
   /* ---------- MQTT ---------- */
   function connectMQTT(){
     if(state.connected){ log("MQTT déjà connecté"); return; }
+    if(!ensurePaho()) return;
     const { host, port, path } = state.broker || defaultBroker;
     log(`MQTT → wss://${host}:${port}${path}`);
 
@@ -131,19 +125,15 @@
     state.client.onConnectionLost = (resp)=>{
       state.connected = false;
       log("MQTT perdu:", resp?.errorMessage ?? resp?.errorCode);
-      // statut offline pour tous
       state.masters = state.masters.map(m=>({ ...m, online:false }));
       renderMasters();
     };
     state.client.onMessageArrived = (msg)=>{
-      // Gestion des messages EVT/STATE
       const t = msg.destinationName || "";
       const payload = msg.payloadString || "";
-      // evt: hizaya/<MID>/evt ; state: hizaya/<MID>/state
       const parts = t.split("/");
       if(parts.length<3 || parts[0]!="hizaya"){ log("←", t, payload); return; }
-      const mid = parts[1];
-      const leaf = parts[2];
+      const mid = parts[1], leaf = parts[2];
 
       if(leaf==="state"){
         const online = payload==="online";
@@ -155,25 +145,17 @@
           const j = JSON.parse(payload);
           const m = state.masters.find(x=>x.id===mid);
           if(!m) return;
-
-          if(Array.isArray(j.peers)){ // liste de pairs
-            m.slaves = j.peers.map(p=>({
-              mac: p.mac,
-              name: p.name || "Device",
-              led0: !!p.led0,
-              led1: !!p.led1
-            }));
+          if(Array.isArray(j.peers)){
+            m.slaves = j.peers.map(p=>({ mac:p.mac, name:p.name||"Device", led0:!!p.led0, led1:!!p.led1 }));
             persistMasters(); renderMasters();
             log(`← peers ${mid}: ${m.slaves.length}`);
           }
-          if(Array.isArray(j.scan)){ // résultats scan
+          if(Array.isArray(j.scan)){
             m.discovered = j.scan.map(s=>({ mac:s.mac, rssi:s.rssi }));
             persistMasters(); renderMasters();
             log(`← scan ${mid}: ${m.discovered.length}`);
           }
-        }catch(e){
-          log("JSON evt invalide", e.message);
-        }
+        }catch(e){ log("JSON evt invalide", e.message); }
       } else {
         log("←", t, payload);
       }
@@ -186,7 +168,6 @@
       onSuccess: ()=>{
         state.connected = true;
         log("MQTT connecté");
-        // s'abonner aux masters connus
         state.masters.forEach(m=> subscribeMaster(m.id));
       },
       onFailure: (err)=>{
@@ -215,13 +196,10 @@
       state.client.subscribe(st);
       state.subs[mid] = { evt:true, state:true };
       log("SUB →", evt, " & ", st);
-      // demande d'état et de pairs
+      // demander peers (et scan si tu veux)
       sendCmd(mid, {cmd:"get_peers"});
-    }catch(e){
-      log("SUB erreur:", e.message);
-    }
+    }catch(e){ log("SUB erreur:", e.message); }
   }
-
   function unsubscribeMaster(mid){
     if(!state.client || !state.connected) return;
     const evt = `hizaya/${mid}/evt`;
@@ -231,11 +209,8 @@
       state.client.unsubscribe(st);
       delete state.subs[mid];
       log("UNSUB →", evt, " & ", st);
-    }catch(e){
-      log("UNSUB erreur:", e.message);
-    }
+    }catch(e){ log("UNSUB erreur:", e.message); }
   }
-
   function sendCmd(mid, obj){
     if(!state.client || !state.connected){ alert("MQTT non connecté"); return; }
     const topic = `hizaya/${mid}/cmd`;
@@ -250,24 +225,16 @@
     updateMaster(mid, { discovered: [] });
     sendCmd(mid, { cmd: "scan_start" });
   }
-
   function doPair(mid, mac){
     const name = prompt("Nom de l'appareil (par défaut: Ordinateur)") || "Ordinateur";
     sendCmd(mid, { cmd: "pair", mac });
-    // côté master réel, il publiera peers; on attend l'evt pour MAJ
-    // on peut pré-remplir provisoirement la discovered list
     const mm = state.masters.find(m=>m.id===mid);
     if(mm){
       mm.discovered = mm.discovered.filter(d=>d.mac!==mac);
       persistMasters(); renderMasters();
     }
   }
-
-  function doRenameMaster(mid, name){
-    renameMaster(mid, name);
-    // côté cloud on n'a pas de cmd rename master (c’est local UI)
-  }
-
+  function doRenameMaster(mid, name){ renameMaster(mid, name); }
   function doRenameSlave(mid, mac, name){
     sendCmd(mid, { cmd: "rename", mac, name });
     const m = state.masters.find(x=>x.id===mid);
@@ -276,7 +243,6 @@
       persistMasters(); renderMasters();
     }
   }
-
   function doLed(mid, mac, id, on){
     sendCmd(mid, { cmd: "led", mac, id, on: on?1:0 });
     const m = state.masters.find(x=>x.id===mid);
@@ -285,7 +251,6 @@
       persistMasters(); renderMasters();
     }
   }
-
   function doDeleteSlave(mid, mac){
     if(!confirm("Supprimer cet appareil ?")) return;
     sendCmd(mid, { cmd: "delete", mac });
@@ -296,7 +261,25 @@
     }
   }
 
-  /* ---------- RENDER ---------- */
+  /* ---------- Render ---------- */
+  function makeSwitch(init, onChange){
+    const btn = document.createElement("button");
+    btn.className = "h-7 w-12 rounded-full transition flex items-center "+(init?"bg-brand-600":"bg-slate-300");
+    const dot = document.createElement("div");
+    dot.className = "h-5 w-5 bg-white rounded-full shadow transition "+(init?"translate-x-5":"translate-x-0");
+    btn.appendChild(dot);
+    btn.onclick = ()=>{
+      const checked = btn.classList.contains("bg-brand-600");
+      const next = !checked;
+      btn.classList.toggle("bg-brand-600", next);
+      btn.classList.toggle("bg-slate-300", !next);
+      dot.classList.toggle("translate-x-5", next);
+      dot.classList.toggle("translate-x-0", !next);
+      onChange(next);
+    };
+    return btn;
+  }
+
   function renderMasters(){
     elMasters.innerHTML = "";
     if(state.masters.length===0){
@@ -308,9 +291,8 @@
     }
     state.masters.forEach((m)=>{
       const card = document.createElement("div");
-      card.className = "card p-4";
+      card.className = "bg-white border border-slate-200 rounded-2xl shadow-sm p-4";
 
-      // header
       const head = document.createElement("div");
       head.className = "flex items-center justify-between gap-3 mb-3";
 
@@ -326,13 +308,13 @@
       const sub = document.createElement("div");
       sub.className="text-xs text-slate-500";
       sub.textContent = `ID: ${m.id}`;
-      title.appendChild(h3); title.appendChild(sub);
-      left.appendChild(logo); left.appendChild(title);
+      left.append(logo, title);
+      title.append(h3, sub);
 
       const right = document.createElement("div");
       right.className="flex items-center gap-2";
       const chip = document.createElement("span");
-      chip.className = "chip";
+      chip.className = "text-xs px-2 py-1 rounded-full border";
       chip.textContent = m.online ? "online" : "offline";
       const btnScan = document.createElement("button");
       btnScan.className="px-3 py-1.5 rounded-xl bg-white border hover:bg-slate-50";
@@ -342,49 +324,38 @@
       btnDel.className="px-3 py-1.5 rounded-xl bg-red-600 text-white hover:bg-red-700";
       btnDel.textContent="Supprimer";
       btnDel.onclick=()=>removeMaster(m.id);
-      right.appendChild(chip); right.appendChild(btnScan); right.appendChild(btnDel);
-
-      head.appendChild(left); head.appendChild(right);
+      right.append(chip, btnScan, btnDel);
+      head.append(left, right);
       card.appendChild(head);
 
-      // rename master (inline)
-      const renameRow = document.createElement("div");
-      renameRow.className = "flex items-center gap-3 text-sm mb-2";
+      // rename inline (auto-save)
+      const row = document.createElement("div");
+      row.className="flex items-center gap-3 text-sm mb-2";
       const lbl = document.createElement("span");
       lbl.className="hidden sm:inline text-slate-600";
       lbl.textContent="Nom du master :";
       const inp = document.createElement("input");
-      inp.className="px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring focus:ring-sky-200";
+      inp.className="px-3 py-2 rounded-xl border border-slate-300";
       inp.value = m.name;
       let timer=null;
       inp.oninput = ()=>{
         clearTimeout(timer);
-        timer = setTimeout(()=> doRenameMaster(m.id, inp.value.trim()||"Master"), 500);
+        timer = setTimeout(()=> renameMaster(m.id, inp.value.trim()||"Master"), 500);
       };
-      const saved = document.createElement("span");
-      saved.className="text-xs text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full hidden";
-      saved.textContent="Sauvegardé ✓";
-      inp.addEventListener("change", ()=>{
-        saved.classList.remove("hidden");
-        setTimeout(()=>saved.classList.add("hidden"), 800);
-      });
-      renameRow.append(lbl, inp, saved);
-      card.appendChild(renameRow);
+      row.append(lbl, inp);
+      card.appendChild(row);
 
-      // divider
       const dv = document.createElement("div");
-      dv.className="h-px bg-slate-200 my-3";
-      card.appendChild(dv);
+      dv.className="h-px bg-slate-200 my-3"; card.appendChild(dv);
 
-      // Slaves + Découverte (2 colonnes)
+      // grid
       const grid = document.createElement("div");
       grid.className="grid md:grid-cols-2 gap-6";
 
       // Slaves
       const colL = document.createElement("div");
       const h4L = document.createElement("div");
-      h4L.className="font-medium mb-2";
-      h4L.textContent="Mes appareils";
+      h4L.className="font-medium mb-2"; h4L.textContent="Mes appareils";
       colL.appendChild(h4L);
       const listL = document.createElement("div");
       listL.className="divide-y rounded-xl border overflow-hidden";
@@ -413,24 +384,20 @@
 
           const right = document.createElement("div");
           right.className="flex items-center gap-4";
-          // LED 0
           const g0 = document.createElement("div");
           g0.className="flex items-center gap-2 text-xs";
           const lab0 = document.createElement("span"); lab0.textContent="LED V";
           const sw0 = makeSwitch(s.led0, (v)=>doLed(m.id, s.mac, 0, v));
           g0.append(lab0, sw0);
-          // LED 1
           const g1 = document.createElement("div");
           g1.className="flex items-center gap-2 text-xs";
           const lab1 = document.createElement("span"); lab1.textContent="LED B";
           const sw1 = makeSwitch(s.led1, (v)=>doLed(m.id, s.mac, 1, v));
           g1.append(lab1, sw1);
-          // delete
           const bdel = document.createElement("button");
           bdel.className="px-3 py-1.5 rounded-xl bg-red-600 text-white hover:bg-red-700";
           bdel.textContent="Supprimer";
           bdel.onclick=()=>doDeleteSlave(m.id, s.mac);
-
           right.append(g0, g1, bdel);
 
           top.append(left, right);
@@ -449,8 +416,7 @@
       bRefresh.className="px-3 py-1.5 rounded-xl bg-white border hover:bg-slate-50";
       bRefresh.textContent="Rafraîchir";
       bRefresh.onclick=()=>doScan(m.id);
-      headR.append(h4R, bRefresh);
-      colR.appendChild(headR);
+      headR.append(h4R, bRefresh); colR.appendChild(headR);
 
       const listR = document.createElement("div");
       listR.className="divide-y rounded-xl border overflow-hidden";
@@ -479,34 +445,31 @@
 
       grid.append(colL, colR);
       card.appendChild(grid);
-
       elMasters.appendChild(card);
     });
   }
 
-  function makeSwitch(init, onChange){
-    const btn = document.createElement("button");
-    btn.className = "h-7 w-12 rounded-full transition flex items-center "+(init?"bg-brand-600":"bg-slate-300");
-    const dot = document.createElement("div");
-    dot.className = "h-5 w-5 bg-white rounded-full shadow transition "+(init?"translate-x-5":"translate-x-0");
-    btn.appendChild(dot);
-    btn.onclick = ()=>{
-      const checked = btn.classList.contains("bg-brand-600");
-      const next = !checked;
-      btn.classList.toggle("bg-brand-600", next);
-      btn.classList.toggle("bg-slate-300", !next);
-      dot.classList.toggle("translate-x-5", next);
-      dot.classList.toggle("translate-x-0", !next);
-      onChange(next);
-    };
-    return btn;
-  }
-
-  /* ---------- Events globaux ---------- */
+  /* ---------- Events ---------- */
   document.addEventListener("DOMContentLoaded", ()=>{
-    initAuth();
-    initMasters();
+    // Login
+    const savedUser = load(LS_KEYS.user);
+    if(savedUser){ state.user = savedUser; showMain(); }
+    else { showLogin(); }
 
+    $("#btnLogin").onclick = ()=>{
+      const email = $("#email").value.trim();
+      if(!email){ alert("Entre un email"); return; }
+      state.user = { email };
+      save(LS_KEYS.user, state.user);
+      showMain();
+    };
+    $("#btnLogout").onclick = ()=>{ state.user=null; save(LS_KEYS.user, null); disconnectMQTT(); showLogin(); };
+
+    // Masters
+    state.masters = load(LS_KEYS.masters) || [];
+    renderMasters();
+
+    // Actions
     $("#btnAddMaster").onclick = addMaster;
     $("#btnConnect").onclick = connectMQTT;
     $("#btnDisconnect").onclick = disconnectMQTT;
