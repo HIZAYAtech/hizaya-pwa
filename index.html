@@ -1,216 +1,111 @@
 <!doctype html>
 <html lang="fr">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<meta name="theme-color" content="#0A84FF">
-<link rel="manifest" href="./manifest.json">
-<title>HIZAYA</title>
-<style>
-  :root{
-    --bg: #f5f7fb;
-    --card: #ffffff;
-    --text: #0b1220;
-    --muted:#667085;
-    --line:#e6e8ef;
-    --tint:#0A84FF;
-    --pill:#eef2ff;
-  }
-  *{box-sizing:border-box}
-  html,body{height:100%}
-  body{
-    margin:0; color:var(--text);
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
-    background:
-      radial-gradient(1200px 600px at 20% -10%, #f8fbff 40%, transparent 60%),
-      radial-gradient(1000px 500px at 110% -10%, #f0f6ff 30%, transparent 60%),
-      linear-gradient(#fafcff, var(--bg));
-  }
+  <head>
+    <meta charset="utf-8" />
+    <title>HIZAYA</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0ea5e9" />
+    <link rel="manifest" href="manifest.json" />
+    <!-- Icônes PWA (optionnelles, ajoute les fichiers si tu veux des vrais) -->
+    <link rel="icon" sizes="192x192" href="icon-192.png" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
 
-  /* Header glassy */
-  .hdr{
-    position:sticky; top:0; z-index:10;
-    backdrop-filter:saturate(1.1) blur(10px);
-    background:rgba(255,255,255,0.7);
-    border-bottom:1px solid var(--line);
-  }
-  .hdr .inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:12px 16px}
-  .brand{display:flex;align-items:center;gap:10px}
-  .logo{width:36px;height:36px;border-radius:12px;background:#111;color:#fff;display:grid;place-items:center;font-weight:700}
-  .brand span{font-weight:600;letter-spacing:-0.01em}
+    <!-- Tailwind CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // petite config pour un look doux
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: { brand: { 600: "#0ea5e9", 700: "#0284c7" } },
+            boxShadow: { soft: "0 10px 30px -10px rgba(0,0,0,.1)" },
+            borderRadius: { xl2: "1.25rem" },
+          },
+        },
+      };
+    </script>
 
-  /* Layout */
-  .wrap{max-width:1100px;margin:0 auto;padding:18px 16px}
-  h1{font-size:26px;margin:10px 0 6px}
-  h2{font-size:18px;margin:12px 0 8px}
-  .muted{color:var(--muted)}
-  .space{height:8px}
+    <!-- Paho MQTT (UMD) -->
+    <script src="https://unpkg.com/paho-mqtt@1.1.0/paho-mqtt-min.js"></script>
 
-  /* Cards */
-  .card{
-    background:var(--card);
-    border:1px solid var(--line);
-    border-radius:18px;
-    padding:14px;
-    box-shadow:0 1px 2px rgba(0,0,0,.04);
-    margin:10px 0;
-  }
+    <style>
+      html, body { background: linear-gradient(180deg,#f8fafc,transparent) #fff; }
+      .card { background:#fff; border:1px solid #e5e7eb; border-radius:1.25rem; box-shadow:var(--tw-shadow,0 0 #0000), 0 10px 30px -10px rgba(0,0,0,.08); }
+      .chip { font-size:12px; padding:.25rem .5rem; border-radius:999px; border:1px solid #e5e7eb; background:#f8fafc; }
+    </style>
+  </head>
+  <body class="min-h-screen text-slate-900">
+    <header class="sticky top-0 z-10 bg-white/70 backdrop-blur border-b border-slate-200">
+      <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-2xl bg-slate-900 text-white grid place-items-center font-bold">H</div>
+          <span class="font-semibold tracking-tight">HIZAYA</span>
+        </div>
+        <div class="flex items-center gap-3 text-sm">
+          <span id="who" class="text-slate-600">Hors ligne</span>
+          <button id="btnLogout" class="hidden px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200">Déconnexion</button>
+        </div>
+      </div>
+    </header>
 
-  /* Forms */
-  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-  input,button{
-    font-size:16px; border-radius:12px;
-    padding:10px 12px; border:1px solid #d5d8e0;
-  }
-  input{background:#fff;color:#0b1220;min-width:200px}
-  button{cursor:pointer;background:#111;color:#fff;border-color:#111}
-  button.secondary{background:#fff;color:#0b1220;border:1px solid #d5d8e0}
-  button.tint{background:var(--tint);border-color:var(--tint);color:#fff}
-  button.ghost{background:transparent;color:#0b1220;border:1px solid transparent}
-  .pill{display:inline-block;padding:6px 10px;border-radius:999px;border:1px solid #d5d8e0;font-size:14px;background:#fff}
-  .ok{background:#e9fbe9;border-color:#b8efb8}
-  .bad{background:#fdeaea;border-color:#f5bcbc}
+    <!-- Page Login -->
+    <main id="page-login" class="max-w-md mx-auto px-4 pt-10">
+      <div class="card p-6">
+        <h1 class="text-2xl font-semibold mb-2">Connexion</h1>
+        <p class="text-sm text-slate-600 mb-5">Mock de connexion pour valider les flux.</p>
+        <div class="space-y-3">
+          <label class="block">
+            <span class="text-sm ml-1">Email</span>
+            <input id="email" class="w-full mt-1 px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring focus:ring-sky-200" placeholder="toi@exemple.com" />
+          </label>
+          <label class="block">
+            <span class="text-sm ml-1">Mot de passe</span>
+            <input id="pass" type="password" class="w-full mt-1 px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring focus:ring-sky-200" placeholder="********" />
+          </label>
+          <button id="btnLogin" class="w-full px-4 py-2 rounded-xl bg-brand-600 text-white hover:bg-brand-700">Se connecter</button>
+          <p class="text-xs text-slate-500 text-center">Astuce : c’est un mock, n’importe quel email suffit.</p>
+        </div>
+      </div>
+    </main>
 
-  /* Tables (listes) */
-  table{width:100%;border-collapse:separate;border-spacing:0 8px}
-  thead th{font-weight:600;color:#475569;font-size:14px;padding:0 10px}
-  tbody td{background:#fff;border:1px solid #eceff5;border-left:none;border-right:none;padding:10px}
-  tbody tr{border-radius:12px;overflow:hidden}
-  tbody tr td:first-child{border-left:1px solid #eceff5;border-top-left-radius:12px;border-bottom-left-radius:12px}
-  tbody tr td:last-child{border-right:1px solid #eceff5;border-top-right-radius:12px;border-bottom-right-radius:12px}
-  .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
-
-  /* Switch iOS */
-  .switch{
-    height:28px;width:52px;border-radius:999px;
-    display:inline-flex;align-items:center;padding:3px;
-    background:#cbd5e1;border:1px solid #bfc7d4;transition:all .15s;
-  }
-  .switch.on{background:var(--tint);border-color:var(--tint)}
-  .switch .dot{height:22px;width:22px;border-radius:999px;background:#fff;transform:translateX(0);transition:transform .15s}
-  .switch.on .dot{transform:translateX(24px)}
-
-  /* Log */
-  #log{
-    white-space:pre-wrap;background:#0b1020;color:#c9defc;
-    padding:10px;border-radius:12px;max-height:240px;overflow:auto;
-    font-family:ui-monospace, SFMono-Regular, Menlo, monospace;font-size:13px
-  }
-
-  /* Grid */
-  .grid{display:grid;grid-template-columns:1fr;gap:12px}
-  @media (min-width:900px){ .grid{grid-template-columns:1fr 1fr} }
-
-  /* Pages */
-  .hidden{display:none}
-</style>
-<!-- libs -->
-<script src="https://unpkg.com/paho-mqtt@1.1.0/paho-mqtt-min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-</head>
-<body>
-
-<!-- HEADER -->
-<div class="hdr">
-  <div class="inner">
-    <div class="brand">
-      <div class="logo">H</div>
-      <span>HIZAYA</span>
-    </div>
-    <div id="who" class="muted">Hors ligne</div>
-  </div>
-</div>
-
-<div class="wrap">
-
-  <!-- Page Login -->
-  <div id="page-login" class="card">
-    <h2 style="margin-top:0">Connexion</h2>
-    <div class="row">
-      <input id="email" type="email" placeholder="email@exemple.com">
-      <button id="btnLogin" class="tint">Se connecter (magic link)</button>
-      <span class="muted">Tu recevras un lien par e-mail</span>
-    </div>
-  </div>
-
-  <!-- Page Dashboard -->
-  <div id="page-main" class="hidden">
-    <div class="card">
-      <div class="row" style="justify-content:space-between">
+    <!-- Page App -->
+    <main id="page-main" class="hidden max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <section class="flex items-end justify-between">
         <div>
-          <h1 style="margin:0">Bienvenue 👋</h1>
-          <div class="muted">Gère tes Masters et leurs Slaves depuis une interface simple.</div>
+          <h2 class="text-3xl font-semibold">Bienvenue 👋</h2>
+          <p class="text-slate-600">Gère tes Masters et leurs Slaves depuis une interface simple.</p>
         </div>
-        <div class="row">
-          <button id="btnAddMaster" class="tint">+ ADD Master</button>
-          <button id="btnLogout" class="secondary">Déconnexion</button>
+        <div class="flex items-center gap-2">
+          <button id="btnConnect" class="px-3 py-2 rounded-xl bg-brand-600 text-white hover:bg-brand-700">Connexion MQTT</button>
+          <button id="btnDisconnect" class="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200">Déconnexion MQTT</button>
         </div>
-      </div>
-    </div>
+      </section>
 
-    <!-- Connexion MQTT + Master sélectionné -->
-    <div class="card">
-      <div class="row">
-        <span class="muted">Broker WSS</span>
-        <input id="host" value="broker.hivemq.com:8884/mqtt" title="ex: broker.hivemq.com:8884/mqtt">
-        <span class="muted">MASTER_ID</span>
-        <input id="mid" placeholder="A842E3917578" title="MAC STA du Master sans :">
-        <button id="btnConnect" class="tint">Connecter</button>
-        <span id="st" class="pill">offline</span>
-      </div>
-      <div class="muted" style="font-size:14px;margin-top:6px">
-        Test rapide : PWA en <b>WSS 8884</b>, firmware Master en <b>TCP 1883</b> sur le même broker (ex: broker.hivemq.com).
-      </div>
-    </div>
-
-    <!-- Liste des Masters -->
-    <div class="card">
-      <h2>Mes Masters</h2>
-      <div class="row">
-        <input id="newMid" placeholder="A842E3917578" size="16">
-        <input id="newName" placeholder="Nom (ex: Atelier)">
-        <button id="btnAddConfirm" class="secondary">Ajouter</button>
-      </div>
-      <table id="tblMasters">
-        <thead><tr><th>Master ID</th><th>Nom</th><th>Utiliser</th><th>Actions</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-
-    <!-- Master actif -->
-    <div class="grid">
-      <div class="card">
-        <h2>Mes appareils (pairés)</h2>
-        <table id="tblPeers">
-          <thead><tr><th>MAC</th><th>Nom</th><th>LED V</th><th>LED B</th><th>Actions</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-
-      <div class="card">
-        <h2>Découverte (scan)</h2>
-        <div class="row" style="margin-bottom:8px">
-          <button id="btnScan" class="secondary">Lancer le scan</button>
-          <button id="btnScanRefresh" class="secondary">Rafraîchir</button>
+      <section class="card p-4">
+        <h3 class="font-medium mb-3">Ajouter un Master</h3>
+        <div class="flex flex-col sm:flex-row gap-2">
+          <input id="mid" class="flex-1 px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring focus:ring-sky-200" placeholder="MASTER_ID (ex: A842E3917578)" />
+          <input id="mname" class="flex-1 px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring focus:ring-sky-200" placeholder="Nom (ex: Atelier)" />
+          <button id="btnAddMaster" class="px-3 py-2 rounded-xl bg-slate-900 text-white">ADD</button>
         </div>
-        <table id="tblScan">
-          <thead><tr><th>MAC</th><th>RSSI</th><th>Action</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
+      </section>
 
-    <div class="card">
-      <h2>Journal</h2>
-      <div id="log"></div>
-    </div>
-  </div>
-</div>
+      <section id="masters" class="grid grid-cols-1 gap-6"></section>
 
-<script src="./config.js"></script>
-<script src="./app.js"></script>
-<script>
-  if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./sw.js').catch(()=>{}); }
-</script>
-</body>
+      <section class="card p-4">
+        <h3 class="font-medium mb-2">Console</h3>
+        <pre id="log" class="text-xs bg-slate-50 p-3 rounded-xl overflow-auto max-h-64"></pre>
+      </section>
+    </main>
+
+    <script defer src="app.js"></script>
+    <script>
+      // PWA : enregistrement SW
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('sw.js').catch(()=>{});
+        });
+      }
+    </script>
+  </body>
 </html>
