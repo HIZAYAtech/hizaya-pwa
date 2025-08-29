@@ -1,52 +1,131 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <meta name="theme-color" content="#0A84FF">
-  <link rel="manifest" href="manifest.json">
-  <title>HIZAYA</title>
-  <style>
-    :root { --t: #0A84FF; --bg:#f6f7fb; --fg:#111; }
-    *{box-sizing:border-box}
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:0;background:linear-gradient(180deg,#f8fafc,transparent) fixed; color:var(--fg)}
-    .wrap{max-width:1024px;margin:0 auto;padding:16px}
-    h1{font-size:22px;margin:8px 0 12px}
-    h2{font-size:18px;margin:14px 0 8px}
-    .card{background:#fff;border:1px solid #e6e8ef;border-radius:16px;padding:14px;margin:10px 0;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-    input,button{padding:10px 12px;border:1px solid #cfd3dc;border-radius:12px;font-size:16px}
-    input{min-width:180px;background:#fff;color:#111}
-    button{cursor:pointer;background:#111;color:#fff}
-    button.secondary{background:#fff;color:#111}
-    button.tint{background:var(--t);border-color:var(--t)}
-    .pill{display:inline-block;padding:6px 10px;border-radius:999px;border:1px solid #d5d8e0;font-size:14px}
-    .ok{background:#e9fbe9;border-color:#b8efb8}
-    .bad{background:#fdeaea;border-color:#f5bcbc}
-    table{width:100%;border-collapse:collapse;font-size:15px}
-    td,th{border-bottom:1px solid #eee;padding:8px;text-align:left}
-    th{font-weight:600;background:#fafbfe}
-    #log{white-space:pre-wrap;background:#0b1020;color:#c9defc;padding:10px;border-radius:10px;max-height:240px;overflow:auto;font-family:ui-monospace, SFMono-Regular, Menlo, monospace;font-size:13px}
-    .grid{display:grid;grid-template-columns:1fr;gap:12px}
-    @media (min-width:900px){ .grid{grid-template-columns:1fr 1fr} }
-    .switch{height:28px;width:52px;border-radius:999px;display:inline-flex;align-items:center;padding:3px;background:#ccc;border:1px solid #bbb}
-    .switch.on{background:var(--t);border-color:var(--t)}
-    .switch .dot{height:22px;width:22px;border-radius:999px;background:#fff;transform:translateX(0);transition:transform .15s ease}
-    .switch.on .dot{transform:translateX(24px)}
-    .muted{color:#666}
-    .hidden{display:none}
-  </style>
-  <!-- libs -->
-  <script src="https://unpkg.com/paho-mqtt@1.1.0/paho-mqtt-min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="theme-color" content="#0A84FF">
+<link rel="manifest" href="./manifest.json">
+<title>HIZAYA</title>
+<style>
+  :root{
+    --bg: #f5f7fb;
+    --card: #ffffff;
+    --text: #0b1220;
+    --muted:#667085;
+    --line:#e6e8ef;
+    --tint:#0A84FF;
+    --pill:#eef2ff;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; color:var(--text);
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+    background:
+      radial-gradient(1200px 600px at 20% -10%, #f8fbff 40%, transparent 60%),
+      radial-gradient(1000px 500px at 110% -10%, #f0f6ff 30%, transparent 60%),
+      linear-gradient(#fafcff, var(--bg));
+  }
+
+  /* Header glassy */
+  .hdr{
+    position:sticky; top:0; z-index:10;
+    backdrop-filter:saturate(1.1) blur(10px);
+    background:rgba(255,255,255,0.7);
+    border-bottom:1px solid var(--line);
+  }
+  .hdr .inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:12px 16px}
+  .brand{display:flex;align-items:center;gap:10px}
+  .logo{width:36px;height:36px;border-radius:12px;background:#111;color:#fff;display:grid;place-items:center;font-weight:700}
+  .brand span{font-weight:600;letter-spacing:-0.01em}
+
+  /* Layout */
+  .wrap{max-width:1100px;margin:0 auto;padding:18px 16px}
+  h1{font-size:26px;margin:10px 0 6px}
+  h2{font-size:18px;margin:12px 0 8px}
+  .muted{color:var(--muted)}
+  .space{height:8px}
+
+  /* Cards */
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:18px;
+    padding:14px;
+    box-shadow:0 1px 2px rgba(0,0,0,.04);
+    margin:10px 0;
+  }
+
+  /* Forms */
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input,button{
+    font-size:16px; border-radius:12px;
+    padding:10px 12px; border:1px solid #d5d8e0;
+  }
+  input{background:#fff;color:#0b1220;min-width:200px}
+  button{cursor:pointer;background:#111;color:#fff;border-color:#111}
+  button.secondary{background:#fff;color:#0b1220;border:1px solid #d5d8e0}
+  button.tint{background:var(--tint);border-color:var(--tint);color:#fff}
+  button.ghost{background:transparent;color:#0b1220;border:1px solid transparent}
+  .pill{display:inline-block;padding:6px 10px;border-radius:999px;border:1px solid #d5d8e0;font-size:14px;background:#fff}
+  .ok{background:#e9fbe9;border-color:#b8efb8}
+  .bad{background:#fdeaea;border-color:#f5bcbc}
+
+  /* Tables (listes) */
+  table{width:100%;border-collapse:separate;border-spacing:0 8px}
+  thead th{font-weight:600;color:#475569;font-size:14px;padding:0 10px}
+  tbody td{background:#fff;border:1px solid #eceff5;border-left:none;border-right:none;padding:10px}
+  tbody tr{border-radius:12px;overflow:hidden}
+  tbody tr td:first-child{border-left:1px solid #eceff5;border-top-left-radius:12px;border-bottom-left-radius:12px}
+  tbody tr td:last-child{border-right:1px solid #eceff5;border-top-right-radius:12px;border-bottom-right-radius:12px}
+  .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+
+  /* Switch iOS */
+  .switch{
+    height:28px;width:52px;border-radius:999px;
+    display:inline-flex;align-items:center;padding:3px;
+    background:#cbd5e1;border:1px solid #bfc7d4;transition:all .15s;
+  }
+  .switch.on{background:var(--tint);border-color:var(--tint)}
+  .switch .dot{height:22px;width:22px;border-radius:999px;background:#fff;transform:translateX(0);transition:transform .15s}
+  .switch.on .dot{transform:translateX(24px)}
+
+  /* Log */
+  #log{
+    white-space:pre-wrap;background:#0b1020;color:#c9defc;
+    padding:10px;border-radius:12px;max-height:240px;overflow:auto;
+    font-family:ui-monospace, SFMono-Regular, Menlo, monospace;font-size:13px
+  }
+
+  /* Grid */
+  .grid{display:grid;grid-template-columns:1fr;gap:12px}
+  @media (min-width:900px){ .grid{grid-template-columns:1fr 1fr} }
+
+  /* Pages */
+  .hidden{display:none}
+</style>
+<!-- libs -->
+<script src="https://unpkg.com/paho-mqtt@1.1.0/paho-mqtt-min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="inner">
+    <div class="brand">
+      <div class="logo">H</div>
+      <span>HIZAYA</span>
+    </div>
+    <div id="who" class="muted">Hors ligne</div>
+  </div>
+</div>
+
 <div class="wrap">
-  <h1>HIZAYA</h1>
 
   <!-- Page Login -->
   <div id="page-login" class="card">
-    <h2>Connexion</h2>
+    <h2 style="margin-top:0">Connexion</h2>
     <div class="row">
       <input id="email" type="email" placeholder="email@exemple.com">
       <button id="btnLogin" class="tint">Se connecter (magic link)</button>
@@ -59,10 +138,10 @@
     <div class="card">
       <div class="row" style="justify-content:space-between">
         <div>
-          <h2 style="margin:0">Bienvenue 👋</h2>
-          <div id="who" class="muted">Hors ligne</div>
+          <h1 style="margin:0">Bienvenue 👋</h1>
+          <div class="muted">Gère tes Masters et leurs Slaves depuis une interface simple.</div>
         </div>
-        <div>
+        <div class="row">
           <button id="btnAddMaster" class="tint">+ ADD Master</button>
           <button id="btnLogout" class="secondary">Déconnexion</button>
         </div>
@@ -72,14 +151,16 @@
     <!-- Connexion MQTT + Master sélectionné -->
     <div class="card">
       <div class="row">
-        <label>Broker WSS</label>
+        <span class="muted">Broker WSS</span>
         <input id="host" value="broker.hivemq.com:8884/mqtt" title="ex: broker.hivemq.com:8884/mqtt">
-        <label>MASTER_ID</label>
+        <span class="muted">MASTER_ID</span>
         <input id="mid" placeholder="A842E3917578" title="MAC STA du Master sans :">
         <button id="btnConnect" class="tint">Connecter</button>
         <span id="st" class="pill">offline</span>
       </div>
-      <div class="muted" style="font-size:14px;margin-top:6px">Test rapide : PWA en <b>WSS 8884</b>, firmware Master en <b>TCP 1883</b> sur le même broker (ex: broker.hivemq.com).</div>
+      <div class="muted" style="font-size:14px;margin-top:6px">
+        Test rapide : PWA en <b>WSS 8884</b>, firmware Master en <b>TCP 1883</b> sur le même broker (ex: broker.hivemq.com).
+      </div>
     </div>
 
     <!-- Liste des Masters -->
@@ -90,14 +171,20 @@
         <input id="newName" placeholder="Nom (ex: Atelier)">
         <button id="btnAddConfirm" class="secondary">Ajouter</button>
       </div>
-      <table id="tblMasters"><thead><tr><th>Master ID</th><th>Nom</th><th>Utiliser</th><th>Actions</th></tr></thead><tbody></tbody></table>
+      <table id="tblMasters">
+        <thead><tr><th>Master ID</th><th>Nom</th><th>Utiliser</th><th>Actions</th></tr></thead>
+        <tbody></tbody>
+      </table>
     </div>
 
-    <!-- Card Master actif -->
+    <!-- Master actif -->
     <div class="grid">
       <div class="card">
         <h2>Mes appareils (pairés)</h2>
-        <table id="tblPeers"><thead><tr><th>MAC</th><th>Nom</th><th>LED V</th><th>LED B</th><th>Actions</th></tr></thead><tbody></tbody></table>
+        <table id="tblPeers">
+          <thead><tr><th>MAC</th><th>Nom</th><th>LED V</th><th>LED B</th><th>Actions</th></tr></thead>
+          <tbody></tbody>
+        </table>
       </div>
 
       <div class="card">
@@ -106,7 +193,10 @@
           <button id="btnScan" class="secondary">Lancer le scan</button>
           <button id="btnScanRefresh" class="secondary">Rafraîchir</button>
         </div>
-        <table id="tblScan"><thead><tr><th>MAC</th><th>RSSI</th><th>Action</th></tr></thead><tbody></tbody></table>
+        <table id="tblScan">
+          <thead><tr><th>MAC</th><th>RSSI</th><th>Action</th></tr></thead>
+          <tbody></tbody>
+        </table>
       </div>
     </div>
 
@@ -117,10 +207,10 @@
   </div>
 </div>
 
-<script src="config.js"></script>
-<script src="app.js"></script>
+<script src="./config.js"></script>
+<script src="./app.js"></script>
 <script>
-  if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+  if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./sw.js').catch(()=>{}); }
 </script>
 </body>
 </html>
