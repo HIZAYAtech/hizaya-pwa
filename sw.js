@@ -1,12 +1,5 @@
-// Cache simple pour le shell
-const CACHE = "hizaya-cache-v2"; // bump la version si tu modifies
-const ASSETS = [
-  "./",
-  "./index.html",
-  "./app.js",
-  "./manifest.json",
-  // ajoute "icon-192.png", "icon-512.png", "apple-touch-icon.png", "favicon.ico" si présents
-];
+const CACHE = "hizaya-cache-v3"; // <-- bump ici
+const ASSETS = ["./","./index.html","./app.js","./manifest.json"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
@@ -19,7 +12,5 @@ self.addEventListener("activate", (e) => {
   );
 });
 self.addEventListener("fetch", (e) => {
-  e.respondWith(
-    caches.match(e.request).then((r) => r || fetch(e.request))
-  );
+  e.respondWith(caches.match(e.request).then((r) => r || fetch(e.request)));
 });
