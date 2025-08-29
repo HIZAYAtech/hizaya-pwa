@@ -1,12 +1,11 @@
 {
   "name": "HIZAYA",
   "short_name": "HIZAYA",
-  "start_url": "/hizaya-pwa/",
+  "start_url": ".",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#111111",
+  "theme_color": "#0A84FF",
   "icons": [
-    { "src": "icons/pwa-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/pwa-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAA..." , "sizes": "128x128", "type": "image/png" }
   ]
 }
