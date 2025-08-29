@@ -1,5 +1,5 @@
-const CACHE = "hizaya-cache-v4"; // bump si tu modifies
-const ASSETS = ["./","./index.html","./app.js","./manifest.json"];
+const CACHE = "hizaya-cache-v5";
+const ASSETS = ["./","./index.html","./app.js","./manifest.json","./supabase-auth.js"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
