@@ -1,4 +1,4 @@
-const CACHE = "hizaya-cache-v5";
+const CACHE = "hizaya-cache-v6";
 const ASSETS = ["./","./index.html","./app.js","./manifest.json","./supabase-auth.js"];
 
 self.addEventListener("install", (e) => {
