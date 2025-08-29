@@ -1,83 +1,169 @@
 <!doctype html>
-<html>
+<html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <link rel="manifest" href="manifest.json">
   <title>HIZAYA</title>
   <style>
-    body{font-family:system-ui;margin:20px}
-    input,button{padding:8px;margin:4px}
-    table{border-collapse:collapse;margin-top:10px}
-    td,th{border:1px solid #ccc;padding:6px 8px}
-    #log{white-space:pre-wrap;background:#fafafa;border:1px solid #eee;padding:10px;max-height:220px;overflow:auto}
+    :root{--pad:8px}
+    body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:20px;line-height:1.35}
+    h2,h3{margin:14px 0 8px}
+    input,button{padding:8px;margin:4px;border:1px solid #ccc;border-radius:8px}
+    button{cursor:pointer}
+    table{border-collapse:collapse;margin-top:10px;width:100%;max-width:900px}
+    td,th{border:1px solid #ddd;padding:8px;text-align:left}
+    .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+    .card{border:1px solid #e6e6e6;border-radius:14px;padding:12px;margin:10px 0;background:#fff}
+    #log{white-space:pre-wrap;background:#fafafa;border:1px solid #eee;padding:10px;max-height:260px;overflow:auto}
+    .pill{display:inline-block;padding:3px 8px;border-radius:999px;font-size:.85em;border:1px solid #ddd}
+    .ok{background:#e9fbe9;border-color:#b8efb8}
+    .bad{background:#fdeaea;border-color:#f5bcbc}
+    .muted{color:#666}
   </style>
+  <!-- Libs CDN -->
   <script src="https://unpkg.com/paho-mqtt@1.1.0/paho-mqtt-min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <h2>HIZAYA (PWA)</h2>
+  <h2>HIZAYA — PWA</h2>
 
-  <div>
-    <label>Broker WSS:</label>
-    <input id="host" value="broker.hivemq.com:8884/mqtt" size="28">
-    <label>MASTER_ID:</label>
-    <input id="mid" placeholder="A842E3917578" size="14">
-    <button onclick="conn()">Connecter</button>
-    <span id="st">offline</span>
+  <!-- Connexion MQTT -->
+  <div class="card">
+    <div class="row">
+      <label>Broker WSS:</label>
+      <input id="host" value="broker.hivemq.com:8884/mqtt" size="28" title="ex: broker.hivemq.com:8884/mqtt">
+      <label>MASTER_ID:</label>
+      <input id="mid" placeholder="A842E3917578" size="16" title="MAC STA du Master sans :">
+      <button onclick="conn()">Connecter</button>
+      <span id="st" class="pill muted">offline</span>
+    </div>
+    <small class="muted">Astuce: le statut passe à <span class="pill ok">online</span> quand le Master publie son LWT (topic state).</small>
   </div>
 
-  <div>
-    <button onclick="send({cmd:'ping'})">Ping</button>
-    <button onclick="send({cmd:'get_peers'})">Peers</button>
-    <button onclick="send({cmd:'scan_start'})">Scan</button>
-    <button onclick="send({cmd:'get_scan'})">Découvertes</button>
+  <!-- Auth + Masters (Supabase) -->
+  <div class="card">
+    <h3>Compte</h3>
+    <div class="row">
+      <input id="email" type="email" placeholder="email@exemple.com">
+      <button onclick="login()">Se connecter (magic link)</button>
+      <button onclick="logout()">Se déconnecter</button>
+      <span id="who" class="muted">Hors ligne</span>
+    </div>
+
+    <h3>Mes Masters</h3>
+    <div class="row">
+      <input id="newMid" placeholder="A842E3917578" size="16">
+      <input id="newName" placeholder="Nom (ex: Atelier)">
+      <button onclick="addMaster()">Ajouter</button>
+    </div>
+    <table id="tblMasters">
+      <thead><tr><th>Master ID</th><th>Nom</th><th>Utiliser</th><th>Actions</th></tr></thead>
+      <tbody></tbody>
+    </table>
   </div>
 
-  <div>
-    MAC: <input id="mac" size="20">
-    <button onclick="send({cmd:'pair',mac:gid('mac').value})">Pairer</button>
-    Nom: <input id="name" placeholder="Ordinateur 1">
-    <button onclick="send({cmd:'rename',mac:gid('mac').value,name:gid('name').value})">Renommer</button>
+  <!-- Contrôle -->
+  <div class="card">
+    <h3>Contrôle</h3>
+    <div class="row">
+      <button onclick="send({cmd:'ping'})">Ping</button>
+      <button onclick="send({cmd:'get_peers'})">Peers</button>
+      <button onclick="send({cmd:'scan_start'})">Scan</button>
+      <button onclick="send({cmd:'get_scan'})">Découvertes</button>
+    </div>
+
+    <div class="row">
+      <b>Pairer / Renommer</b>
+      <input id="mac" placeholder="AA:BB:CC:DD:EE:FF" size="20">
+      <button onclick="send({cmd:'pair',mac:gid('mac').value})">Pairer</button>
+      <input id="name" placeholder="Nom (Ordinateur 1)">
+      <button onclick="send({cmd:'rename',mac:gid('mac').value,name:gid('name').value})">Renommer</button>
+    </div>
+
+    <div class="row">
+      <b>LED</b>
+      <input id="mac2" placeholder="AA:BB:CC:DD:EE:FF" size="20">
+      id:<input id="ledid" value="0" size="2">
+      <button onclick="send({cmd:'led',mac:gid('mac2').value,id:+gid('ledid').value,on:1})">ON</button>
+      <button onclick="send({cmd:'led',mac:gid('mac2').value,id:+gid('ledid').value,on:0})">OFF</button>
+    </div>
   </div>
 
-  <div>
-    LED id: <input id="ledid" value="0" size="2"> MAC: <input id="mac2" size="20">
-    <button onclick="send({cmd:'led',mac:gid('mac2').value,id:+gid('ledid').value,on:1})">ON</button>
-    <button onclick="send({cmd:'led',mac:gid('mac2').value,id:+gid('ledid').value,on:0})">OFF</button>
+  <!-- Événements -->
+  <div class="card">
+    <h3>Événements</h3>
+    <div id="log"></div>
+    <h3>Mes appareils</h3>
+    <table id="tblPeers"><thead><tr><th>MAC</th><th>Nom</th></tr></thead><tbody></tbody></table>
+    <h3>Découvertes (scan)</h3>
+    <table id="tblScan"><thead><tr><th>MAC</th><th>RSSI</th></tr></thead><tbody></tbody></table>
   </div>
-
-  <h3>Événements</h3>
-  <div id="log"></div>
-  <table id="tblPeers"><thead><tr><th>MAC</th><th>Nom</th></tr></thead><tbody></tbody></table>
-  <table id="tblScan"><thead><tr><th>MAC</th><th>RSSI</th></tr></thead><tbody></tbody></table>
 
 <script>
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("/hizaya-pwa/sw.js");
+/* ===== PWA: Service Worker ===== */
+if ("serviceWorker" in navigator) {
+  // En GitHub Pages, le chemin relatif marche (sw.js à la racine du repo)
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
 
-let client, TOP_CMD, TOP_EVT;
+/* ===== Utils ===== */
 function gid(id){return document.getElementById(id)}
-function log(s){ const d=gid('log'); d.textContent=(new Date()).toLocaleTimeString()+"  "+s+"\n"+d.textContent; }
+function log(s){
+  const d=gid('log'); d.textContent = (new Date()).toLocaleTimeString()+"  "+s+"\n"+d.textContent;
+}
+function setStatus(s){
+  const el=gid('st'); el.textContent=s;
+  el.className = "pill " + (s==="online" ? "ok" : (s==="offline"?"bad":"muted"));
+}
+function saveSettings(){
+  localStorage.setItem("brokerHost", gid('host').value.trim());
+  localStorage.setItem("masterId",  gid('mid').value.trim());
+}
+function loadSettings(){
+  const h=localStorage.getItem("brokerHost")||"broker.hivemq.com:8884/mqtt";
+  const m=localStorage.getItem("masterId")||"";
+  gid('host').value=h; gid('mid').value=m;
+}
+
+/* ===== MQTT bridge ===== */
+let client, TOP_CMD, TOP_EVT, TOP_STATE;
 
 function conn(){
-  const host = gid('host').value.trim();  // ex: broker.hivemq.com:8884/mqtt
+  const host = gid('host').value.trim();
   const mid  = gid('mid').value.trim();
   if(!host || !mid){ alert("host + MASTER_ID requis"); return; }
-  TOP_CMD = "hizaya/"+mid+"/cmd";
-  TOP_EVT = "hizaya/"+mid+"/evt";
+  saveSettings();
+
+  TOP_CMD   = "hizaya/"+mid+"/cmd";
+  TOP_EVT   = "hizaya/"+mid+"/evt";
+  TOP_STATE = "hizaya/"+mid+"/state";
 
   const [h,p] = host.split('/');
   const parts = h.split(':'); const hostname=parts[0]; const port=+parts[1];
 
   client = new Paho.MQTT.Client(hostname, port, "/"+(p||"mqtt"), "web-"+Math.random().toString(16).slice(2));
-  client.onConnectionLost = r=>{ gid('st').textContent='offline'; log("MQTT lost: "+r.errorMessage); };
-  client.onMessageArrived = m=>{ handleEvt(m.payloadString); };
+  client.onConnectionLost = r=>{ setStatus('offline'); log("MQTT lost: "+r.errorMessage); tryAutoReconnect(); };
+  client.onMessageArrived = m=>{
+    if (m.destinationName===TOP_STATE) { setStatus(m.payloadString); return; }
+    handleEvt(m.payloadString);
+  };
 
   client.connect({
     useSSL: true, timeout: 6,
-    onSuccess: ()=>{ gid('st').textContent='online'; client.subscribe(TOP_EVT); log("Sub "+TOP_EVT); },
-    onFailure: e=>{ gid('st').textContent='offline'; log("Fail: "+e.errorMessage); }
+    onSuccess: ()=>{
+      client.subscribe(TOP_EVT);
+      client.subscribe(TOP_STATE);
+      setStatus('online');
+      log("Sub "+TOP_EVT+" & "+TOP_STATE);
+      // seed
+      send({cmd:'get_peers'}); send({cmd:'get_scan'});
+    },
+    onFailure: e=>{ setStatus('offline'); log("Fail: "+e.errorMessage); tryAutoReconnect(); }
   });
 }
+function tryAutoReconnect(){ setTimeout(()=>{ if(gid('mid').value.trim()) conn(); }, 3000); }
+
 function send(obj){
   if(!client || !client.isConnected()){ alert("MQTT non connecté"); return; }
   const m=new Paho.MQTT.Message(JSON.stringify(obj)); m.destinationName=TOP_CMD; client.send(m);
@@ -89,14 +175,99 @@ function handleEvt(payload){
     const j=JSON.parse(payload);
     if(j.peers){
       const tb=document.querySelector('#tblPeers tbody'); tb.innerHTML='';
-      j.peers.forEach(p=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${p.mac}</td><td>${p.name||''}</td>`; tb.appendChild(tr); });
+      j.peers.forEach(p=>{
+        const tr=document.createElement('tr'); tr.innerHTML=`<td>${p.mac}</td><td>${p.name||''}</td>`; tb.appendChild(tr);
+      });
     }
     if(j.scan){
       const tb=document.querySelector('#tblScan tbody'); tb.innerHTML='';
-      j.scan.forEach(p=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${p.mac}</td><td>${p.rssi}</td>`; tb.appendChild(tr); });
+      j.scan.forEach(p=>{
+        const tr=document.createElement('tr'); tr.innerHTML=`<td>${p.mac}</td><td>${p.rssi}</td>`; tb.appendChild(tr);
+      });
     }
   }catch(e){}
 }
+
+/* ===== Supabase: Auth + Masters ===== */
+const SUPABASE_URL  = "https://ctjljqmxjnfykskfgral.supabase.co";   // ← remplace
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0amxqcW14am5meWtza2ZncmFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NzQzMDMsImV4cCI6MjA3MjA1MDMwM30.GoLM8CSHRh2KWOmrMLk2-JkFMz2hwAqyHaHxd8T51M4";                    // ← remplace
+let sb=null;
+try{
+  if(SUPABASE_URL.startsWith("https://") && SUPABASE_ANON.length>10){
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+      auth: { persistSession: true, detectSessionInUrl: true }
+    });
+    sb.auth.onAuthStateChange(async (_ev, session)=>{
+      gid('who').textContent = session?.user?.email ? ("Connecté: "+session.user.email) : "Hors ligne";
+      if(session) loadMasters(); else renderMasters([]);
+    });
+  } else {
+    gid('who').textContent = "Supabase non configuré (OK en proto)";
+  }
+}catch(e){ console.warn(e); }
+
+async function login(){
+  if(!sb) return alert("Supabase non configuré");
+  const email = gid('email').value.trim();
+  if(!email) return alert("Email ?");
+  const { error } = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.href } });
+  if(error) alert(error.message); else alert("Regarde tes emails 📬");
+}
+async function logout(){ if(sb){ await sb.auth.signOut(); gid('who').textContent='Hors ligne'; renderMasters([]); } }
+
+async function loadMasters(){
+  if(!sb) return;
+  const { data, error } = await sb.from('masters').select('*').order('created_at',{ascending:false});
+  if(error){ console.error(error); return; }
+  renderMasters(data||[]);
+}
+function renderMasters(rows){
+  const tb=document.querySelector('#tblMasters tbody'); tb.innerHTML='';
+  rows.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.master_id}</td>
+      <td><input id="nm_${r.id}" value="${r.name||''}" size="18"></td>
+      <td><button onclick="useMaster('${r.master_id}')">Utiliser</button></td>
+      <td>
+        <button onclick="renameMaster('${r.id}')">Renommer</button>
+        <button onclick="delMaster('${r.id}')">Supprimer</button>
+      </td>`;
+    tb.appendChild(tr);
+  });
+}
+async function addMaster(){
+  if(!sb) return alert("Supabase non configuré");
+  const master_id = gid('newMid').value.trim();
+  const name      = gid('newName').value.trim() || 'Master';
+  if(!master_id) return alert("Master ID ?");
+  const { error } = await sb.from('masters').insert({ master_id, name });
+  if(error){ alert(error.message); return; }
+  gid('newMid').value=''; gid('newName').value='';
+  loadMasters();
+}
+async function delMaster(id){
+  if(!sb) return;
+  if(!confirm("Supprimer ce master ?")) return;
+  const { error } = await sb.from('masters').delete().eq('id', id);
+  if(error){ alert(error.message); return; }
+  loadMasters();
+}
+async function renameMaster(id){
+  if(!sb) return;
+  const val = (gid('nm_'+id)?.value||'').trim();
+  const { error } = await sb.from('masters').update({ name: val }).eq('id', id);
+  if(error){ alert(error.message); }
+}
+function useMaster(mid){
+  gid('mid').value = mid;
+  saveSettings();
+  conn();
+}
+
+/* ===== Boot ===== */
+loadSettings();
+if (gid('mid').value) { setTimeout(conn, 100); }
 </script>
 </body>
 </html>
