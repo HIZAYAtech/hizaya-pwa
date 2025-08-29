@@ -6,14 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0ea5e9" />
     <link rel="manifest" href="manifest.json" />
-    <!-- Icônes PWA (optionnelles, ajoute les fichiers si tu veux des vrais) -->
-    <link rel="icon" sizes="192x192" href="icon-192.png" />
-    <link rel="apple-touch-icon" href="icon-192.png" />
+    <!-- Icônes PWA (optionnelles mais recommandées) -->
+    <link rel="icon" href="favicon.ico">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
 
-    <!-- Tailwind CDN -->
+    <!-- Tailwind CDN (pour le style) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      // petite config pour un look doux
       tailwind.config = {
         theme: {
           extend: {
@@ -24,17 +23,8 @@
         },
       };
     </script>
-
-    <!-- Paho MQTT (UMD) -->
-    <script src="https://unpkg.com/paho-mqtt@1.1.0/paho-mqtt-min.js"></script>
-
-    <style>
-      html, body { background: linear-gradient(180deg,#f8fafc,transparent) #fff; }
-      .card { background:#fff; border:1px solid #e5e7eb; border-radius:1.25rem; box-shadow:var(--tw-shadow,0 0 #0000), 0 10px 30px -10px rgba(0,0,0,.08); }
-      .chip { font-size:12px; padding:.25rem .5rem; border-radius:999px; border:1px solid #e5e7eb; background:#f8fafc; }
-    </style>
   </head>
-  <body class="min-h-screen text-slate-900">
+  <body class="min-h-screen text-slate-900 bg-gradient-to-b from-slate-50 to-white">
     <header class="sticky top-0 z-10 bg-white/70 backdrop-blur border-b border-slate-200">
       <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
         <div class="flex items-center gap-3">
@@ -50,7 +40,7 @@
 
     <!-- Page Login -->
     <main id="page-login" class="max-w-md mx-auto px-4 pt-10">
-      <div class="card p-6">
+      <div class="bg-white border border-slate-200 rounded-3xl shadow-sm p-6">
         <h1 class="text-2xl font-semibold mb-2">Connexion</h1>
         <p class="text-sm text-slate-600 mb-5">Mock de connexion pour valider les flux.</p>
         <div class="space-y-3">
@@ -81,7 +71,7 @@
         </div>
       </section>
 
-      <section class="card p-4">
+      <section class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
         <h3 class="font-medium mb-3">Ajouter un Master</h3>
         <div class="flex flex-col sm:flex-row gap-2">
           <input id="mid" class="flex-1 px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring focus:ring-sky-200" placeholder="MASTER_ID (ex: A842E3917578)" />
@@ -92,15 +82,19 @@
 
       <section id="masters" class="grid grid-cols-1 gap-6"></section>
 
-      <section class="card p-4">
+      <section class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
         <h3 class="font-medium mb-2">Console</h3>
         <pre id="log" class="text-xs bg-slate-50 p-3 rounded-xl overflow-auto max-h-64"></pre>
       </section>
     </main>
 
+    <!-- Paho MQTT: DOIT être avant app.js -->
+    <script src="https://unpkg.com/paho-mqtt@1.1.0/paho-mqtt-min.js"></script>
+    <!-- Ton app -->
     <script defer src="app.js"></script>
+
     <script>
-      // PWA : enregistrement SW
+      // PWA: Service Worker
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('sw.js').catch(()=>{});
