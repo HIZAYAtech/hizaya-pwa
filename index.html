@@ -5,30 +5,24 @@
     <title>HIZAYA</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0ea5e9" />
+
+    <!-- PWA -->
     <link rel="manifest" href="manifest.json" />
     <link rel="icon" href="favicon.ico">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
 
-    <!-- Tailwind (style rapide) -->
+    <!-- Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- ⚙️ CONFIG SUPABASE -->
+    <!-- ⚙️ Config Supabase -->
     <script>
-      window.__SUPABASE_URL__ = "<<< https://ctjljqmxjnfykskfgral.supabase.co >>>";
-      window.__SUPABASE_ANON_KEY__ = "<<< eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0amxqcW14am5meWtza2ZncmFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NzQzMDMsImV4cCI6MjA3MjA1MDMwM30.GoLM8CSHRh2KWOmrMLk2-JkFMz2hwAqyHaHxd8T51M4 >>>";
-      // Supabase -> Auth -> URL de redirection : https://hizayatech.github.io/hizaya-pwa/
-      // ex: https://<username>.github.io/<repo>/
-    </script>
-
-    <!-- ⚙️ CONFIG MQTT (HiveMQ Cloud privé) -->
-    <script>
-      // URL WSS de ton cluster (port 8884 + /mqtt)
-      window.__MQTT_URL__ = "<<< e507d97e86884fc8b75f90b37d859a33.s1.eu.hivemq.cloud >>>";
-      window.__MQTT_USER__ = "<<< MQTT_USERNAME >>>";
-      window.__MQTT_PASS__ = "<<< MQTT_PASSWORD >>>";
+      // ⬇️ REMPLACE par ton projet Supabase
+      window.__SUPABASE_URL__ = "https://ctjljqmxjnfykskfgral.supabase.co";
+      window.__SUPABASE_ANON_KEY__ = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0amxqcW14am5meWtza2ZncmFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NzQzMDMsImV4cCI6MjA3MjA1MDMwM30.GoLM8CSHRh2KWOmrMLk2-JkFMz2hwAqyHaHxd8T51M4";
     </script>
   </head>
   <body class="min-h-screen text-slate-900 bg-gradient-to-b from-slate-50 to-white">
+    <!-- Header -->
     <header class="sticky top-0 z-10 bg-white/70 backdrop-blur border-b border-slate-200">
       <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
         <div class="flex items-center gap-3">
@@ -57,7 +51,7 @@
             Se connecter avec Google
           </button>
           <div class="text-xs text-slate-500 text-center">
-            Pense à ajouter l’URL GitHub Pages dans Supabase &gt; Auth &gt; URL de redirection.
+            Ajoute ton URL GitHub Pages dans Supabase → Auth → URL de redirection.
           </div>
         </div>
       </div>
@@ -100,11 +94,13 @@
     <!-- App -->
     <script defer src="app.js"></script>
 
+    <!-- Service Worker -->
     <script>
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('sw.js').catch(()=>{});
+        });
       }
     </script>
   </body>
 </html>
-
