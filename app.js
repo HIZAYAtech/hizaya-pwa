@@ -1,88 +1,122 @@
-/* HIZAYA PWA – Auth Supabase + MQTT.js (WSS HiveMQ Cloud) */
+/* HIZAYA – app.js (PWA)
+   - Auth: Supabase (via supabase-auth.js déjà inclus)
+   - MQTT: via Edge Function get_or_create_mqtt_creds (HiveMQ Cloud Starter)
+   - UI: vanilla DOM (index.html fourni plus tôt)
+*/
 
 (function(){
+  'use strict';
+
+  /* ---------- Shortcuts & State ---------- */
   const $ = (sel) => document.querySelector(sel);
   const elMasters = $("#masters");
   const elLog = $("#log");
+  const LS = { masters: "hz_masters" };
 
-  const LS_KEYS = { masters:"hz_masters" };
   const state = {
     user: null,
-    masters: load(LS_KEYS.masters) || [],
+    masters: load(LS.masters) || [],
     client: null,
     connected: false,
-    subs: {},
   };
 
-  // Broker vars depuis index.html
-  const MQTT_URL = window.__MQTT_URL__;
-  const MQTT_USER = window.__MQTT_USER__;
-  const MQTT_PASS = window.__MQTT_PASS__;
+  // ⚠️ REMPLACE ICI par l’URL de ta function Supabase
+  //    ex: https://abcd1234.functions.supabase.co/get_or_create_mqtt_creds
+  const FN_URL = "https://ctjljqmxjnfykskfgral.supabase.co/functions/v1/smart-worker";
 
-  function log(...a){ if(elLog){ elLog.textContent += a.join(" ") + "\n"; elLog.scrollTop = elLog.scrollHeight; } console.log(...a); }
+  function log(...a){
+    console.log(...a);
+    if(!elLog) return;
+    elLog.textContent += a.join(" ") + "\n";
+    elLog.scrollTop = elLog.scrollHeight;
+  }
   function save(k,v){ localStorage.setItem(k, JSON.stringify(v)); }
-  function load(k){ try{ return JSON.parse(localStorage.getItem(k) || "null"); }catch{ return null; } }
+  function load(k){ try{ return JSON.parse(localStorage.getItem(k)||"null"); }catch{ return null; } }
   const up = (s)=> (s||"").trim().toUpperCase();
 
-  /* ---------- Routing ---------- */
-  function showMain(){ $("#page-login").classList.add("hidden"); $("#page-main").classList.remove("hidden"); $("#who").textContent=`Connecté: ${state.user.email}`; $("#btnLogout").classList.remove("hidden"); renderMasters(); }
-  function showLogin(){ $("#page-main").classList.add("hidden"); $("#page-login").classList.remove("hidden"); $("#who").textContent="Hors ligne"; $("#btnLogout").classList.add("hidden"); }
+  /* ---------- Routing (login/main) ---------- */
+  function showMain(){
+    $("#page-login").classList.add("hidden");
+    $("#page-main").classList.remove("hidden");
+    $("#btnLogout").classList.remove("hidden");
+    $("#who").textContent = `Connecté: ${state.user.email}`;
+    renderMasters();
+  }
+  function showLogin(){
+    $("#page-main").classList.add("hidden");
+    $("#page-login").classList.remove("hidden");
+    $("#btnLogout").classList.add("hidden");
+    $("#who").textContent = "Hors ligne";
+  }
 
   /* ---------- Auth Supabase ---------- */
   async function initAuth(){
-    const session = await window.hzAuth.getSession();
+    // session actuelle
+    const { data:{ session } } = await window.supabase.auth.getSession();
     if(session?.user){ state.user = session.user; showMain(); } else { showLogin(); }
 
+    // écoute des changements
     window.addEventListener("supabase-auth", (e)=>{
       const s = e.detail?.session;
-      if(s?.user){ state.user = s.user; showMain(); } else { state.user=null; disconnectMQTT(); showLogin(); }
+      if(s?.user){ state.user = s.user; showMain(); }
+      else { state.user=null; disconnectMQTT(); showLogin(); }
     });
 
+    // boutons
     $("#btnGoogle").onclick = ()=> window.hzAuth.loginWithGoogle();
     $("#btnLogout").onclick = ()=> window.hzAuth.logout();
   }
 
   /* ---------- Masters UI ---------- */
-  function persist(){ save(LS_KEYS.masters, state.masters); }
+  function persist(){ save(LS.masters, state.masters); }
+
   function renderMasters(){
     elMasters.innerHTML = "";
     if(state.masters.length===0){
-      const d=document.createElement("div"); d.className="text-slate-600"; d.textContent="Aucun master. Ajoute un MASTER_ID ci-dessus.";
+      const d=document.createElement("div"); d.className="text-slate-600";
+      d.textContent="Aucun master. Ajoute un MASTER_ID ci-dessus.";
       elMasters.appendChild(d); return;
     }
+
     state.masters.forEach((m)=>{
-      const card = document.createElement("div"); card.className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4";
+      const card = document.createElement("div");
+      card.className = "bg-white border border-slate-200 rounded-2xl shadow-sm p-4";
+
+      // header
       const head = document.createElement("div"); head.className="flex items-center justify-between gap-3 mb-3";
       const left = document.createElement("div"); left.className="flex items-center gap-3";
       const logo = document.createElement("div"); logo.className="h-10 w-10 rounded-2xl bg-slate-900 text-white grid place-items-center"; logo.textContent="🖥️";
       const title = document.createElement("div");
       const h3 = document.createElement("div"); h3.className="text-lg font-semibold"; h3.textContent = m.name;
       const sub = document.createElement("div"); sub.className="text-xs text-slate-500"; sub.textContent = `ID: ${m.id}`;
-      left.append(logo,title); title.append(h3,sub);
+      title.append(h3,sub); left.append(logo,title);
 
       const right=document.createElement("div"); right.className="flex items-center gap-2";
       const chip=document.createElement("span"); chip.className="text-xs px-2 py-1 rounded-full border"; chip.textContent=m.online?"online":"offline";
       const btnScan=document.createElement("button"); btnScan.className="px-3 py-1.5 rounded-xl bg-white border hover:bg-slate-50"; btnScan.textContent="Scan"; btnScan.onclick=()=>doScan(m.id);
       const btnDel=document.createElement("button"); btnDel.className="px-3 py-1.5 rounded-xl bg-red-600 text-white hover:bg-red-700"; btnDel.textContent="Supprimer"; btnDel.onclick=()=>removeMaster(m.id);
       right.append(chip,btnScan,btnDel);
-      head.append(left,right); card.appendChild(head);
+      head.append(left,right);
+      card.appendChild(head);
 
+      // rename inline (autosave)
       const row=document.createElement("div"); row.className="flex items-center gap-3 text-sm mb-2";
       const lbl=document.createElement("span"); lbl.className="hidden sm:inline text-slate-600"; lbl.textContent="Nom du master :";
       const inp=document.createElement("input"); inp.className="px-3 py-2 rounded-xl border border-slate-300"; inp.value=m.name;
-      let timer=null; inp.oninput=()=>{ clearTimeout(timer); timer=setTimeout(()=>renameMaster(m.id, inp.value.trim()||"Master"), 500); };
+      let t=null; inp.oninput=()=>{ clearTimeout(t); t=setTimeout(()=>renameMaster(m.id, inp.value.trim()||"Master"), 500); };
       row.append(lbl,inp); card.appendChild(row);
 
       const dv=document.createElement("div"); dv.className="h-px bg-slate-200 my-3"; card.appendChild(dv);
 
       const grid=document.createElement("div"); grid.className="grid md:grid-cols-2 gap-6";
 
-      // Slaves
+      // SLAVES (gauche)
       const colL=document.createElement("div");
-      const h4L=document.createElement("div"); h4L.className="font-medium mb-2"; h4L.textContent="Mes appareils"; colL.appendChild(h4L);
+      const h4L=document.createElement("div"); h4L.className="font-medium mb-2"; h4L.textContent="Mes appareils";
       const listL=document.createElement("div"); listL.className="divide-y rounded-xl border overflow-hidden";
-      if(!m.slaves || m.slaves.length===0){ const empty=document.createElement("div"); empty.className="text-sm text-slate-500 p-4"; empty.textContent="Aucun appareil pairé."; listL.appendChild(empty); }
-      else {
+      if(!m.slaves || m.slaves.length===0){
+        const empty=document.createElement("div"); empty.className="text-sm text-slate-500 p-4"; empty.textContent="Aucun appareil pairé."; listL.appendChild(empty);
+      } else {
         m.slaves.forEach(s=>{
           const row=document.createElement("div"); row.className="p-3 bg-white";
           const top=document.createElement("div"); top.className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3";
@@ -103,18 +137,18 @@
           top.append(left,right); row.appendChild(top); listL.appendChild(row);
         });
       }
-      colL.appendChild(listL);
+      colL.append(h4L,listL);
 
-      // Découverte
+      // DISCOVERY (droite)
       const colR=document.createElement("div");
       const headR=document.createElement("div"); headR.className="flex items-center justify-between mb-2";
       const h4R=document.createElement("div"); h4R.className="font-medium"; h4R.textContent="Découverte";
       const bRefresh=document.createElement("button"); bRefresh.className="px-3 py-1.5 rounded-xl bg-white border hover:bg-slate-50"; bRefresh.textContent="Rafraîchir"; bRefresh.onclick=()=>doScan(m.id);
-      headR.append(h4R,bRefresh); colR.appendChild(headR);
-
+      headR.append(h4R,bRefresh);
       const listR=document.createElement("div"); listR.className="divide-y rounded-xl border overflow-hidden";
-      if(!m.discovered || m.discovered.length===0){ const empty=document.createElement("div"); empty.className="text-sm text-slate-500 p-4"; empty.textContent="Aucun appareil en vue. Lance un scan puis mets le Slave en mode pairing."; listR.appendChild(empty); }
-      else {
+      if(!m.discovered || m.discovered.length===0){
+        const empty=document.createElement("div"); empty.className="text-sm text-slate-500 p-4"; empty.textContent="Aucun appareil en vue. Lance un scan puis mets le Slave en mode pairing."; listR.appendChild(empty);
+      } else {
         m.discovered.forEach(d=>{
           const row=document.createElement("div"); row.className="p-3 bg-white flex items-center justify-between gap-3";
           const left=document.createElement("div"); const mac=document.createElement("div"); mac.className="font-mono text-sm"; mac.textContent=d.mac;
@@ -123,7 +157,7 @@
           row.append(left,bpair); listR.appendChild(row);
         });
       }
-      colR.appendChild(listR);
+      colR.append(headR,listR);
 
       grid.append(colL,colR);
       card.appendChild(grid);
@@ -134,7 +168,12 @@
   function makeSwitch(init,onChange){
     const btn=document.createElement("button"); btn.className="h-7 w-12 rounded-full transition flex items-center "+(init?"bg-sky-600":"bg-slate-300");
     const dot=document.createElement("div"); dot.className="h-5 w-5 bg-white rounded-full shadow transition "+(init?"translate-x-5":"translate-x-0");
-    btn.appendChild(dot); btn.onclick=()=>{ const next=!btn.classList.contains("bg-sky-600"); btn.classList.toggle("bg-sky-600",next); btn.classList.toggle("bg-slate-300",!next); dot.classList.toggle("translate-x-5",next); dot.classList.toggle("translate-x-0",!next); onChange(next); };
+    btn.appendChild(dot);
+    btn.onclick=()=>{ const next=!btn.classList.contains("bg-sky-600");
+      btn.classList.toggle("bg-sky-600",next); btn.classList.toggle("bg-slate-300",!next);
+      dot.classList.toggle("translate-x-5",next); dot.classList.toggle("translate-x-0",!next);
+      onChange(next);
+    };
     return btn;
   }
 
@@ -156,6 +195,7 @@
     const i = state.masters.findIndex(m=>m.id===mid); if(i<0) return;
     state.masters[i] = { ...state.masters[i], name }; persist(); renderMasters();
   }
+
   function doScan(mid){
     const i = state.masters.findIndex(m=>m.id===mid); if(i<0) return;
     state.masters[i].discovered = []; persist(); renderMasters();
@@ -175,21 +215,36 @@
     const m=state.masters.find(x=>x.id===mid); if(m){ m.slaves=m.slaves.filter(s=>s.mac!==mac); persist(); renderMasters(); }
   }
 
-  /* ---------- MQTT.js ---------- */
-  function connectMQTT(){
+  /* ---------- MQTT (via Edge Function creds) ---------- */
+  async function connectMQTT(){
     if(state.connected) return log("MQTT déjà connecté");
     if(!(window.mqtt && window.mqtt.connect)) return alert("mqtt.min.js introuvable");
 
-    const url = MQTT_URL;
-    const clientId = "pwa-" + Math.random().toString(16).slice(2);
-    log(`MQTT → ${url}`);
+    const { data:{ session } } = await window.supabase.auth.getSession();
+    if(!session) return alert("Connecte-toi d'abord");
 
+    // récupère/created creds (Starter API)
+    const res = await fetch(FN_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}` }
+    });
+    if(!res.ok){
+      const txt = await res.text();
+      return alert("MQTT creds error: " + txt);
+    }
+    const { url, username, password } = await res.json();
+    log("MQTT →", url, "(edge creds)");
+
+    const clientId = "pwa-" + Math.random().toString(16).slice(2);
     state.client = mqtt.connect(url, {
       clientId, clean:true, reconnectPeriod:2000, connectTimeout:15000,
-      username: MQTT_USER, password: MQTT_PASS
+      username, password
     });
 
-    state.client.on("connect", ()=>{ state.connected=true; log("MQTT connecté"); state.masters.forEach(m=>subscribeMaster(m.id)); });
+    state.client.on("connect", ()=>{
+      state.connected=true; log("MQTT connecté");
+      state.masters.forEach(m=>subscribeMaster(m.id));
+    });
     state.client.on("reconnect", ()=> log("MQTT reconnect…"));
     state.client.on("close", ()=>{ state.connected=false; log("MQTT fermé"); state.masters=state.masters.map(m=>({...m,online:false})); renderMasters(); });
     state.client.on("error", (err)=> log("MQTT erreur:", err?.message||err));
@@ -215,16 +270,42 @@
       }
     });
   }
-  function disconnectMQTT(){ if(state.client){ try{ state.client.end(true); }catch{} } state.connected=false; state.client=null; log("MQTT déconnecté"); }
-  function subscribeMaster(mid){ if(!state.client || !state.connected) return; const t1=`hizaya/${mid}/evt`, t2=`hizaya/${mid}/state`; state.client.subscribe([t1,t2]); log("SUB →", t1, "&", t2); sendCmd(mid,{cmd:"get_peers"}); }
-  function unsubscribeMaster(mid){ if(!state.client || !state.connected) return; const t1=`hizaya/${mid}/evt`, t2=`hizaya/${mid}/state`; state.client.unsubscribe([t1,t2]); log("UNSUB →", t1, "&", t2); }
-  function sendCmd(mid, obj){ if(!state.client || !state.connected) return alert("MQTT non connecté"); const t=`hizaya/${mid}/cmd`; state.client.publish(t, JSON.stringify(obj), { qos:0, retain:false }); log("→", t, JSON.stringify(obj)); }
+
+  function disconnectMQTT(){
+    if(state.client){ try{ state.client.end(true); }catch{} }
+    state.connected=false; state.client=null; log("MQTT déconnecté");
+  }
+
+  function subscribeMaster(mid){
+    if(!state.client || !state.connected) return;
+    const t1=`hizaya/${mid}/evt`, t2=`hizaya/${mid}/state`;
+    state.client.subscribe([t1,t2]);
+    log("SUB →", t1, "&", t2);
+    // demander l'état initial
+    sendCmd(mid,{cmd:"get_peers"});
+  }
+  function unsubscribeMaster(mid){
+    if(!state.client || !state.connected) return;
+    const t1=`hizaya/${mid}/evt`, t2=`hizaya/${mid}/state`;
+    state.client.unsubscribe([t1,t2]);
+    log("UNSUB →", t1, "&", t2);
+  }
+  function sendCmd(mid, obj){
+    if(!state.client || !state.connected) return alert("MQTT non connecté");
+    const t=`hizaya/${mid}/cmd`;
+    state.client.publish(t, JSON.stringify(obj), { qos:0, retain:false });
+    log("→", t, JSON.stringify(obj));
+  }
 
   /* ---------- Boot ---------- */
   document.addEventListener("DOMContentLoaded", ()=>{
     initAuth();
-    $("#btnAddMaster").onclick = addMaster;
+
+    // boutons haut de page
     $("#btnConnect").onclick = connectMQTT;
     $("#btnDisconnect").onclick = disconnectMQTT;
+
+    // ajouter un master
+    $("#btnAddMaster").onclick = addMaster;
   });
 })();
