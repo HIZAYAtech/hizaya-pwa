@@ -8,30 +8,32 @@
 
     <!-- PWA -->
     <link rel="manifest" href="./manifest.json" />
-    <link rel="icon" href="./favicon.ico">
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+    <link rel="icon" href="./favicon.ico" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
 
-    <!-- Tailwind (OK pour proto sur Pages; warning ignoré) -->
+    <!-- Tailwind (OK pour proto sur Pages) -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- ⚙️ Config Supabase : REMPLACE ces 2 lignes -->
+    <!-- ========= CONFIG SUPABASE (REMPLACE CES 2 LIGNES) ========= -->
     <script>
       window.__SUPABASE_URL__ = "https://ctjljqmxjnfykskfgral.supabase.co";
       window.__SUPABASE_ANON_KEY__ = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0amxqcW14am5meWtza2ZncmFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NzQzMDMsImV4cCI6MjA3MjA1MDMwM30.GoLM8CSHRh2KWOmrMLk2-JkFMz2hwAqyHaHxd8T51M4";
     </script>
+    <!-- ============================================================ -->
 
-    <!-- Supabase JS (UMD) -->
+    <!-- Supabase JS UMD -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-    <!-- MQTT.js (browser) si tu utilises MQTT côté web -->
+    <!-- MQTT.js (front) -->
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
-    <!-- Auth helper (doit venir AVANT app.js) -->
+    <!-- Init Supabase (UMD, pas de module) -->
     <script src="./supabase-auth.js"></script>
 
-    <!-- App -->
+    <!-- App (pairing par code + MQTT) -->
     <script defer src="./app.js"></script>
   </head>
+
   <body class="min-h-screen text-slate-900 bg-gradient-to-b from-slate-50 to-white">
     <!-- Header -->
     <header class="sticky top-0 z-10 bg-white/70 backdrop-blur border-b border-slate-200">
@@ -62,7 +64,7 @@
             Se connecter avec Google
           </button>
           <div class="text-xs text-slate-500 text-center">
-            Pense à ajouter l’URL GitHub Pages dans Supabase → Auth → URL de redirection.
+            Ajoute l’URL GitHub Pages dans Supabase → Auth → URL de redirection.
           </div>
         </div>
       </div>
@@ -81,22 +83,48 @@
         </div>
       </section>
 
+      <!-- Lier un Master par code -->
       <section class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
-        <h3 class="font-medium mb-3">Ajouter un Master</h3>
-        <div class="flex flex-col sm:flex-row gap-2">
-          <input id="mid" class="flex-1 px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring focus:ring-sky-200" placeholder="MASTER_ID (ex: A842E3917578)" />
-          <input id="mname" class="flex-1 px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring focus:ring-sky-200" placeholder="Nom (ex: Atelier)" />
-          <button id="btnAddMaster" class="px-3 py-2 rounded-xl bg-slate-900 text-white">ADD</button>
+        <h3 class="font-medium mb-3">Lier un Master</h3>
+        <div class="flex flex-wrap gap-2">
+          <button id="btnPairMaster" class="px-3 py-2 rounded-xl bg-slate-900 text-white">Générer un code</button>
+          <button id="btnRefreshMasters" class="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200">Rafraîchir mes masters</button>
         </div>
+        <p class="text-xs text-slate-500 mt-2">
+          1) Clique “Générer un code” · 2) Sur le Master, maintiens BTN1 au boot (portail Wi-Fi) et saisis le code · 3) Clique “J’ai terminé”.
+        </p>
       </section>
 
+      <!-- Liste des masters -->
       <section id="masters" class="grid grid-cols-1 gap-6"></section>
 
+      <!-- Console -->
       <section class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
         <h3 class="font-medium mb-2">Console</h3>
         <pre id="log" class="text-xs bg-slate-50 p-3 rounded-xl overflow-auto max-h-64"></pre>
       </section>
     </main>
+
+    <!-- Modal : code d’appairage -->
+    <div id="modalClaim" class="hidden fixed inset-0 z-50">
+      <div class="absolute inset-0 bg-black/30"></div>
+      <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-md p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="text-[17px] font-semibold">Code d’appairage</h4>
+            <button id="btnClaimClose" class="px-2 py-1 rounded-lg bg-slate-100">✕</button>
+          </div>
+          <div class="text-center">
+            <div class="text-4xl font-semibold tracking-widest text-slate-900" id="claimCode">000000</div>
+            <div class="text-xs text-slate-500 mt-1">Expire dans <span id="claimTimer">--</span></div>
+            <p class="text-sm text-slate-600 mt-4">
+              Sur le Master, ouvre le portail Wi-Fi, entre ce code puis sauvegarde.
+            </p>
+            <button id="btnClaimDone" class="mt-4 px-3 py-2 rounded-xl bg-sky-600 text-white">J’ai terminé</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Service Worker -->
     <script>
