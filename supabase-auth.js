@@ -1,39 +1,42 @@
-/* supabase-auth.js — plain JS (UMD) */
-
+/* supabase-auth.js — UMD, no TypeScript, no modules */
 (function () {
-const url = window.__https://ctjljqmxjnfykskfgral.supabase.co__;
-const anon = window.__eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0amxqcW14am5meWtza2ZncmFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NzQzMDMsImV4cCI6MjA3MjA1MDMwM30.GoLM8CSHRh2KWOmrMLk2-JkFMz2hwAqyHaHxd8T51M4__;
+  // Ces variables DOIVENT être définies dans index.html AVANT ce script
+  var url  = window.__SUPABASE_URL__;
+  var anon = window.__SUPABASE_ANON_KEY__;
 
-  if(!url || !anon){
+  if (!url || !anon) {
     console.error("Supabase config missing: __SUPABASE_URL__ / __SUPABASE_ANON_KEY__");
     return;
   }
 
-  // La librairie UMD fournit window.supabase avec createClient()
+  // La lib UMD doit être chargée avant (cdn.jsdelivr.net/npm/@supabase/supabase-js@2)
   if (!window.supabase || typeof window.supabase.createClient !== "function") {
     console.error("Supabase JS not loaded. Add the CDN script before supabase-auth.js");
     return;
   }
 
-  // Crée le client et remplace le namespace par l’instance (pratique pour app.js)
+  // Remplace le namespace par l’instance client (pratique pour app.js)
   window.supabase = window.supabase.createClient(url, anon);
 
-  // Expose quelques helpers pour app.js
+  // Petits helpers que app.js peut appeler
   window.hzAuth = {
-    async loginWithGoogle() {
-      const redirectTo = location.origin + location.pathname; // ex: https://.../hizaya-pwa/ (ou /index.html)
+    loginWithGoogle: async function () {
+      var redirectTo = location.origin + location.pathname;
       await window.supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo }
+        options: { redirectTo: redirectTo }
       });
     },
-    async logout() {
+    logout: async function () {
       await window.supabase.auth.signOut();
     }
   };
 
-  // Relaye les changements de session vers app.js
-  window.supabase.auth.onAuthStateChange((_event, session) => {
-    window.dispatchEvent(new CustomEvent("supabase-auth", { detail: { session } }));
+  // Émet un event quand la session change (app.js peut écouter)
+  window.supabase.auth.onAuthStateChange(function (_evt, session) {
+    window.dispatchEvent(new CustomEvent("supabase-auth", { detail: { session: session } }));
   });
+
+  // Petite trace de debug
+  console.log("[supabase-auth] OK");
 })();
