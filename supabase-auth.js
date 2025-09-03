@@ -1,34 +1,26 @@
-/* supabase-auth.js — UMD simple */
+/* supabase-auth.js — UMD simple (Google + email OTP) */
 (function () {
   const cfg = window.__CFG__ || {};
-  const url  = cfg.SUPABASE_URL;
-  const anon = cfg.SUPABASE_ANON_KEY;
-  if (!url || !anon || !window.supabase) {
-    console.error("[supabase-auth] Mauvaise config ou supabase-js manquant.");
+  if (!cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY || !window.supabase) {
+    console.error("[supabase-auth] Config manquante ou supabase-js absent.");
     return;
   }
-  const client = window.supabase.createClient(url, anon);
+  const sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
+  window.sb = sb;
 
-  // Expose
-  window.sb = client;
-
-  // Helpers login
+  // Helpers d'auth
   window.hzAuth = {
-    loginWithGoogle: () => client.auth.signInWithOAuth({ provider: "google" }),
-    loginWithEmail:  (email) => client.auth.signInWithOtp({ email }),
-    logout: () => client.auth.signOut()
+    loginWithGoogle: () => sb.auth.signInWithOAuth({ provider: "google", options:{ redirectTo: location.origin+location.pathname } }),
+    loginWithEmail:  (email) => sb.auth.signInWithOtp({ email }),
+    logout: () => sb.auth.signOut()
   };
 
-  // Notifier l'app au boot
-  client.auth.getSession().then(({ data }) => {
-    const ev = new CustomEvent("supabase-auth", { detail: { session: data.session } });
-    window.dispatchEvent(ev);
+  // Propagation session → app
+  sb.auth.getSession().then(({ data }) => {
+    window.dispatchEvent(new CustomEvent("supabase-auth", { detail: { session: data.session } }));
   });
-
-  // Notifier sur chaque changement
-  client.auth.onAuthStateChange((_, session) => {
-    const ev = new CustomEvent("supabase-auth", { detail: { session } });
-    window.dispatchEvent(ev);
+  sb.auth.onAuthStateChange((_, session) => {
+    window.dispatchEvent(new CustomEvent("supabase-auth", { detail: { session } }));
   });
 
   console.log("[supabase-auth] OK");
