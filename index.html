@@ -2,157 +2,113 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>HIZAYA • Console</title>
-  <meta name="theme-color" content="#0ea5e9" />
-
-  <!-- PWA -->
-  <link rel="manifest" href="manifest.json" />
-  <link rel="icon" href="icons/icon-192.png" sizes="192x192" />
-  <link rel="apple-touch-icon" href="icons/icon-192.png" />
-
-  <!-- Police (Inter) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-
-  <!-- Tailwind (CDN : ok pour proto / GH Pages) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] } }
-      }
-    }
-  </script>
+  <meta name="theme-color" content="#0f172a"/>
 
   <style>
-    html,body { height:100%; background: #f8fafc; }
-    body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; }
-    .hidden { display: none; }
+    :root{--bg:#f8fafc;--card:#fff;--text:#0f172a;--muted:#64748b;--line:#e2e8f0;--brand:#2563eb;--danger:#ef4444;}
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#fff 0%, var(--bg) 100%);color:var(--text);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto}
+    .wrap{max-width:1000px;margin:0 auto;padding:24px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 6px 16px rgba(2,6,23,.06)}
+    .row{display:flex;gap:16px;align-items:center}
+    .btn{border:0;border-radius:12px;padding:10px 14px;cursor:pointer;font-weight:600}
+    .btn-brand{background:var(--brand);color:#fff}
+    .btn-ghost{background:#fff;border:1px solid var(--line)}
+    .btn-danger{background:var(--danger);color:#fff}
+    .muted{color:var(--muted)}
+    .input{width:100%;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+    .header{position:sticky;top:0;backdrop-filter:saturate(180%) blur(8px);background:rgba(255,255,255,.7);border-bottom:1px solid var(--line)}
+    .grid{display:grid;grid-template-columns:1fr;gap:16px}
+    @media(min-width:800px){.grid{grid-template-columns:1fr}}
+    .badge{font-size:12px;padding:4px 8px;border-radius:999px;border:1px solid var(--line);background:#f1f5f9}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+    .hidden{display:none}
+    .right{margin-left:auto}
   </style>
+
+  <!-- Définis ici tes variables (laisse vide pour Edge Function public_config) -->
+  <script>
+    // ⚠️ Remplace par tes vraies valeurs pour un proto simple :
+    window.__SUPABASE_URL__      = ""; // ex: "https://xxxx.supabase.co"
+    window.__SUPABASE_ANON_KEY__  = ""; // ex: "eyJhbGciOi..."
+    // URL WSS de ton cluster HiveMQ (PWA) — ex: "wss://xxxxx.s1.eu.hivemq.cloud:8884/mqtt"
+    window.__MQTT_WSS_URL__       = "";
+  </script>
+
+  <!-- Librairies -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+  <!-- Init Supabase (hybride: globals OU Edge Function public_config) -->
+  <script src="./supabase-auth.js"></script>
 </head>
-<body class="min-h-screen">
-
-  <!-- PAGE LOGIN -->
-  <section id="page-login" class="min-h-screen flex items-center justify-center px-4">
-    <div class="w-full max-w-md">
-      <div class="bg-white border border-slate-200 rounded-3xl shadow-sm p-6">
-        <div class="flex items-center gap-3 mb-3">
-          <div class="w-10 h-10 rounded-2xl bg-slate-900 text-white grid place-items-center font-semibold">H</div>
-          <h1 class="text-[22px] font-semibold tracking-[-0.01em] text-slate-900">HIZAYA</h1>
-        </div>
-        <p class="text-sm text-slate-600 mb-5">Connecte-toi pour gérer ton Master et ses Slaves.</p>
-
-        <!-- Bouton Google fourni par supabase-auth.js -->
-        <button id="btnGoogle" class="w-full px-4 py-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-sm">
-          Se connecter avec Google
-        </button>
-
-        <p class="text-xs text-slate-500 text-center mt-3">
-          Ton compte est géré par Supabase (Google OAuth).
-        </p>
+<body>
+  <header class="header">
+    <div class="wrap row" style="padding:12px 24px">
+      <div class="row" style="gap:10px">
+        <div style="width:34px;height:34px;border-radius:10px;background:#0f172a;color:#fff;display:grid;place-items:center;font-weight:800">H</div>
+        <strong>HIZAYA</strong>
       </div>
+      <div class="right muted" id="who">Hors ligne</div>
     </div>
-  </section>
+  </header>
 
-  <!-- PAGE PRINCIPALE -->
-  <section id="page-main" class="hidden">
-    <!-- Header -->
-    <header class="sticky top-0 z-10 bg-white/70 backdrop-blur supports-[backdrop-filter]:bg-white/60 border-b border-slate-200">
-      <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-2xl bg-slate-900 text-white grid place-items-center font-bold">H</div>
-          <span class="font-semibold tracking-[-0.01em] text-slate-900">HIZAYA</span>
-        </div>
-        <div class="flex items-center gap-3">
-          <span id="who" class="text-sm text-slate-600">Hors ligne</span>
-          <button id="btnLogout" class="px-3 py-1.5 rounded-xl text-sm bg-white ring-1 ring-slate-300 hover:bg-slate-50">
-            Déconnexion
-          </button>
+  <main class="wrap">
+    <!-- PAGE LOGIN -->
+    <section id="page-login" class="grid">
+      <div class="card" style="padding:18px 18px 22px">
+        <h2 style="margin:8px 0 6px">Connexion</h2>
+        <p class="muted">Connecte-toi avec Google pour gérer tes Masters.</p>
+        <div class="row" style="margin-top:12px;gap:10px">
+          <button class="btn btn-brand" id="btnGoogle">Se connecter avec Google</button>
         </div>
       </div>
-    </header>
+    </section>
 
-    <main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
-      <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <div>
-          <h2 class="text-[28px] font-semibold tracking-[-0.02em] text-slate-900">Bienvenue 👋</h2>
-          <p class="text-slate-600 text-[15px]">Gère tes Masters et leurs Slaves depuis une interface simple.</p>
-        </div>
-        <div class="flex items-center gap-2">
-          <button id="btnConnect" class="px-3.5 py-2 rounded-2xl text-sm bg-blue-600 text-white hover:bg-blue-700">
-            Connect MQTT
-          </button>
-          <button id="btnDisconnect" class="px-3.5 py-2 rounded-2xl text-sm bg-white ring-1 ring-slate-300 hover:bg-slate-50">
-            Disconnect
-          </button>
-          <button id="btnPairMaster" class="px-3.5 py-2 rounded-2xl text-sm bg-slate-900 text-white hover:bg-black/90">
-            Lier un Master
-          </button>
-          <button id="btnRefreshMasters" class="px-3.5 py-2 rounded-2xl text-sm bg-white ring-1 ring-slate-300 hover:bg-slate-50">
-            Rafraîchir
-          </button>
-        </div>
+    <!-- PAGE APP -->
+    <section id="page-main" class="grid hidden">
+      <div class="row" style="gap:10px;margin-bottom:16px">
+        <button class="btn btn-ghost" id="btnConnect">Connecter MQTT</button>
+        <button class="btn btn-ghost" id="btnDisconnect">Déconnecter MQTT</button>
+        <button class="btn btn-brand" id="btnPairMaster">Lier un Master</button>
+        <button class="btn btn-danger right" id="btnLogout">Se déconnecter</button>
       </div>
 
-      <!-- Liste des masters -->
-      <div id="masters" class="grid grid-cols-1 gap-6">
-        <!-- Cartes Master injectées par app.js -->
+      <div class="card" style="padding:16px">
+        <div class="row" style="justify-content:space-between">
+          <h3>Mes Masters</h3>
+          <button class="btn btn-ghost" id="btnRefreshMasters">Rafraîchir</button>
+        </div>
+        <div id="masters" style="margin-top:10px"></div>
       </div>
 
-      <!-- Logs (optionnel) -->
-      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm">
-        <div class="px-4 py-2 border-b border-slate-100 font-medium text-sm text-slate-700">Logs</div>
-        <pre id="log" class="p-4 text-xs text-slate-700 overflow-auto max-h-64 whitespace-pre-wrap"></pre>
+      <div class="card" style="padding:16px;margin-top:16px">
+        <h3>Log</h3>
+        <pre id="log" style="white-space:pre-wrap;max-height:260px;overflow:auto;margin:8px 0 0"></pre>
       </div>
-    </main>
-  </section>
+    </section>
+  </main>
 
-  <!-- Modale Appairage par code -->
-  <div id="modalClaim" class="hidden fixed inset-0 z-50">
-    <div class="absolute inset-0 bg-black/30"></div>
-    <div class="absolute inset-0 flex items-center justify-center p-4">
-      <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg border border-slate-200">
-        <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h4 class="font-semibold text-[17px] text-slate-900">Appairage du Master</h4>
-          <button id="btnClaimClose" class="text-slate-400 hover:text-slate-600">✕</button>
-        </div>
-        <div class="p-5 space-y-3">
-          <p class="text-sm text-slate-600">
-            Saisis ce code sur le Master (portail Wi-Fi) avant expiration.
-          </p>
-          <div class="text-center">
-            <div id="claimCode" class="font-mono text-3xl tracking-widest text-slate-900">000000</div>
-            <div class="text-xs text-slate-500">Expire dans <span id="claimTimer">60s</span></div>
-          </div>
-        </div>
-        <div class="px-5 py-4 border-t border-slate-200 flex justify-end gap-2">
-          <button id="btnClaimDone" class="px-3.5 py-2 rounded-2xl text-sm bg-blue-600 text-white hover:bg-blue-700">
-            J’ai terminé
-          </button>
-        </div>
+  <!-- Modal d’appairage -->
+  <div id="modalClaim" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.35);display:grid;place-items:center">
+    <div class="card" style="width:min(520px,92vw);padding:16px">
+      <div class="row" style="justify-content:space-between">
+        <h3>Code d’appairage</h3>
+        <button class="btn btn-ghost" id="btnClaimClose">✕</button>
+      </div>
+      <p class="muted">Entre ce code sur le Master (portail Wi-Fi) dans les <b>60s</b>.</p>
+      <div class="row" style="margin:10px 0">
+        <div style="font-size:32px;font-weight:800;letter-spacing:4px" id="claimCode">000000</div>
+        <span class="badge" id="claimTimer">60s</span>
+      </div>
+      <div class="row" style="justify-content:flex-end;gap:10px">
+        <button class="btn btn-ghost" id="btnClaimDone">Ok</button>
       </div>
     </div>
   </div>
 
-  <!-- Libs externes (dans cet ordre) -->
-  <!-- MQTT.js (WSS) -->
-  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-  <!-- Supabase UMD (si besoin par ton supabase-auth.js) -->
-  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-  <!-- Ton init Supabase + Auth (doit émettre l’event 'supabase-auth' et exposer window.supabase & window.hzAuth) -->
-  <script src="supabase-auth.js"></script>
-  <!-- Ton app -->
-  <script src="app.js" defer></script>
-
-  <!-- Service Worker (PWA) -->
-  <script>
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js").catch(()=>{});
-      });
-    }
-  </script>
+  <script src="./app.js"></script>
 </body>
 </html>
