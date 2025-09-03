@@ -1,193 +1,210 @@
-// ===== HIZAYA PWA — Appairage par code + MQTT =====
+/* HIZAYA – App front statique (GitHub Pages)
+ * - Auth Supabase (Google ou email)
+ * - Liste des masters (table Supabase)
+ * - Connexion MQTT (mqtt.js via WSS) → souscription hizaya/+/state
+ * - Création d’un code d’appairage 6 chiffres (Edge Function)
+ */
 
-// Base URL des Functions (auto depuis SUPABASE_URL)
-function fnBase() {
-  const url = window.__SUPABASE_URL__ || (window.supabase?.supabaseUrl) || "";
-  try {
-    const ref = new URL(url).host.split(".")[0];
-    return `https://${ref}.functions.supabase.co`;
-  } catch { return ""; }
-}
-const FN_CREATE_CLAIM = () => fnBase() + "/create_claim";
-const FN_MQTT_CREDS   = () => fnBase() + "/get_or_create_mqtt_creds";
+const CFG = window.__CFG__ || {};
+const logEl = document.getElementById("log");
+const mastersEl = document.getElementById("masters");
 
+function log(...a){ logEl.textContent += a.join(" ") + "\n"; logEl.scrollTop = logEl.scrollHeight; }
+
+// Etat
 const S = {
   session: null,
   masters: [],
   mqtt: null,
   mqttReady: false,
-  mqttSubs: new Set(),
 };
-
-const $ = (s) => document.querySelector(s);
-function show(id){ $(id).classList.remove("hidden"); }
-function hide(id){ $(id).classList.add("hidden"); }
-function log(...a){ const el=$("#log"); if(!el) return; el.textContent += a.join(" ")+"\n"; el.scrollTop = el.scrollHeight; }
 
 // ---------- AUTH ----------
 async function initAuth(){
-  window.addEventListener("supabase-auth", e => updateSession(e.detail.session));
-  const { data: { session } } = await window.supabase.auth.getSession();
-  updateSession(session);
+  // écoute les évènements du wrapper
+  window.addEventListener("supabase-auth", (e)=>updateSession(e.detail.session));
 
-  $("#btnGoogle")?.addEventListener("click", ()=>window.hzAuth.loginWithGoogle());
-  $("#btnLogout")?.addEventListener("click", async ()=>{ await window.hzAuth.logout(); });
+  // Boutons
+  document.getElementById("btnLoginGoogle").onclick = ()=>window.hzAuth.loginWithGoogle();
+  document.getElementById("btnLoginEmail").onclick = async ()=>{
+    const email = document.getElementById("email").value.trim();
+    if(!email) return alert("Entre un email.");
+    await window.hzAuth.loginWithEmail(email);
+    alert("Lien envoyé (check email).");
+  };
+  document.getElementById("btnLogout").onclick = async ()=>{ await window.hzAuth.logout(); };
+
+  // Actions
+  document.getElementById("btnConnect").onclick = connectMQTT;
+  document.getElementById("btnDisconnect").onclick = disconnectMQTT;
+  document.getElementById("btnPairMaster").onclick = createPairingCode;
+  document.getElementById("btnRefreshMasters").onclick = loadMasters;
+
+  // Get session actuelle
+  const { data:{ session } } = await window.sb.auth.getSession();
+  updateSession(session);
 }
 
 async function updateSession(session){
   S.session = session || null;
+  const ui = document.getElementById("userInfo");
+  const pgLogin = document.getElementById("page-login");
+  const pgMain  = document.getElementById("page-main");
+  const btnOut  = document.getElementById("btnLogout");
+  const btnGoogle = document.getElementById("btnLoginGoogle");
+
   if(!S.session){
-    $("#who").textContent = "Hors ligne";
-    show("#page-login"); hide("#page-main");
+    ui.textContent = "Hors ligne";
+    pgLogin.classList.remove("hidden");
+    pgMain.classList.add("hidden");
+    btnOut.classList.add("hidden");
+    btnGoogle.classList.remove("hidden");
     return;
   }
-  $("#who").textContent = S.session.user.email || "Connecté";
-  hide("#page-login"); show("#page-main");
+  ui.textContent = S.session.user.email || "Connecté";
+  pgLogin.classList.add("hidden");
+  pgMain.classList.remove("hidden");
+  btnOut.classList.remove("hidden");
+  btnGoogle.classList.add("hidden");
+
   await loadMasters();
 }
 
-// ---------- MASTERS (Supabase) ----------
+// ---------- MASTERS ----------
 async function loadMasters(){
-  const { data, error } = await window.supabase
+  const { data, error } = await window.sb
     .from("masters")
-    .select("master_id, name, created_at")
+    .select("master_id,name,created_at")
     .order("created_at", { ascending: false });
+
   if(error){ log("[DB] masters error:", error.message); return; }
   S.masters = data || [];
   renderMasters();
 
-  // (Re)abonnements MQTT state
-  if(S.mqtt){
-    for(const m of S.masters){
-      const t = `hizaya/${m.master_id}/state`;
-      if(!S.mqttSubs.has(t)){ S.mqtt.subscribe(t); S.mqttSubs.add(t); }
-    }
+  // si MQTT est connecté, souscrire aux state
+  if(S.mqttReady){
+    S.mqtt.subscribe("hizaya/+/state");
   }
 }
 
 function renderMasters(){
-  const cont = $("#masters");
-  cont.innerHTML = "";
+  mastersEl.innerHTML = "";
   if(!S.masters.length){
-    cont.innerHTML = `<div class="muted">Aucun master. Clique “Lier un Master”.</div>`;
+    mastersEl.innerHTML = `<div class="muted">Aucun master. Clique “Lier un Master”.</div>`;
     return;
   }
   for(const m of S.masters){
     const card = document.createElement("div");
     card.className = "card";
-    card.style.padding = "12px 12px 14px";
     card.innerHTML = `
-      <div class="row" style="justify-content:space-between">
+      <div class="row">
         <div>
-          <div style="font-weight:700">${m.name}</div>
-          <div class="muted mono">ID: ${m.master_id} • <span class="badge">offline</span></div>
+          <div style="font-weight:600">${escapeHTML(m.name||"Master")}</div>
+          <div class="muted mono">ID: ${m.master_id}</div>
         </div>
-        <div class="row" style="gap:8px">
-          <button class="btn btn-ghost btn-scan">Scan</button>
-          <button class="btn btn-danger btn-del">Supprimer</button>
-        </div>
+        <div class="spacer"></div>
+        <span class="badge off" data-badge="${m.master_id}">offline</span>
+        <button class="btn" data-scan="${m.master_id}">Scan (demo)</button>
+        <button class="btn d" data-del="${m.master_id}">Supprimer</button>
       </div>
-      <div class="muted" style="margin-top:8px">Mes appareils (à implémenter avec tes messages MQTT /evt)</div>
     `;
+    mastersEl.appendChild(card);
 
-    // suppression
-    card.querySelector(".btn-del").onclick = async ()=>{
-      if(!confirm("Supprimer ce master de ton compte ?")) return;
-      await window.supabase.from("masters").delete().eq("master_id", m.master_id);
+    card.querySelector(`[data-del="${m.master_id}"]`).onclick = async ()=>{
+      if(!confirm("Retirer ce master de ton compte ?")) return;
+      await window.sb.from("masters").delete().eq("master_id", m.master_id);
       await loadMasters();
     };
-
-    // scan → publish cmd
-    card.querySelector(".btn-scan").onclick = ()=>{
+    card.querySelector(`[data-scan="${m.master_id}"]`).onclick = ()=>{
       if(!S.mqttReady) return alert("Connecte MQTT d'abord");
       const t = `hizaya/${m.master_id}/cmd`;
       const msg = JSON.stringify({ cmd:"scan_start" });
       S.mqtt.publish(t, msg);
       log("[MQTT] ->", t, msg);
     };
-
-    cont.appendChild(card);
   }
 }
 
 function setOnline(master_id, online){
-  const cards = [...document.querySelectorAll("#masters .card")];
-  for(const el of cards){
-    const txt = el.querySelector(".mono")?.textContent || "";
-    if(txt.includes(master_id)){
-      const badge = el.querySelector(".badge");
-      badge.textContent = online ? "online" : "offline";
-      badge.style.background = online ? "#dcfce7" : "#f1f5f9";
-      badge.style.borderColor = online ? "#86efac" : "#e2e8f0";
-    }
+  const b = document.querySelector(`[data-badge="${master_id}"]`);
+  if(!b) return;
+  if(online){
+    b.textContent = "online";
+    b.className = "badge ok";
+  }else{
+    b.textContent = "offline";
+    b.className = "badge off";
   }
 }
 
-// ---------- APPAIRAGE ----------
-let countdownTimer = null;
+function escapeHTML(s){ return (s||"").replace(/[&<>"']/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])) }
+
+// ---------- CLAIM (pairing) ----------
+let countTimer = null;
 async function createPairingCode(){
-  const { data:{ session } } = await window.supabase.auth.getSession();
+  const { data:{ session } } = await window.sb.auth.getSession();
   if(!session) return alert("Connecte-toi d'abord.");
 
-  const url = FN_CREATE_CLAIM();
-  if(!url) return alert("Functions base URL introuvable (vérifie SUPABASE_URL).");
-
-  const res = await fetch(url, { method:"POST", headers:{ Authorization:`Bearer ${session.access_token}` }});
-  if(!res.ok){ return alert("Erreur create_claim: "+ await res.text()); }
+  const res = await fetch(CFG.FN_CREATE_CLAIM, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${session.access_token}` }
+  });
+  if(!res.ok){
+    const t = await res.text();
+    alert("Erreur create_claim: "+t);
+    return;
+  }
   const { code, expires_at } = await res.json();
   showClaimModal(code, expires_at);
 }
 
 function showClaimModal(code, expiresAt){
-  $("#claimCode").textContent = code;
-  $("#modalClaim").classList.remove("hidden");
-  clearInterval(countdownTimer);
+  document.getElementById("claimCode").textContent = code;
+  const dlg = document.getElementById("dlgClaim");
+  dlg.showModal();
+  clearInterval(countTimer);
   function refresh(){
     const s = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now())/1000));
-    $("#claimTimer").textContent = s+"s";
-    if(s<=0) clearInterval(countdownTimer);
+    document.getElementById("claimTimer").textContent = s+"s";
+    if(s<=0) clearInterval(countTimer);
   }
   refresh();
-  countdownTimer = setInterval(refresh, 1000);
+  countTimer = setInterval(refresh, 1000);
 }
-function closeClaimModal(){ $("#modalClaim").classList.add("hidden"); clearInterval(countdownTimer); }
+document.getElementById("btnClaimClose").onclick = ()=> document.getElementById("dlgClaim").close();
+document.getElementById("btnClaimDone").onclick  = async ()=>{
+  document.getElementById("dlgClaim").close();
+  await loadMasters();
+};
 
-$("#btnPairMaster")?.addEventListener("click", createPairingCode);
-$("#btnClaimDone")?.addEventListener("click", async ()=>{ closeClaimModal(); await loadMasters(); });
-$("#btnClaimClose")?.addEventListener("click", closeClaimModal);
-$("#btnRefreshMasters")?.addEventListener("click", loadMasters);
-
-// ---------- MQTT (Front) ----------
+// ---------- MQTT ----------
 async function connectMQTT(){
-  if(S.mqtt){ try{ S.mqtt.end(true); }catch(e){} S.mqtt=null; S.mqttReady=false; S.mqttSubs.clear(); }
+  if(S.mqtt){ try{ S.mqtt.end(true); }catch(e){} S.mqtt=null; S.mqttReady=false; }
 
-  const { data:{ session } } = await window.supabase.auth.getSession();
+  const { data:{ session } } = await window.sb.auth.getSession();
   if(!session) return alert("Connecte-toi d'abord.");
 
-  // Récupère des credentials Front
-  const url = FN_MQTT_CREDS();
-  if(!url) return alert("Functions base URL introuvable.");
-  const r = await fetch(url, { method:"POST", headers:{ Authorization:`Bearer ${session.access_token}` } });
+  // Récupère des credentials dédiés front (Edge Function)
+  const r = await fetch(CFG.FN_MQTT_CREDS, {
+    method:"POST",
+    headers:{ Authorization:`Bearer ${session.access_token}` }
+  });
   if(!r.ok){ return alert("MQTT creds error: "+ await r.text()); }
-  const { url: wssUrl, username, password } = await r.json();
-
-  const endpoint = window.__MQTT_WSS_URL__ || wssUrl;
-  if(!endpoint) return alert("URL WSS MQTT introuvable.");
+  const { url, username, password } = await r.json();
 
   const clientId = "pwa-"+Math.random().toString(16).slice(2);
-  const opts = { clientId, username, password, keepalive:30, clean:true, reconnectPeriod:3000 };
+  const opts = { clientId, username, password, keepalive: 30, clean: true, reconnectPeriod: 3000 };
 
-  S.mqtt = mqtt.connect(endpoint, opts);
+  log("[MQTT] connect", url, username);
+  S.mqtt = mqtt.connect(url, opts);
 
   S.mqtt.on("connect", ()=>{
     S.mqttReady = true;
-    log("[MQTT] connected", endpoint, "as", username);
-    for(const m of S.masters){
-      const t = `hizaya/${m.master_id}/state`;
-      if(!S.mqttSubs.has(t)){ S.mqtt.subscribe(t); S.mqttSubs.add(t); }
-    }
+    log("[MQTT] connected");
+    // un seul wildcard pour tous les masters
+    S.mqtt.subscribe("hizaya/+/state");
   });
-  S.mqtt.on("message",(topic,payload)=>{
+  S.mqtt.on("message", (topic, payload)=>{
     const txt = payload.toString();
     log("[MQTT] <-", topic, txt);
     const m = topic.match(/^hizaya\/([^/]+)\/state$/);
@@ -196,10 +213,10 @@ async function connectMQTT(){
   S.mqtt.on("error", err=> log("[MQTT] error", err?.message||err));
   S.mqtt.on("close", ()=>{ S.mqttReady=false; log("[MQTT] closed"); });
 }
-function disconnectMQTT(){ if(S.mqtt){ S.mqtt.end(true); S.mqtt=null; S.mqttReady=false; S.mqttSubs.clear(); log("[MQTT] disconnected"); } }
 
-$("#btnConnect")?.addEventListener("click", connectMQTT);
-$("#btnDisconnect")?.addEventListener("click", disconnectMQTT);
+function disconnectMQTT(){
+  if(S.mqtt){ S.mqtt.end(true); S.mqtt=null; S.mqttReady=false; log("[MQTT] disconnected"); }
+}
 
 // ---------- BOOT ----------
 document.addEventListener("DOMContentLoaded", initAuth);
