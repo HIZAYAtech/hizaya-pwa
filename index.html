@@ -1,113 +1,130 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>HIZAYA • Console</title>
   <meta name="theme-color" content="#0f172a"/>
 
+  <!-- Style minimal, pas de Tailwind pour éviter les warnings -->
   <style>
-    :root{--bg:#f8fafc;--card:#fff;--text:#0f172a;--muted:#64748b;--line:#e2e8f0;--brand:#2563eb;--danger:#ef4444;}
-    *{box-sizing:border-box}
-    body{margin:0;background:linear-gradient(180deg,#fff 0%, var(--bg) 100%);color:var(--text);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto}
-    .wrap{max-width:1000px;margin:0 auto;padding:24px}
-    .card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 6px 16px rgba(2,6,23,.06)}
-    .row{display:flex;gap:16px;align-items:center}
-    .btn{border:0;border-radius:12px;padding:10px 14px;cursor:pointer;font-weight:600}
-    .btn-brand{background:var(--brand);color:#fff}
-    .btn-ghost{background:#fff;border:1px solid var(--line)}
-    .btn-danger{background:var(--danger);color:#fff}
+    :root{--bg:#0f172a;--card:#ffffff;--muted:#64748b;--text:#0f172a;--ring:#e2e8f0}
+    *{box-sizing:border-box} body{margin:0;font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto}
+    header{position:sticky;top:0;background:#fff8;border-bottom:1px solid var(--ring);backdrop-filter:saturate(180%) blur(12px)}
+    .wrap{max-width:980px;margin:0 auto;padding:16px}
+    .row{display:flex;gap:12px;align-items:center}
+    .spacer{flex:1}
+    .btn{padding:10px 14px;border-radius:12px;border:1px solid var(--ring);background:#fff;color:#0f172a;cursor:pointer}
+    .btn:hover{background:#f8fafc}
+    .btn.p{background:#2563eb;border-color:#2563eb;color:#fff}
+    .btn.d{background:#ef4444;border-color:#ef4444;color:#fff}
+    .card{background:var(--card);border:1px solid var(--ring);border-radius:18px;padding:16px}
+    .h1{font-weight:700;font-size:22px;color:var(--text);margin:0}
     .muted{color:var(--muted)}
-    .input{width:100%;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
-    .header{position:sticky;top:0;backdrop-filter:saturate(180%) blur(8px);background:rgba(255,255,255,.7);border-bottom:1px solid var(--line)}
-    .grid{display:grid;grid-template-columns:1fr;gap:16px}
-    @media(min-width:800px){.grid{grid-template-columns:1fr}}
-    .badge{font-size:12px;padding:4px 8px;border-radius:999px;border:1px solid var(--line);background:#f1f5f9}
-    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+    .grid{display:grid;gap:14px}
+    .badge{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:999px;font-size:12px}
+    .ok{background:#dcfce7;color:#166534;border:1px solid #86efac}
+    .off{background:#f1f5f9;color:#334155;border:1px solid #e2e8f0}
+    input{padding:10px 12px;border:1px solid var(--ring);border-radius:12px;width:100%}
+    .mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+    .center{display:flex;align-items:center;justify-content:center}
+    dialog{border:0;border-radius:16px;padding:0;max-width:440px;width:calc(100% - 32px)}
+    .dlg-h{padding:14px 16px;border-bottom:1px solid var(--ring);font-weight:600}
+    .dlg-b{padding:16px}
+    .dlg-f{padding:14px 16px;border-top:1px solid var(--ring);display:flex;gap:8px;justify-content:flex-end}
+    .list{border:1px solid var(--ring);border-radius:14px;overflow:hidden}
+    .item{padding:12px 14px;border-top:1px solid var(--ring);display:flex;gap:12px;align-items:center;justify-content:space-between}
+    .item:first-child{border-top:0}
     .hidden{display:none}
-    .right{margin-left:auto}
+    .log{height:120px;overflow:auto;background:#0b1020;color:#cbd5e1;padding:8px;border-radius:12px;font:12px/1.4 ui-monospace,monospace}
   </style>
 
-  <!-- Définis ici tes variables (laisse vide pour Edge Function public_config) -->
+  <!-- Libs -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+
+  <!-- Config (REMPLACE LES VALEURS) -->
   <script>
-window.__SUPABASE_URL__     = "https://ctjljqmxjnfykskfgral.supabase.co";
-window.__SUPABASE_ANON_KEY__ = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0amxqcW14am5meWtza2ZncmFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NzQzMDMsImV4cCI6MjA3MjA1MDMwM30.GoLM8CSHRh2KWOmrMLk2-JkFMz2hwAqyHaHxd8T51M4";
-window.__MQTT_WSS_URL__      = "hizaya-caa4ec3b.a03.euc1.aws.hivemq.cloud:8884/mqtt";
+    window.__CFG__ = {
+      SUPABASE_URL: "https://ctjljqmxjnfykskfgral.supabase.co",
+      SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0amxqcW14am5meWtza2ZncmFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NzQzMDMsImV4cCI6MjA3MjA1MDMwM30.GoLM8CSHRh2KWOmrMLk2-JkFMz2hwAqyHaHxd8T51M4",
+      FN_CREATE_CLAIM: "https://ctjljqmxjnfykskfgral.functions.supabase.co/create_claim",
+      FN_MQTT_CREDS:   "https://ctjljqmxjnfykskfgral.functions.supabase.co/get_or_create_mqtt_creds"
+    };
   </script>
 
-  <!-- Librairies -->
-  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-
-  <!-- Init Supabase (hybride: globals OU Edge Function public_config) -->
+  <!-- Init Supabase + petit wrapper d'auth (UMD) -->
   <script src="./supabase-auth.js"></script>
 </head>
 <body>
-  <header class="header">
-    <div class="wrap row" style="padding:12px 24px">
-      <div class="row" style="gap:10px">
-        <div style="width:34px;height:34px;border-radius:10px;background:#0f172a;color:#fff;display:grid;place-items:center;font-weight:800">H</div>
-        <strong>HIZAYA</strong>
-      </div>
-      <div class="right muted" id="who">Hors ligne</div>
+
+<header>
+  <div class="wrap row">
+    <div class="row" style="gap:10px">
+      <div class="center" style="width:34px;height:34px;border-radius:10px;background:#0f172a;color:#fff;font-weight:700">H</div>
+      <div class="h1">HIZAYA</div>
     </div>
-  </header>
-
-  <main class="wrap">
-    <!-- PAGE LOGIN -->
-    <section id="page-login" class="grid">
-      <div class="card" style="padding:18px 18px 22px">
-        <h2 style="margin:8px 0 6px">Connexion</h2>
-        <p class="muted">Connecte-toi avec Google pour gérer tes Masters.</p>
-        <div class="row" style="margin-top:12px;gap:10px">
-          <button class="btn btn-brand" id="btnGoogle">Se connecter avec Google</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- PAGE APP -->
-    <section id="page-main" class="grid hidden">
-      <div class="row" style="gap:10px;margin-bottom:16px">
-        <button class="btn btn-ghost" id="btnConnect">Connecter MQTT</button>
-        <button class="btn btn-ghost" id="btnDisconnect">Déconnecter MQTT</button>
-        <button class="btn btn-brand" id="btnPairMaster">Lier un Master</button>
-        <button class="btn btn-danger right" id="btnLogout">Se déconnecter</button>
-      </div>
-
-      <div class="card" style="padding:16px">
-        <div class="row" style="justify-content:space-between">
-          <h3>Mes Masters</h3>
-          <button class="btn btn-ghost" id="btnRefreshMasters">Rafraîchir</button>
-        </div>
-        <div id="masters" style="margin-top:10px"></div>
-      </div>
-
-      <div class="card" style="padding:16px;margin-top:16px">
-        <h3>Log</h3>
-        <pre id="log" style="white-space:pre-wrap;max-height:260px;overflow:auto;margin:8px 0 0"></pre>
-      </div>
-    </section>
-  </main>
-
-  <!-- Modal d’appairage -->
-  <div id="modalClaim" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.35);display:grid;place-items:center">
-    <div class="card" style="width:min(520px,92vw);padding:16px">
-      <div class="row" style="justify-content:space-between">
-        <h3>Code d’appairage</h3>
-        <button class="btn btn-ghost" id="btnClaimClose">✕</button>
-      </div>
-      <p class="muted">Entre ce code sur le Master (portail Wi-Fi) dans les <b>60s</b>.</p>
-      <div class="row" style="margin:10px 0">
-        <div style="font-size:32px;font-weight:800;letter-spacing:4px" id="claimCode">000000</div>
-        <span class="badge" id="claimTimer">60s</span>
-      </div>
-      <div class="row" style="justify-content:flex-end;gap:10px">
-        <button class="btn btn-ghost" id="btnClaimDone">Ok</button>
-      </div>
-    </div>
+    <div class="spacer"></div>
+    <div id="userInfo" class="muted">Hors ligne</div>
+    <button id="btnLoginGoogle" class="btn">Google</button>
+    <button id="btnLogout" class="btn hidden">Déconnexion</button>
   </div>
+</header>
 
-  <script src="./app.js"></script>
+<main class="wrap grid" style="padding-top:18px">
+
+  <!-- LOGIN (email pour tests sans Google) -->
+  <section id="page-login" class="card">
+    <h2 class="h1">Connexion</h2>
+    <p class="muted">Connecte-toi pour gérer tes Masters.</p>
+    <div class="grid" style="grid-template-columns:1fr auto;align-items:center">
+      <input id="email" type="email" placeholder="toi@exemple.com"/>
+      <button id="btnLoginEmail" class="btn p">Recevoir un lien</button>
+    </div>
+  </section>
+
+  <!-- DASHBOARD -->
+  <section id="page-main" class="hidden grid" style="grid-template-columns:1fr">
+    <div class="row">
+      <div class="h1">Tableau de bord</div>
+      <div class="spacer"></div>
+      <button id="btnConnect" class="btn p">Se connecter à MQTT</button>
+      <button id="btnDisconnect" class="btn">Couper MQTT</button>
+      <button id="btnPairMaster" class="btn">Lier un Master</button>
+      <button id="btnRefreshMasters" class="btn">Rafraîchir</button>
+    </div>
+
+    <!-- Liste des masters -->
+    <div class="card">
+      <div class="row" style="margin-bottom:8px">
+        <div class="h1">Mes Masters</div>
+        <div class="spacer"></div>
+      </div>
+      <div id="masters"></div>
+    </div>
+
+    <div class="card">
+      <div class="h1" style="margin-bottom:8px">Logs</div>
+      <pre id="log" class="log"></pre>
+    </div>
+  </section>
+</main>
+
+<!-- Modal Claim -->
+<dialog id="dlgClaim">
+  <div class="dlg-h">Appairage Master</div>
+  <div class="dlg-b">
+    <p>Entre ce code sur le Master (portail Wi-Fi) :</p>
+    <p style="font-size:28px;font-weight:800;letter-spacing:2px" id="claimCode">— — — — — —</p>
+    <p class="muted">Expire dans <span id="claimTimer">60s</span></p>
+  </div>
+  <div class="dlg-f">
+    <button id="btnClaimClose" class="btn">Fermer</button>
+    <button id="btnClaimDone" class="btn p">J’ai terminé</button>
+  </div>
+</dialog>
+
+<!-- App -->
+<script src="./app.js"></script>
 </body>
 </html>
-
