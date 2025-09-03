@@ -1,17 +1,15 @@
-/* HIZAYA – App front statique (GitHub Pages)
- * - Auth Supabase (Google ou email)
+/* HIZAYA – App statique (GitHub Pages)
+ * - Auth Supabase (Google + email)
  * - Liste des masters (table Supabase)
- * - Connexion MQTT (mqtt.js via WSS) → souscription hizaya/+/state
- * - Création d’un code d’appairage 6 chiffres (Edge Function)
+ * - MQTT (mqtt.js / WSS 8884) → souscription hizaya/+/state
+ * - Appairage: create_claim → code 6 chiffres
  */
 
 const CFG = window.__CFG__ || {};
 const logEl = document.getElementById("log");
 const mastersEl = document.getElementById("masters");
+function log(...a){ logEl.textContent += a.join(" ")+"\n"; logEl.scrollTop = logEl.scrollHeight; }
 
-function log(...a){ logEl.textContent += a.join(" ") + "\n"; logEl.scrollTop = logEl.scrollHeight; }
-
-// Etat
 const S = {
   session: null,
   masters: [],
@@ -19,70 +17,58 @@ const S = {
   mqttReady: false,
 };
 
-// ---------- AUTH ----------
+// ---------- AUTH UI ----------
+function setAuthedUI(on, email=""){
+  document.getElementById("userInfo").textContent = on ? (email||"Connecté") : "Hors ligne";
+  document.getElementById("page-login").classList.toggle("hidden", !!on);
+  document.getElementById("page-main").classList.toggle("hidden", !on);
+  document.getElementById("btnLogout").classList.toggle("hidden", !on);
+  document.getElementById("btnLoginGoogle").classList.toggle("hidden", !!on);
+}
+
 async function initAuth(){
-  // écoute les évènements du wrapper
+  // events de supabase-auth.js
   window.addEventListener("supabase-auth", (e)=>updateSession(e.detail.session));
 
-  // Boutons
+  // boutons
   document.getElementById("btnLoginGoogle").onclick = ()=>window.hzAuth.loginWithGoogle();
   document.getElementById("btnLoginEmail").onclick = async ()=>{
     const email = document.getElementById("email").value.trim();
     if(!email) return alert("Entre un email.");
     await window.hzAuth.loginWithEmail(email);
-    alert("Lien envoyé (check email).");
+    alert("Lien envoyé (vérifie ta boîte mail).");
   };
   document.getElementById("btnLogout").onclick = async ()=>{ await window.hzAuth.logout(); };
 
-  // Actions
   document.getElementById("btnConnect").onclick = connectMQTT;
   document.getElementById("btnDisconnect").onclick = disconnectMQTT;
   document.getElementById("btnPairMaster").onclick = createPairingCode;
   document.getElementById("btnRefreshMasters").onclick = loadMasters;
 
-  // Get session actuelle
+  // session initiale
   const { data:{ session } } = await window.sb.auth.getSession();
   updateSession(session);
 }
 
 async function updateSession(session){
   S.session = session || null;
-  const ui = document.getElementById("userInfo");
-  const pgLogin = document.getElementById("page-login");
-  const pgMain  = document.getElementById("page-main");
-  const btnOut  = document.getElementById("btnLogout");
-  const btnGoogle = document.getElementById("btnLoginGoogle");
-
-  if(!S.session){
-    ui.textContent = "Hors ligne";
-    pgLogin.classList.remove("hidden");
-    pgMain.classList.add("hidden");
-    btnOut.classList.add("hidden");
-    btnGoogle.classList.remove("hidden");
-    return;
-  }
-  ui.textContent = S.session.user.email || "Connecté";
-  pgLogin.classList.add("hidden");
-  pgMain.classList.remove("hidden");
-  btnOut.classList.remove("hidden");
-  btnGoogle.classList.add("hidden");
-
+  if(!S.session){ setAuthedUI(false); return; }
+  setAuthedUI(true, S.session.user.email || "");
   await loadMasters();
 }
 
-// ---------- MASTERS ----------
+// ---------- DB: masters ----------
 async function loadMasters(){
   const { data, error } = await window.sb
     .from("masters")
     .select("master_id,name,created_at")
-    .order("created_at", { ascending: false });
-
+    .order("created_at", { ascending:false });
   if(error){ log("[DB] masters error:", error.message); return; }
   S.masters = data || [];
   renderMasters();
 
-  // si MQTT est connecté, souscrire aux state
   if(S.mqttReady){
+    // souscription wildcard (un seul subscribe)
     S.mqtt.subscribe("hizaya/+/state");
   }
 }
@@ -94,28 +80,27 @@ function renderMasters(){
     return;
   }
   for(const m of S.masters){
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
+    const wrap = document.createElement("div");
+    wrap.className = "card";
+    wrap.innerHTML = `
       <div class="row">
         <div>
           <div style="font-weight:600">${escapeHTML(m.name||"Master")}</div>
-          <div class="muted mono">ID: ${m.master_id}</div>
+          <div class="muted mono">ID: ${m.master_id} • <span class="badge" data-badge="${m.master_id}">offline</span></div>
         </div>
         <div class="spacer"></div>
-        <span class="badge off" data-badge="${m.master_id}">offline</span>
         <button class="btn" data-scan="${m.master_id}">Scan (demo)</button>
         <button class="btn d" data-del="${m.master_id}">Supprimer</button>
       </div>
     `;
-    mastersEl.appendChild(card);
+    mastersEl.appendChild(wrap);
 
-    card.querySelector(`[data-del="${m.master_id}"]`).onclick = async ()=>{
+    wrap.querySelector(`[data-del="${m.master_id}"]`).onclick = async ()=>{
       if(!confirm("Retirer ce master de ton compte ?")) return;
       await window.sb.from("masters").delete().eq("master_id", m.master_id);
       await loadMasters();
     };
-    card.querySelector(`[data-scan="${m.master_id}"]`).onclick = ()=>{
+    wrap.querySelector(`[data-scan="${m.master_id}"]`).onclick = ()=>{
       if(!S.mqttReady) return alert("Connecte MQTT d'abord");
       const t = `hizaya/${m.master_id}/cmd`;
       const msg = JSON.stringify({ cmd:"scan_start" });
@@ -128,33 +113,24 @@ function renderMasters(){
 function setOnline(master_id, online){
   const b = document.querySelector(`[data-badge="${master_id}"]`);
   if(!b) return;
-  if(online){
-    b.textContent = "online";
-    b.className = "badge ok";
-  }else{
-    b.textContent = "offline";
-    b.className = "badge off";
-  }
+  b.textContent = online ? "online" : "offline";
+  b.className = "badge" + (online ? " ok" : "");
 }
 
 function escapeHTML(s){ return (s||"").replace(/[&<>"']/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])) }
 
-// ---------- CLAIM (pairing) ----------
-let countTimer = null;
+// ---------- Pairing (Edge Function create_claim) ----------
+let timer = null;
 async function createPairingCode(){
   const { data:{ session } } = await window.sb.auth.getSession();
   if(!session) return alert("Connecte-toi d'abord.");
 
-  const res = await fetch(CFG.FN_CREATE_CLAIM, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${session.access_token}` }
+  const r = await fetch(CFG.FN_CREATE_CLAIM, {
+    method:"POST",
+    headers:{ Authorization:`Bearer ${session.access_token}` }
   });
-  if(!res.ok){
-    const t = await res.text();
-    alert("Erreur create_claim: "+t);
-    return;
-  }
-  const { code, expires_at } = await res.json();
+  if(!r.ok){ return alert("Erreur create_claim: " + await r.text()); }
+  const { code, expires_at } = await r.json();
   showClaimModal(code, expires_at);
 }
 
@@ -162,38 +138,31 @@ function showClaimModal(code, expiresAt){
   document.getElementById("claimCode").textContent = code;
   const dlg = document.getElementById("dlgClaim");
   dlg.showModal();
-  clearInterval(countTimer);
-  function refresh(){
+  clearInterval(timer);
+  const tick = ()=>{
     const s = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now())/1000));
     document.getElementById("claimTimer").textContent = s+"s";
-    if(s<=0) clearInterval(countTimer);
-  }
-  refresh();
-  countTimer = setInterval(refresh, 1000);
+    if(s<=0) clearInterval(timer);
+  };
+  tick(); timer = setInterval(tick, 1000);
 }
 document.getElementById("btnClaimClose").onclick = ()=> document.getElementById("dlgClaim").close();
-document.getElementById("btnClaimDone").onclick  = async ()=>{
-  document.getElementById("dlgClaim").close();
-  await loadMasters();
-};
+document.getElementById("btnClaimDone").onclick  = async ()=>{ document.getElementById("dlgClaim").close(); await loadMasters(); };
 
-// ---------- MQTT ----------
+// ---------- MQTT (mqtt.js / WSS) ----------
 async function connectMQTT(){
   if(S.mqtt){ try{ S.mqtt.end(true); }catch(e){} S.mqtt=null; S.mqttReady=false; }
 
   const { data:{ session } } = await window.sb.auth.getSession();
   if(!session) return alert("Connecte-toi d'abord.");
 
-  // Récupère des credentials dédiés front (Edge Function)
-  const r = await fetch(CFG.FN_MQTT_CREDS, {
-    method:"POST",
-    headers:{ Authorization:`Bearer ${session.access_token}` }
-  });
+  // récupère creds front (user_mqtt_creds)
+  const r = await fetch(CFG.FN_MQTT_CREDS, { method:"POST", headers:{ Authorization:`Bearer ${session.access_token}` } });
   if(!r.ok){ return alert("MQTT creds error: "+ await r.text()); }
   const { url, username, password } = await r.json();
 
   const clientId = "pwa-"+Math.random().toString(16).slice(2);
-  const opts = { clientId, username, password, keepalive: 30, clean: true, reconnectPeriod: 3000 };
+  const opts = { clientId, username, password, keepalive:30, clean:true, reconnectPeriod:3000 };
 
   log("[MQTT] connect", url, username);
   S.mqtt = mqtt.connect(url, opts);
