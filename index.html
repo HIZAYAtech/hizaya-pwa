@@ -1,138 +1,158 @@
 <!doctype html>
 <html lang="fr">
-  <head>
-    <meta charset="utf-8" />
-    <title>HIZAYA</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0ea5e9" />
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>HIZAYA • Console</title>
+  <meta name="theme-color" content="#0ea5e9" />
 
-    <!-- PWA -->
-    <link rel="manifest" href="./manifest.json" />
-    <link rel="icon" href="./favicon.ico" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/icon-192.png" sizes="192x192" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
 
-    <!-- Tailwind (OK pour proto sur Pages) -->
-    <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Police (Inter) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
-    <!-- ========= CONFIG SUPABASE (REMPLACE CES 2 LIGNES) ========= -->
-    <script>
-      window.__SUPABASE_URL__ = "https://ctjljqmxjnfykskfgral.supabase.co";
-      window.__SUPABASE_ANON_KEY__ = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0amxqcW14am5meWtza2ZncmFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NzQzMDMsImV4cCI6MjA3MjA1MDMwM30.GoLM8CSHRh2KWOmrMLk2-JkFMz2hwAqyHaHxd8T51M4";
-    </script>
-    <!-- ============================================================ -->
+  <!-- Tailwind (CDN : ok pour proto / GH Pages) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] } }
+      }
+    }
+  </script>
 
-    <!-- Supabase JS UMD -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    html,body { height:100%; background: #f8fafc; }
+    body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body class="min-h-screen">
 
-    <!-- MQTT.js (front) -->
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <!-- PAGE LOGIN -->
+  <section id="page-login" class="min-h-screen flex items-center justify-center px-4">
+    <div class="w-full max-w-md">
+      <div class="bg-white border border-slate-200 rounded-3xl shadow-sm p-6">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-10 h-10 rounded-2xl bg-slate-900 text-white grid place-items-center font-semibold">H</div>
+          <h1 class="text-[22px] font-semibold tracking-[-0.01em] text-slate-900">HIZAYA</h1>
+        </div>
+        <p class="text-sm text-slate-600 mb-5">Connecte-toi pour gérer ton Master et ses Slaves.</p>
 
-    <!-- Init Supabase (UMD, pas de module) -->
-    <script src="./supabase-auth.js"></script>
+        <!-- Bouton Google fourni par supabase-auth.js -->
+        <button id="btnGoogle" class="w-full px-4 py-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-sm">
+          Se connecter avec Google
+        </button>
 
-    <!-- App (pairing par code + MQTT) -->
-    <script defer src="./app.js"></script>
-  </head>
+        <p class="text-xs text-slate-500 text-center mt-3">
+          Ton compte est géré par Supabase (Google OAuth).
+        </p>
+      </div>
+    </div>
+  </section>
 
-  <body class="min-h-screen text-slate-900 bg-gradient-to-b from-slate-50 to-white">
+  <!-- PAGE PRINCIPALE -->
+  <section id="page-main" class="hidden">
     <!-- Header -->
-    <header class="sticky top-0 z-10 bg-white/70 backdrop-blur border-b border-slate-200">
+    <header class="sticky top-0 z-10 bg-white/70 backdrop-blur supports-[backdrop-filter]:bg-white/60 border-b border-slate-200">
       <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 rounded-2xl bg-slate-900 text-white grid place-items-center font-bold">H</div>
-          <span class="font-semibold tracking-tight">HIZAYA</span>
+          <span class="font-semibold tracking-[-0.01em] text-slate-900">HIZAYA</span>
         </div>
-        <div class="flex items-center gap-3 text-sm">
-          <span id="who" class="text-slate-600">Hors ligne</span>
-          <button id="btnLogout" class="hidden px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200">Déconnexion</button>
+        <div class="flex items-center gap-3">
+          <span id="who" class="text-sm text-slate-600">Hors ligne</span>
+          <button id="btnLogout" class="px-3 py-1.5 rounded-xl text-sm bg-white ring-1 ring-slate-300 hover:bg-slate-50">
+            Déconnexion
+          </button>
         </div>
       </div>
     </header>
 
-    <!-- Page Login -->
-    <main id="page-login" class="max-w-md mx-auto px-4 pt-10">
-      <div class="bg-white border border-slate-200 rounded-3xl shadow-sm p-6">
-        <div class="flex items-center gap-3 mb-3">
-          <div class="w-10 h-10 rounded-2xl bg-gray-900 text-white grid place-items-center font-semibold">H</div>
-          <h1 class="text-[22px] font-semibold tracking-[-0.01em] text-gray-900">HIZAYA</h1>
-        </div>
-        <p class="text-sm text-slate-600 mb-5">Connecte-toi (Google) pour gérer ton Master et ses Slaves.</p>
-        <div class="space-y-3">
-          <button id="btnGoogle" class="w-full px-4 py-2 rounded-xl bg-slate-900 text-white hover:opacity-90 flex items-center justify-center gap-2">
-            <!-- Icône Google -->
-            <svg width="18" height="18" viewBox="0 0 533.5 544.3"><path fill="#4285F4" d="M533.5 278.4c0-18.6-1.7-37-5.3-54.9H272.1v103.9h146.9c-6.3 34.2-25.2 63.1-53.7 82.5v68h86.8c50.8-46.8 81.4-115.8 81.4-199.5z"/><path fill="#34A853" d="M272.1 544.3c72.9 0 134.1-24.1 178.8-65.3l-86.8-68c-24.1 16.2-55 25.7-92 25.7-70.7 0-130.6-47.7-152.1-111.9H30.7v70.3c44.3 88 135.6 149.2 241.4 149.2z"/><path fill="#FBBC05" d="M120 324.8c-10.6-31.9-10.6-66.9 0-98.8V155.7H30.7c-43.1 86.1-43.1 187.5 0 273.6l89.3-70.3z"/><path fill="#EA4335" d="M272.1 107.7c39.7-.6 77.7 13.7 107 40l80-80C416.2 23.6 345.7-1.6 272.1 0 166.3 0 75 61.3 30.7 149.4l89.3 70.3c21.4-64.2 81.4-112 152.1-112z"/></svg>
-            Se connecter avec Google
-          </button>
-          <div class="text-xs text-slate-500 text-center">
-            Ajoute l’URL GitHub Pages dans Supabase → Auth → URL de redirection.
-          </div>
-        </div>
-      </div>
-    </main>
-
-    <!-- Page App -->
-    <main id="page-main" class="hidden max-w-6xl mx-auto px-4 py-6 space-y-6">
-      <section class="flex items-end justify-between">
+    <main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h2 class="text-3xl font-semibold">Bienvenue 👋</h2>
-          <p class="text-slate-600">Gère tes Masters et leurs Slaves depuis une interface simple.</p>
+          <h2 class="text-[28px] font-semibold tracking-[-0.02em] text-slate-900">Bienvenue 👋</h2>
+          <p class="text-slate-600 text-[15px]">Gère tes Masters et leurs Slaves depuis une interface simple.</p>
         </div>
         <div class="flex items-center gap-2">
-          <button id="btnConnect" class="px-3 py-2 rounded-xl bg-sky-600 text-white hover:bg-sky-700">Connexion MQTT</button>
-          <button id="btnDisconnect" class="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200">Déconnexion MQTT</button>
+          <button id="btnConnect" class="px-3.5 py-2 rounded-2xl text-sm bg-blue-600 text-white hover:bg-blue-700">
+            Connect MQTT
+          </button>
+          <button id="btnDisconnect" class="px-3.5 py-2 rounded-2xl text-sm bg-white ring-1 ring-slate-300 hover:bg-slate-50">
+            Disconnect
+          </button>
+          <button id="btnPairMaster" class="px-3.5 py-2 rounded-2xl text-sm bg-slate-900 text-white hover:bg-black/90">
+            Lier un Master
+          </button>
+          <button id="btnRefreshMasters" class="px-3.5 py-2 rounded-2xl text-sm bg-white ring-1 ring-slate-300 hover:bg-slate-50">
+            Rafraîchir
+          </button>
         </div>
-      </section>
-
-      <!-- Lier un Master par code -->
-      <section class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
-        <h3 class="font-medium mb-3">Lier un Master</h3>
-        <div class="flex flex-wrap gap-2">
-          <button id="btnPairMaster" class="px-3 py-2 rounded-xl bg-slate-900 text-white">Générer un code</button>
-          <button id="btnRefreshMasters" class="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200">Rafraîchir mes masters</button>
-        </div>
-        <p class="text-xs text-slate-500 mt-2">
-          1) Clique “Générer un code” · 2) Sur le Master, maintiens BTN1 au boot (portail Wi-Fi) et saisis le code · 3) Clique “J’ai terminé”.
-        </p>
-      </section>
+      </div>
 
       <!-- Liste des masters -->
-      <section id="masters" class="grid grid-cols-1 gap-6"></section>
+      <div id="masters" class="grid grid-cols-1 gap-6">
+        <!-- Cartes Master injectées par app.js -->
+      </div>
 
-      <!-- Console -->
-      <section class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
-        <h3 class="font-medium mb-2">Console</h3>
-        <pre id="log" class="text-xs bg-slate-50 p-3 rounded-xl overflow-auto max-h-64"></pre>
-      </section>
+      <!-- Logs (optionnel) -->
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm">
+        <div class="px-4 py-2 border-b border-slate-100 font-medium text-sm text-slate-700">Logs</div>
+        <pre id="log" class="p-4 text-xs text-slate-700 overflow-auto max-h-64 whitespace-pre-wrap"></pre>
+      </div>
     </main>
+  </section>
 
-    <!-- Modal : code d’appairage -->
-    <div id="modalClaim" class="hidden fixed inset-0 z-50">
-      <div class="absolute inset-0 bg-black/30"></div>
-      <div class="absolute inset-0 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-md p-5">
-          <div class="flex items-center justify-between mb-3">
-            <h4 class="text-[17px] font-semibold">Code d’appairage</h4>
-            <button id="btnClaimClose" class="px-2 py-1 rounded-lg bg-slate-100">✕</button>
-          </div>
+  <!-- Modale Appairage par code -->
+  <div id="modalClaim" class="hidden fixed inset-0 z-50">
+    <div class="absolute inset-0 bg-black/30"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+      <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg border border-slate-200">
+        <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+          <h4 class="font-semibold text-[17px] text-slate-900">Appairage du Master</h4>
+          <button id="btnClaimClose" class="text-slate-400 hover:text-slate-600">✕</button>
+        </div>
+        <div class="p-5 space-y-3">
+          <p class="text-sm text-slate-600">
+            Saisis ce code sur le Master (portail Wi-Fi) avant expiration.
+          </p>
           <div class="text-center">
-            <div class="text-4xl font-semibold tracking-widest text-slate-900" id="claimCode">000000</div>
-            <div class="text-xs text-slate-500 mt-1">Expire dans <span id="claimTimer">--</span></div>
-            <p class="text-sm text-slate-600 mt-4">
-              Sur le Master, ouvre le portail Wi-Fi, entre ce code puis sauvegarde.
-            </p>
-            <button id="btnClaimDone" class="mt-4 px-3 py-2 rounded-xl bg-sky-600 text-white">J’ai terminé</button>
+            <div id="claimCode" class="font-mono text-3xl tracking-widest text-slate-900">000000</div>
+            <div class="text-xs text-slate-500">Expire dans <span id="claimTimer">60s</span></div>
           </div>
+        </div>
+        <div class="px-5 py-4 border-t border-slate-200 flex justify-end gap-2">
+          <button id="btnClaimDone" class="px-3.5 py-2 rounded-2xl text-sm bg-blue-600 text-white hover:bg-blue-700">
+            J’ai terminé
+          </button>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Service Worker -->
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js').catch(()=>{});
-        });
-      }
-    </script>
-  </body>
+  <!-- Libs externes (dans cet ordre) -->
+  <!-- MQTT.js (WSS) -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <!-- Supabase UMD (si besoin par ton supabase-auth.js) -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <!-- Ton init Supabase + Auth (doit émettre l’event 'supabase-auth' et exposer window.supabase & window.hzAuth) -->
+  <script src="supabase-auth.js"></script>
+  <!-- Ton app -->
+  <script src="app.js" defer></script>
+
+  <!-- Service Worker (PWA) -->
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js").catch(()=>{});
+      });
+    }
+  </script>
+</body>
 </html>
