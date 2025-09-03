@@ -1,8 +1,10 @@
-// ===== HIZAYA PWA — Appairage par code (6 chiffres) + MQTT =====
+// ===== HIZAYA PWA — app.js =====
+// Auth via supabase-auth.js (expose window.supabase, window.hzAuth)
+// MQTT via mqtt.min.js (expose window.mqtt.connect)
 
-// ⚙️ URLs des Edge Functions (remplace <PROJECT-REF>)
-const FN_CREATE_CLAIM = "https://ctjljqmxjnfykskfgral.functions.supabase.co/create_claim";
-const FN_MQTT_CREDS   = "https://ctjljqmxjnfykskfgral.functions.supabase.co/get_or_create_mqtt_creds"; // si tu l’utilises pour connecter le front au broker
+// ⚙️ URLs des Edge Functions (mets bien ton REF Supabase)
+const FN_CREATE_CLAIM = "https://ctjljqmxjnfykskfgral.supabase.co/functions/v1/create_claim";
+const FN_MQTT_CREDS   = "https://ctjljqmxjnfykskfgral.supabase.co/functions/v1/get_or_create_mqtt_creds";
 
 // État global
 const S = {
@@ -13,49 +15,68 @@ const S = {
   mqttSubs: new Set(),
 };
 
-// Helpers UI
-const $ = (s) => document.querySelector(s);
+// -------- Helpers DOM/UI --------
+const $  = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+function show(sel){ $(sel)?.classList.remove("hidden"); }
+function hide(sel){ $(sel)?.classList.add("hidden"); }
 function log(...a){ const el=$("#log"); if(!el) return; el.textContent += a.join(" ")+"\n"; el.scrollTop = el.scrollHeight; }
-function show(id){ $(id).classList.remove("hidden"); }
-function hide(id){ $(id).classList.add("hidden"); }
+function debounce(fn, d=400){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), d); }; }
+function escapeHtml(s=""){ return s.replace(/[&<>"']/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[c])); }
 
-// ----------------------- AUTH -----------------------
+// --------------- AUTH ---------------
 async function initAuth(){
-  // écoute les changements de session (déclenché par supabase-auth.js)
-  window.addEventListener("supabase-auth", (e)=>updateSession(e.detail.session));
-  const { data:{ session } } = await window.supabase.auth.getSession();
-  updateSession(session);
+  // écoute session depuis supabase-auth.js
+  window.addEventListener("supabase-auth", (e)=> updateSession(e.detail.session));
+
+  // session existante
+  try{
+    const { data:{ session } } = await window.supabase.auth.getSession();
+    updateSession(session);
+  }catch(err){
+    console.error("[AUTH] getSession error", err);
+  }
 
   // boutons
-  $("#btnGoogle")?.addEventListener("click", ()=>window.hzAuth.loginWithGoogle());
-  $("#btnLogout")?.addEventListener("click", async ()=>{
-    await window.hzAuth.logout();
-  });
+  $("#btnGoogle")?.addEventListener("click", ()=>window.hzAuth?.loginWithGoogle());
+  $("#btnLogout")?.addEventListener("click", ()=>window.hzAuth?.logout());
 }
 
 async function updateSession(session){
   S.session = session || null;
   if(!S.session){
-    $("#who").textContent = "Hors ligne";
+    if($("#who")) $("#who").textContent = "Hors ligne";
     show("#page-login"); hide("#page-main");
     return;
   }
-  $("#who").textContent = S.session.user.email || "Connecté";
+  if($("#who")) $("#who").textContent = S.session.user.email || "Connecté";
   hide("#page-login"); show("#page-main");
+
   await loadMasters();
+
+  // si déjà connecté MQTT, (re)abonne les topics spécifiques
+  if(S.mqttReady){
+    for(const m of S.masters){
+      const t = `hizaya/${m.master_id}/state`;
+      if(!S.mqttSubs.has(t)){ S.mqtt.subscribe(t); S.mqttSubs.add(t); }
+    }
+  }
 }
 
-// -------------------- MASTERS (Supabase) --------------------
+// ---------- MASTERS (Supabase) ----------
 async function loadMasters(){
+  if(!S.session) return;
   const { data, error } = await window.supabase
     .from("masters")
     .select("master_id, name, created_at")
     .order("created_at", { ascending: false });
+
   if(error){ log("[DB] masters error:", error.message); return; }
   S.masters = data || [];
   renderMasters();
-  // (Re)abonne les /state pour l’info online
-  if(S.mqtt){
+
+  // si MQTT actif, abonne (en plus du wildcard)
+  if(S.mqttReady){
     for(const m of S.masters){
       const t = `hizaya/${m.master_id}/state`;
       if(!S.mqttSubs.has(t)){ S.mqtt.subscribe(t); S.mqttSubs.add(t); }
@@ -65,19 +86,22 @@ async function loadMasters(){
 
 function renderMasters(){
   const cont = $("#masters");
+  if(!cont) return;
   cont.innerHTML = "";
+
   if(!S.masters.length){
     cont.innerHTML = `<div class="text-sm text-slate-600">Aucun master. Clique “Lier un Master”.</div>`;
     return;
   }
+
   for(const m of S.masters){
     const card = document.createElement("div");
     card.className = "bg-white border border-slate-200 rounded-2xl shadow-sm p-4";
     card.innerHTML = `
       <div class="flex items-center justify-between mb-3">
-        <div>
+        <div class="min-w-0">
           <div class="text-[17px] font-semibold text-slate-900 flex items-center gap-2">
-            <input class="rename input px-3 py-1.5 rounded-xl border border-slate-300 text-[15px]" value="${m.name}">
+            <input class="rename input px-3 py-1.5 rounded-xl border border-slate-300 text-[15px]" value="${escapeHtml(m.name||"Master")}">
             <span class="mono text-xs text-slate-500">ID: ${m.master_id}</span>
             <span class="badge inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700">offline</span>
           </div>
@@ -89,48 +113,63 @@ function renderMasters(){
       </div>
       <div class="text-sm text-slate-600">Mes appareils (via MQTT/evt)… (à implémenter avec tes messages)</div>
     `;
-    // Rename (autosave)
-    card.querySelector(".rename").addEventListener("input", debounce(async (ev)=>{
-      const name = ev.target.value.trim() || "Master";
-      await window.supabase.from("masters").update({ name }).eq("master_id", m.master_id);
-      log("[DB] rename ->", m.master_id, name);
+
+    // rename autosave
+    const input = card.querySelector(".rename");
+    input.addEventListener("input", debounce(async (ev)=>{
+      const name = (ev.target.value || "Master").trim();
+      const { error } = await window.supabase.from("masters").update({ name }).eq("master_id", m.master_id);
+      if(error) log("[DB] rename error:", error.message);
+      else log("[DB] rename ->", m.master_id, name);
     }, 500));
 
-    // Delete
+    // delete
     card.querySelector(".btn-del").onclick = async ()=>{
       if(!confirm("Supprimer ce master de ton compte ?")) return;
-      await window.supabase.from("masters").delete().eq("master_id", m.master_id);
+      const { error } = await window.supabase.from("masters").delete().eq("master_id", m.master_id);
+      if(error) return alert("Supabase error: "+error.message);
       await loadMasters();
     };
 
-    // Scan (publie un cmd MQTT)
+    // scan → publish /cmd
     card.querySelector(".btn-scan").onclick = ()=>{
       if(!S.mqttReady) return alert("Connecte MQTT d'abord");
       const t = `hizaya/${m.master_id}/cmd`;
       const msg = JSON.stringify({ cmd:"scan_start" });
-      S.mqtt.publish(t, msg);
-      log("[MQTT] ->", t, msg);
+      try{
+        S.mqtt.publish(t, msg);
+        log("[MQTT] ->", t, msg);
+      }catch(e){
+        log("[MQTT] publish err", e?.message||e);
+      }
     };
 
     cont.appendChild(card);
   }
 }
 
-// petite aide pour afficher “online/offline” en temps réel
+// met à jour le badge online/offline
 function setOnline(master_id, online){
-  const cards = [...document.querySelectorAll("#masters > div")];
+  const cards = $$("#masters > div");
   for(const el of cards){
     const idText = el.querySelector(".mono")?.textContent || "";
     if(idText.includes(master_id)){
       const b = el.querySelector(".badge");
-      if(online){ b.textContent="online"; b.className="badge inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-green-100 text-green-700"; }
-      else      { b.textContent="offline"; b.className="badge inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700"; }
+      if(!b) return;
+      if(online){
+        b.textContent="online";
+        b.className="badge inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-green-100 text-green-700";
+      }else{
+        b.textContent="offline";
+        b.className="badge inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700";
+      }
     }
   }
 }
 
-// ------------------- APPAIRAGE PAR CODE ---------------------
+// -------- Appairage par code (6 chiffres) --------
 let countdownTimer = null;
+
 async function createPairingCode(){
   const { data:{ session } } = await window.supabase.auth.getSession();
   if(!session) return alert("Connecte-toi d'abord.");
@@ -141,6 +180,7 @@ async function createPairingCode(){
   });
   if(!res.ok){
     const t = await res.text();
+    log("[CLAIM] create_claim error:", t);
     return alert("Erreur create_claim: "+t);
   }
   const { code, expires_at } = await res.json();
@@ -150,7 +190,6 @@ async function createPairingCode(){
 function showClaimModal(code, expiresAt){
   $("#claimCode").textContent = code;
   show("#modalClaim");
-  // compte à rebours
   clearInterval(countdownTimer);
   function refreshTimer(){
     const s = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now())/1000));
@@ -167,47 +206,72 @@ $("#btnClaimDone")?.addEventListener("click", async ()=>{ closeClaimModal(); awa
 $("#btnClaimClose")?.addEventListener("click", closeClaimModal);
 $("#btnRefreshMasters")?.addEventListener("click", loadMasters);
 
-// ----------------------- MQTT (front) -----------------------
+// --------------- MQTT (front) ---------------
 async function connectMQTT(){
   if(S.mqtt){ try{ S.mqtt.end(true); }catch(e){} S.mqtt=null; S.mqttReady=false; S.mqttSubs.clear(); }
+
   const { data:{ session } } = await window.supabase.auth.getSession();
   if(!session) return alert("Connecte-toi d'abord.");
 
-  // Récupère des credentials pour le FRONT (user_mqtt_creds)
+  // récupère les creds pour le FRONT (fonction renvoie {url, username, password})
   const r = await fetch(FN_MQTT_CREDS, { method:"POST", headers:{ Authorization:`Bearer ${session.access_token}` } });
   if(!r.ok){ return alert("MQTT creds error: "+ await r.text()); }
   const { url, username, password } = await r.json();
 
-  const clientId = "pwa-"+Math.random().toString(16).slice(2);
-  const opts = { clientId, username, password, keepalive: 30, clean: true, reconnectPeriod: 3000 };
+  if(!window.mqtt || !window.mqtt.connect){
+    return alert("Bibliothèque MQTT (mqtt.min.js) introuvable");
+  }
 
-  S.mqtt = mqtt.connect(url, opts);
+  const clientId = "pwa-"+Math.random().toString(16).slice(2);
+  const opts = {
+    clientId,
+    username,
+    password,
+    keepalive: 30,
+    clean: true,
+    reconnectPeriod: 3000,
+  };
+
+  S.mqtt = window.mqtt.connect(url, opts);
 
   S.mqtt.on("connect", async ()=>{
     S.mqttReady = true;
-    log("[MQTT] connected", url);
-    // s'abonner au state des masters
+    log("[MQTT] connected", url, "as", username);
+
+    // 🔸 wildcard: reçoit l’état de tous les masters
+    S.mqtt.subscribe("hizaya/+/state");
+
+    // et on (ré)abonne explicitement les masters connus (pour capturer les retained)
     for(const m of S.masters){
       const t = `hizaya/${m.master_id}/state`;
       if(!S.mqttSubs.has(t)){ S.mqtt.subscribe(t); S.mqttSubs.add(t); }
     }
   });
+
   S.mqtt.on("message", (topic, payload)=>{
-    const txt = payload.toString();
+    const txt = payload?.toString?.() ?? "";
     log("[MQTT] <-", topic, txt);
+
+    // état online/offline
     const m = topic.match(/^hizaya\/([^/]+)\/state$/);
     if(m){ setOnline(m[1], txt==="online"); }
+
+    // (plus tard) traite /evt, etc.
   });
+
   S.mqtt.on("error", err=> log("[MQTT] error", err?.message||err));
   S.mqtt.on("close", ()=>{ S.mqttReady=false; log("[MQTT] closed"); });
 }
-function disconnectMQTT(){ if(S.mqtt){ S.mqtt.end(true); S.mqtt=null; S.mqttReady=false; S.mqttSubs.clear(); log("[MQTT] disconnected"); } }
+
+function disconnectMQTT(){
+  if(S.mqtt){ try{ S.mqtt.end(true); }catch(e){} S.mqtt=null; S.mqttReady=false; S.mqttSubs.clear(); log("[MQTT] disconnected"); }
+}
 
 $("#btnConnect")?.addEventListener("click", connectMQTT);
 $("#btnDisconnect")?.addEventListener("click", disconnectMQTT);
 
-// ----------------------- UTILS -----------------------
-function debounce(fn, d=300){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), d); }; }
-
-// ----------------------- BOOT ------------------------
+// --------------- Boot ---------------
 document.addEventListener("DOMContentLoaded", initAuth);
+
+// expose pour debug console
+window.S = S;
