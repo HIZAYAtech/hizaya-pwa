@@ -2,48 +2,39 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>HIZAYA • Console</title>
   <meta name="theme-color" content="#0f172a"/>
 
-  <!-- Style minimal, pas de Tailwind pour éviter les warnings -->
   <style>
-    :root{--bg:#0f172a;--card:#ffffff;--muted:#64748b;--text:#0f172a;--ring:#e2e8f0}
-    *{box-sizing:border-box} body{margin:0;font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto}
-    header{position:sticky;top:0;background:#fff8;border-bottom:1px solid var(--ring);backdrop-filter:saturate(180%) blur(12px)}
+    :root{--ring:#e2e8f0;--text:#0f172a;--muted:#64748b}
+    *{box-sizing:border-box}
+    body{margin:0;font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto;background:linear-gradient(180deg,#fff,#f8fafc)}
+    header{position:sticky;top:0;background:#fff8;border-bottom:1px solid var(--ring);backdrop-filter:saturate(180%) blur(10px)}
     .wrap{max-width:980px;margin:0 auto;padding:16px}
     .row{display:flex;gap:12px;align-items:center}
     .spacer{flex:1}
-    .btn{padding:10px 14px;border-radius:12px;border:1px solid var(--ring);background:#fff;color:#0f172a;cursor:pointer}
+    .btn{padding:10px 14px;border-radius:12px;border:1px solid var(--ring);background:#fff;color:var(--text);cursor:pointer}
     .btn:hover{background:#f8fafc}
     .btn.p{background:#2563eb;border-color:#2563eb;color:#fff}
     .btn.d{background:#ef4444;border-color:#ef4444;color:#fff}
-    .card{background:var(--card);border:1px solid var(--ring);border-radius:18px;padding:16px}
+    .card{background:#fff;border:1px solid var(--ring);border-radius:18px;padding:16px;box-shadow:0 6px 16px rgba(2,6,23,.06)}
     .h1{font-weight:700;font-size:22px;color:var(--text);margin:0}
     .muted{color:var(--muted)}
     .grid{display:grid;gap:14px}
-    .badge{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:999px;font-size:12px}
-    .ok{background:#dcfce7;color:#166534;border:1px solid #86efac}
-    .off{background:#f1f5f9;color:#334155;border:1px solid #e2e8f0}
     input{padding:10px 12px;border:1px solid var(--ring);border-radius:12px;width:100%}
     .mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
-    .center{display:flex;align-items:center;justify-content:center}
-    dialog{border:0;border-radius:16px;padding:0;max-width:440px;width:calc(100% - 32px)}
-    .dlg-h{padding:14px 16px;border-bottom:1px solid var(--ring);font-weight:600}
-    .dlg-b{padding:16px}
-    .dlg-f{padding:14px 16px;border-top:1px solid var(--ring);display:flex;gap:8px;justify-content:flex-end}
-    .list{border:1px solid var(--ring);border-radius:14px;overflow:hidden}
-    .item{padding:12px 14px;border-top:1px solid var(--ring);display:flex;gap:12px;align-items:center;justify-content:space-between}
-    .item:first-child{border-top:0}
+    .badge{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:999px;font-size:12px;border:1px solid var(--ring);background:#f1f5f9}
+    .badge.ok{background:#dcfce7;border-color:#86efac;color:#166534}
     .hidden{display:none}
     .log{height:120px;overflow:auto;background:#0b1020;color:#cbd5e1;padding:8px;border-radius:12px;font:12px/1.4 ui-monospace,monospace}
   </style>
 
-  <!-- Libs -->
+  <!-- Libs UMD -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+  <script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
 
-  <!-- Config (REMPLACE LES VALEURS) -->
+  <!-- Config (⚠️ REMPLACE CES VALEURS) -->
   <script>
     window.__CFG__ = {
       SUPABASE_URL: "https://ctjljqmxjnfykskfgral.supabase.co",
@@ -53,7 +44,7 @@
     };
   </script>
 
-  <!-- Init Supabase + petit wrapper d'auth (UMD) -->
+  <!-- Init Supabase (UMD simple) -->
   <script src="./supabase-auth.js"></script>
 </head>
 <body>
@@ -61,7 +52,7 @@
 <header>
   <div class="wrap row">
     <div class="row" style="gap:10px">
-      <div class="center" style="width:34px;height:34px;border-radius:10px;background:#0f172a;color:#fff;font-weight:700">H</div>
+      <div class="row" style="width:34px;height:34px;border-radius:10px;background:#0f172a;color:#fff;justify-content:center;font-weight:800">H</div>
       <div class="h1">HIZAYA</div>
     </div>
     <div class="spacer"></div>
@@ -73,7 +64,7 @@
 
 <main class="wrap grid" style="padding-top:18px">
 
-  <!-- LOGIN (email pour tests sans Google) -->
+  <!-- LOGIN (email OTP en secours) -->
   <section id="page-login" class="card">
     <h2 class="h1">Connexion</h2>
     <p class="muted">Connecte-toi pour gérer tes Masters.</p>
@@ -94,11 +85,9 @@
       <button id="btnRefreshMasters" class="btn">Rafraîchir</button>
     </div>
 
-    <!-- Liste des masters -->
     <div class="card">
       <div class="row" style="margin-bottom:8px">
         <div class="h1">Mes Masters</div>
-        <div class="spacer"></div>
       </div>
       <div id="masters"></div>
     </div>
@@ -112,19 +101,18 @@
 
 <!-- Modal Claim -->
 <dialog id="dlgClaim">
-  <div class="dlg-h">Appairage Master</div>
-  <div class="dlg-b">
+  <div style="padding:16px 16px 0;font-weight:600;border-bottom:1px solid var(--ring)">Appairage Master</div>
+  <div style="padding:16px">
     <p>Entre ce code sur le Master (portail Wi-Fi) :</p>
-    <p style="font-size:28px;font-weight:800;letter-spacing:2px" id="claimCode">— — — — — —</p>
+    <p id="claimCode" style="font-size:28px;font-weight:800;letter-spacing:2px">— — — — — —</p>
     <p class="muted">Expire dans <span id="claimTimer">60s</span></p>
   </div>
-  <div class="dlg-f">
+  <div style="padding:12px 16px;border-top:1px solid var(--ring);display:flex;gap:8px;justify-content:flex-end">
     <button id="btnClaimClose" class="btn">Fermer</button>
     <button id="btnClaimDone" class="btn p">J’ai terminé</button>
   </div>
 </dialog>
 
-<!-- App -->
 <script src="./app.js"></script>
 </body>
 </html>
