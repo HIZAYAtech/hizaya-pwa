@@ -1,51 +1,35 @@
-/* supabase-auth.js – UMD, sans modules, FR */
+/* supabase-auth.js — UMD simple */
 (function () {
-  const PUBLIC_CONFIG_FN =
-    "https://ctjljqmxjnfykskfgral.functions.supabase.co/public_config"; // ← adapte si besoin
-
-  async function getConfig() {
-    const url  = window.__SUPABASE_URL__ || "";
-    const anon = window.__SUPABASE_ANON_KEY__ || "";
-    if (url && anon) return { supabaseUrl: url, supabaseAnonKey: anon, mqttWssUrl: window.__MQTT_WSS_URL__ || "" };
-
-    // fallback: Edge Function
-    const r = await fetch(PUBLIC_CONFIG_FN);
-    if (!r.ok) throw new Error("public_config: " + (await r.text()));
-    const cfg = await r.json();
-    if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) throw new Error("public_config: champs manquants");
-    if (cfg.mqttWssUrl) window.__MQTT_WSS_URL__ = cfg.mqttWssUrl;
-    return { supabaseUrl: cfg.supabaseUrl, supabaseAnonKey: cfg.supabaseAnonKey, mqttWssUrl: cfg.mqttWssUrl || "" };
+  const cfg = window.__CFG__ || {};
+  const url  = cfg.SUPABASE_URL;
+  const anon = cfg.SUPABASE_ANON_KEY;
+  if (!url || !anon || !window.supabase) {
+    console.error("[supabase-auth] Mauvaise config ou supabase-js manquant.");
+    return;
   }
+  const client = window.supabase.createClient(url, anon);
 
-  (async () => {
-    try {
-      const { supabaseUrl, supabaseAnonKey } = await getConfig();
-      window.supabase = supabase.createClient(supabaseUrl, supabaseAnonKey);
+  // Expose
+  window.sb = client;
 
-      window.hzAuth = {
-        async loginWithGoogle() {
-          const { error } = await window.supabase.auth.signInWithOAuth({
-            provider: "google",
-            options: { redirectTo: window.location.origin + window.location.pathname }
-          });
-          if (error) alert(error.message);
-        },
-        async logout() {
-          await window.supabase.auth.signOut();
-          window.dispatchEvent(new CustomEvent("supabase-auth", { detail: { session: null } }));
-        }
-      };
+  // Helpers login
+  window.hzAuth = {
+    loginWithGoogle: () => client.auth.signInWithOAuth({ provider: "google" }),
+    loginWithEmail:  (email) => client.auth.signInWithOtp({ email }),
+    logout: () => client.auth.signOut()
+  };
 
-      window.supabase.auth.onAuthStateChange((_e, session) => {
-        window.dispatchEvent(new CustomEvent("supabase-auth", { detail: { session } }));
-      });
-      const { data: { session } } = await window.supabase.auth.getSession();
-      window.dispatchEvent(new CustomEvent("supabase-auth", { detail: { session } }));
+  // Notifier l'app au boot
+  client.auth.getSession().then(({ data }) => {
+    const ev = new CustomEvent("supabase-auth", { detail: { session: data.session } });
+    window.dispatchEvent(ev);
+  });
 
-      console.log("[supabase-auth] OK");
-    } catch (e) {
-      console.error("[supabase-auth] erreur:", e);
-      alert("Erreur d'initialisation Supabase (voir console).");
-    }
-  })();
+  // Notifier sur chaque changement
+  client.auth.onAuthStateChange((_, session) => {
+    const ev = new CustomEvent("supabase-auth", { detail: { session } });
+    window.dispatchEvent(ev);
+  });
+
+  console.log("[supabase-auth] OK");
 })();
