@@ -1,22 +1,22 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>HIZAYA • Control</title>
   <meta name="theme-color" content="#0f172a"/>
 
-  <!-- Tailwind (ok pour proto). Pour prod, passe en build CLI/PostCSS. -->
+  <!-- Tailwind (ok pour proto). Pour prod, utilise la build CLI/PostCSS. -->
   <script src="https://cdn.tailwindcss.com"></script>
 
   <style>
-    :root { --bg:#f8fafc; --ink:#0f172a; --muted:#64748b; --line:#e5e7eb; }
+    :root { --bg:#f8fafc; --ink:#0f172a; --line:#e5e7eb; }
     html,body{ height:100%; background:var(--bg); color:var(--ink); }
-    .wrap{ max-width: 1100px; margin:0 auto; padding: 1rem; }
+    .wrap{ max-width:1100px; margin:0 auto; padding: 1rem; }
     .header{ position:sticky; top:0; z-index:10; backdrop-filter: blur(8px); background:rgba(255,255,255,.7); border-bottom:1px solid var(--line); }
     .brand{ display:flex; align-items:center; gap:.6rem; }
     .logo{ width:36px; height:36px; border-radius:12px; display:grid; place-items:center; background:#0f172a; color:#fff; font-weight:700; }
-    .card{ background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow: 0 1px 2px rgba(0,0,0,.04); padding:16px; }
+    .card{ background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow:0 1px 2px rgba(0,0,0,.04); padding:16px; }
     .row{ display:flex; align-items:center; gap:.5rem; }
     .spacer{ flex:1; }
     .btn{ border-radius:12px; padding:.5rem .75rem; font-size:.9rem; background:#f1f5f9; }
@@ -27,7 +27,7 @@
     .badge.ok{ background:#dcfce7; color:#166534; }
     .hidden{ display:none; }
     .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-    .muted{ color: var(--muted); }
+    .muted{ color:#64748b; }
     pre.log{ background:#0b1020; color:#e5e7eb; padding:10px; border-radius:12px; height:160px; overflow:auto; font-size:.8rem; }
     dialog::backdrop{ background: rgba(0,0,0,.35); }
     dialog{ border:none; border-radius:16px; width:min(520px, 92vw); }
@@ -115,24 +115,24 @@
     </div>
   </dialog>
 
-  <!-- ====== CONFIG GLOBALE (à remplir) ====== -->
+  <!-- ====== CONFIG GLOBALE (remplis ces valeurs) ====== -->
   <script>
     window.__CFG__ = {
       // Supabase (utilisé par supabase-auth.js)
       SUPABASE_URL: "https://ctjljqmxjnfykskfgral.supabase.co",
       SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0amxqcW14am5meWtza2ZncmFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NzQzMDMsImV4cCI6MjA3MjA1MDMwM30.GoLM8CSHRh2KWOmrMLk2-JkFMz2hwAqyHaHxd8T51M4",
 
-      // Edge Functions (utilisé par app.js)
+      // Edge Functions (utilisées par app.js)
       FN_CREATE_CLAIM: "https://ctjljqmxjnfykskfgral.functions.supabase.co/create_claim",
       FN_MQTT_CREDS:   "https://ctjljqmxjnfykskfgral.functions.supabase.co/get_or_create_mqtt_creds"
     };
   </script>
 
-  <!-- Libs -->
+  <!-- Librairies -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
-  <!-- Tes scripts (garde ces noms si possible) -->
+  <!-- Scripts de l’app -->
   <script src="./supabase-auth.js"></script>
   <script src="./app.js"></script>
 </body>
