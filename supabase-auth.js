@@ -6,19 +6,25 @@ const SUPABASE_URL  = "https://ctjljqmxjnfykskfgral.supabase.co";  // ex: https:
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0amxqcW14am5meWtza2ZncmFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NzQzMDMsImV4cCI6MjA3MjA1MDMwM30.GoLM8CSHRh2KWOmrMLk2-JkFMz2hwAqyHaHxd8T51M4";                          // ta anon key (publique)
 const REDIRECT_TO   = "https://hizayatech.github.io/hizaya-pwa/";                    // ex: https://hizayatech.github.io/hizaya-pwa/
 
-// Expose un client global unique
+// Client global unique
 window.supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
 
-// Helper d’auth
+// API login/logout exposée globalement
 window.hzAuth = {
   async loginWithGoogle() {
-    const { error } = await window.supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: REDIRECT_TO }
-    });
-    if (error) {
-      console.error("[auth] Google error:", error);
-      alert("Erreur Google: " + (error.message || error));
+    try {
+      const { error } = await window.supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: REDIRECT_TO }
+      });
+      if (error) {
+        console.error("[auth] Google error:", error);
+        alert("Erreur Google: " + (error.message || error));
+      }
+      // redirection automatique par Supabase → retour sur REDIRECT_TO
+    } catch (e) {
+      console.error("[auth] signIn exception:", e);
+      alert("Auth exception: " + e.message);
     }
   },
   async logout() {
@@ -26,26 +32,33 @@ window.hzAuth = {
   }
 };
 
-// Dispatch un évènement custom "supabase-auth" à chaque changement
-function dispatchSession(session) {
+// Dispatch un événement "supabase-auth" à chaque changement
+function dispatch(session) {
   window.dispatchEvent(new CustomEvent("supabase-auth", { detail: { session } }));
 }
 
-// État initial
+// État initial (au chargement)
 const { data: { session } } = await window.supabase.auth.getSession();
-dispatchSession(session);
+dispatch(session);
 
-// Écoute les changements (retour OAuth inclus)
-window.supabase.auth.onAuthStateChange((_event, sess) => {
-  console.log("[auth] state:", _event, sess?.user?.email);
-  dispatchSession(sess);
+// Changements d’état (retour OAuth inclus)
+window.supabase.auth.onAuthStateChange((evt, sess) => {
+  console.log("[auth] state:", evt, sess?.user?.email);
+  dispatch(sess);
 });
 
-// Branchement du bouton si présent
-document.addEventListener("DOMContentLoaded", () => {
+// Sécuriser le bouton #btnGoogle même si un autre JS ne l’attache pas
+function bindBtn() {
   const btn = document.querySelector("#btnGoogle");
   if (btn && !btn._hzBound) {
     btn._hzBound = true;
     btn.addEventListener("click", () => window.hzAuth.loginWithGoogle());
+  }
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", bindBtn);
+} else {
+  bindBtn();
+}
   }
 });
