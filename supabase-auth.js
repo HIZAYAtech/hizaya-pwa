@@ -1,127 +1,60 @@
-/* supabase-auth.js — HIZAYA
- * Initialise le client Supabase (v2) et expose un petit helper d’auth:
- *   - window.sb       → client Supabase
- *   - window.hzAuth   → { loginWithGoogle, loginWithEmail, logout }
- * Emet un event global "supabase-auth" avec { session } à chaque changement.
- *
- * Pré-requis dans index.html:
- *   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
- *   <script>
- *     window.__CFG__ = {
- *       SUPABASE_URL: "https://<project-ref>.supabase.co",
- *       SUPABASE_ANON_KEY: "<ANON_KEY>"
- *     };
- *   </script>
- */
+// supabase-auth.js  (charger avec type="module")
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-(function(){
-  const CFG = window.__CFG__ || {};
-  if(!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY){
-    console.error("[supabase-auth] Manque SUPABASE_URL / SUPABASE_ANON_KEY dans window.__CFG__");
-  }
+// === CONFIG À ADAPTER ===
+const SUPABASE_URL  = "https://ctjljqmxjnfykskfgral.supabase.co";     // ex: https://ctjljqmxjnfykskfgral.supabase.co
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0amxqcW14am5meWtza2ZncmFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NzQzMDMsImV4cCI6MjA3MjA1MDMwM30.GoLM8CSHRh2KWOmrMLk2-JkFMz2hwAqyHaHxd8T51M4";                             // ta anon public key
+const REDIRECT_TO   = "https://hizayatech.github.io/hizaya-pwa/"; // URL publique de ta PWA (exacte, avec /)
 
-  // Client Supabase global
-  const sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true, // gère automatiquement le retour OAuth (code dans l’URL)
-      storageKey: "hizaya-auth"
+// Expose un client global unique
+window.supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// Petit helper auth
+window.hzAuth = {
+  async loginWithGoogle() {
+    // IMPORTANT: Configure dans Supabase → Authentication → URL Configuration:
+    // - Site URL = REDIRECT_TO
+    // - Redirect URLs = REDIRECT_TO (et localhost si tu testes en local)
+    const { data, error } = await window.supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: REDIRECT_TO }
+    });
+    if (error) {
+      console.error("[auth] Google error:", error);
+      alert("Erreur Google: " + (error.message || error));
     }
-  });
-  window.sb = sb;
+    // redirection OAuth automatique; rien d'autre à faire ici
+  },
 
-  // Dispatch util
-  function dispatchAuth(session){
-    window.dispatchEvent(new CustomEvent("supabase-auth", { detail: { session } }));
+  async logout() {
+    await window.supabase.auth.signOut();
+    // on laisse app.js gérer l’UI via l’événement ci-dessous
   }
+};
 
-  // Nettoyage de l’URL après retour OAuth / magic link (pour éviter ?code=... & error=...)
-  function cleanUrl(){
-    try{
-      const url = new URL(window.location.href);
-      const paramsToStrip = ["code", "error", "error_description"];
-      let changed = false;
-      paramsToStrip.forEach(k=>{
-        if(url.searchParams.has(k)){ url.searchParams.delete(k); changed = true; }
-      });
-      if(changed){
-        history.replaceState({}, document.title, url.pathname + (url.search ? "?"+url.searchParams.toString() : "") + url.hash);
-      }
-    }catch(e){}
-  }
+// Dispatch un évènement custom "supabase-auth" à chaque changement
+function dispatchSession(session) {
+  window.dispatchEvent(new CustomEvent("supabase-auth", { detail: { session } }));
+}
 
-  // Redirection de retour (doit matcher l’URL autorisée sur ton projet Supabase)
-  // → sur GitHub Pages, inclure le chemin du repo (origin + pathname)
-  function getRedirectUrl(){
-    return window.location.origin + window.location.pathname;
-  }
-
-  // Expose helpers d’auth
-  window.hzAuth = {
-    async loginWithGoogle(){
-      try{
-        const { error } = await sb.auth.signInWithOAuth({
-          provider: "google",
-          options: {
-            redirectTo: getRedirectUrl(),
-            queryParams: {
-              // optionnels, utiles si tu veux forcer le refresh token Google
-              // access_type: "offline",
-              // prompt: "consent"
-            }
-          }
-        });
-        if(error) throw error;
-        // Redirection automatique vers Google, puis retour ici.
-      }catch(e){
-        console.error("[supabase-auth] Google error:", e);
-        alert("Connexion Google impossible: " + (e.message||e));
-      }
-    },
-
-    async loginWithEmail(email){
-      try{
-        const { error } = await sb.auth.signInWithOtp({
-          email,
-          options: { emailRedirectTo: getRedirectUrl() }
-        });
-        if(error) throw error;
-        // Un mail est envoyé. Au clic, Supabase revient ici et finalise la session.
-      }catch(e){
-        console.error("[supabase-auth] OTP error:", e);
-        alert("Connexion par email impossible: " + (e.message||e));
-      }
-    },
-
-    async logout(){
-      try{
-        const { error } = await sb.auth.signOut();
-        if(error) throw error;
-      }catch(e){
-        console.error("[supabase-auth] logout error:", e);
-        alert("Déconnexion impossible: " + (e.message||e));
-      }
-    }
-  };
-
-  // 1) Session initiale (après que Supabase ait traité un éventuel code OAuth)
-  sb.auth.getSession().then(({ data:{ session }, error })=>{
-    if(error) console.warn("[supabase-auth] getSession:", error.message);
-    // Si Supabase renvoie des erreurs dans l’URL:
-    const url = new URL(window.location.href);
-    if(url.searchParams.get("error_description")){
-      alert("Auth error: " + url.searchParams.get("error_description"));
-    }
-    cleanUrl(); // enlève ?code=... etc.
-    dispatchAuth(session||null);
-    console.log("[supabase-auth] OK");
-  });
-
-  // 2) Écoute temps réel des changements (login/logout/refresh)
-  sb.auth.onAuthStateChange((event, session)=>{
-    // event: "SIGNED_IN" | "SIGNED_OUT" | "TOKEN_REFRESHED" | ...
-    dispatchAuth(session||null);
-  });
-
+// Au chargement: publie l’état courant
+(async () => {
+  const { data: { session } } = await window.supabase.auth.getSession();
+  dispatchSession(session);
 })();
+
+// Et écoute les changements (retour d’OAuth compris)
+window.supabase.auth.onAuthStateChange((_event, session) => {
+  console.log("[auth] state:", _event, session?.user?.email);
+  dispatchSession(session);
+});
+
+// (facultatif) branchement direct si ton bouton a l’id #btnGoogle et qu’aucun autre
+// code ne s’en occupe (sinon, laisse app.js l’attacher)
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.querySelector("#btnGoogle");
+  if (btn && !btn._hzBound) {
+    btn._hzBound = true;
+    btn.addEventListener("click", () => window.hzAuth.loginWithGoogle());
+  }
+});
