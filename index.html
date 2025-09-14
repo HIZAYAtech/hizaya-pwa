@@ -5,11 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>HIZAYA</title>
   <meta name="theme-color" content="#0ea5e9"/>
+
+  <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png" sizes="192x192">
   <link rel="apple-touch-icon" href="icons/icon-192.png"/>
 
-  <!-- Tailwind (OK pour proto; warning normal en console) -->
+  <!-- Tailwind (ok pour proto; le warning en console est normal) -->
   <script src="https://cdn.tailwindcss.com"></script>
 
   <!-- Auth Supabase : DOIT être un module et chargé AVANT app.js -->
@@ -38,8 +40,13 @@
     <div class="bg-white border border-slate-200 rounded-3xl shadow-sm p-6">
       <h1 class="text-xl font-semibold text-slate-900 mb-2">Connexion</h1>
       <p class="text-slate-600 text-sm mb-4">Connecte-toi avec Google pour accéder à ton matériel.</p>
+
+      <!-- Bouton Google qui appelle directement l’OAuth -->
       <button id="btnGoogle"
-        class="w-full px-4 py-2 rounded-2xl bg-slate-900 text-white hover:bg-black transition">Se connecter avec Google</button>
+        onclick="window.hzAuth && window.hzAuth.loginWithGoogle()"
+        class="w-full px-4 py-2 rounded-2xl bg-slate-900 text-white hover:bg-black transition">
+        Se connecter avec Google
+      </button>
     </div>
   </main>
 
@@ -78,5 +85,12 @@
       </div>
     </div>
   </div>
+
+  <script>
+    // (optionnel) enregistrement du Service Worker si tu utilises sw.js
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    }
+  </script>
 </body>
 </html>
