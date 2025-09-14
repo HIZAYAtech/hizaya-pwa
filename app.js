@@ -11,27 +11,33 @@ const S = {
   session: null,
   masters: [],
   peersByMaster: new Map(), // master_id -> Map(mac, peer)
-  channel: null
+  channel: null,
+  claimTimer: null
 };
 
+async function waitSupabase(maxMs = 3000) {
+  const t0 = Date.now();
+  while (!window.supabase && (Date.now() - t0) < maxMs) {
+    await new Promise(r => setTimeout(r, 50));
+  }
+  if (!window.supabase) throw new Error("Supabase non initialisé (supabase-auth.js manquant ?)");
+}
+
 // ---------- AUTH ----------
-async function initAuth(){
-  // écoute du helper (Google)
-  window.addEventListener("supabase-auth", (e)=>updateSession(e.detail.session));
+function initAuth(){
+  window.addEventListener("supabase-auth", (e)=> updateSession(e.detail.session));
 
-  // session initiale
-  const { data:{ session } } = await supabase.auth.getSession();
-  updateSession(session);
-
-  $("#btnGoogle")?.addEventListener("click", ()=> window.hzAuth?.loginWithGoogle?.());
   $("#btnLogout")?.addEventListener("click", async ()=>{
     await window.hzAuth?.logout?.();
   });
 
-  // claim modal
   $("#btnPairMaster")?.addEventListener("click", createPairingCode);
+
   $("#btnClaimClose")?.addEventListener("click", closeClaimModal);
   $("#btnClaimDone")?.addEventListener("click", async ()=>{ closeClaimModal(); await loadMasters(); });
+
+  // Session initiale
+  window.supabase.auth.getSession().then(({data:{session}})=> updateSession(session));
 }
 
 async function updateSession(session){
@@ -128,15 +134,13 @@ function renderMasters(){
       await loadMasters();
     };
 
-    // scan (écriture d’une commande – à brancher étape 2)
+    // scan (placeholder; sera câblé via 'commands' étape 2)
     card.querySelector(".btn-scan").onclick = ()=>{
       alert("Scan sera géré par la file de commandes (étape 2).");
     };
 
     cont.appendChild(card);
   }
-  // rafraîchit l’état online déjà connu
-  refreshAllOnlineBadges();
   // réinjecte les peers connus (si push_state a déjà tourné)
   for(const m of S.masters){
     const peers = S.peersByMaster.get(m.master_id);
@@ -149,10 +153,6 @@ function setOnline(master_id, online){
   if(!b) return;
   b.className = `inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${online?"bg-green-100 text-green-700":"bg-slate-100 text-slate-700"}`;
   b.innerHTML = `<span class="inline-block h-1.5 w-1.5 rounded-full ${online?"bg-green-500":"bg-slate-400"}"></span>${online?"online":"offline"}`;
-}
-function refreshAllOnlineBadges(){
-  // Optionnel: tu peux appeler un select sur master_states pour initialiser
-  // Ici on attend simplement les push Realtime.
 }
 
 function upsertPeer(master_id, row){
@@ -195,10 +195,9 @@ function renderPeers(master_id, peers){
         </div>
       </div>
     `;
-    // rename peer (étape 2: ira dans commands → ESP → push_state)
+    // rename peer (étape 2: via commands + push_state)
     row.querySelector(".peer-rename").addEventListener("change",(ev)=>{
       const name = ev.target.value.trim() || "Device";
-      // pour l’instant: on met à jour localement (la vraie MAJ viendra du push_state de l’ESP)
       const m = S.peersByMaster.get(master_id); const cur = m?.get(p.mac);
       if(cur){ cur.name = name; m.set(p.mac, cur); }
       renderPeers(master_id, [...(S.peersByMaster.get(master_id)||new Map()).values()]);
@@ -213,15 +212,13 @@ function renderPeers(master_id, peers){
 }
 
 // ---------- Pairing (code 6 chiffres) ----------
-const FN_CREATE_CLAIM = "https://<PROJECT-REF>.functions.supabase.co/create_claim"; // si dispo
-let countdownTimer=null;
+const FN_CREATE_CLAIM = "https://ctjljqmxjnfykskfgral.supabase.co/functions/v1/create_claim"; // si dispo
 
 async function createPairingCode(){
   if(!S.session) return alert("Connecte-toi d'abord.");
-  // si tu as déjà la function create_claim:
   try{
     const res = await fetch(FN_CREATE_CLAIM, { method:"POST", headers:{ Authorization:`Bearer ${S.session.access_token}` }});
-    if(!res.ok){ throw new Error(await res.text()); }
+    if(!res.ok) throw new Error(await res.text());
     const { code, expires_at } = await res.json();
     showClaimModal(code, expires_at);
   }catch(e){
@@ -233,21 +230,29 @@ async function createPairingCode(){
 function showClaimModal(code, expiresAt){
   $("#claimCode").textContent = code;
   $("#modalClaim").classList.remove("hidden");
-  clearInterval(countdownTimer);
+  clearInterval(S.claimTimer);
   const refresh=()=>{
     const s = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now())/1000));
     $("#claimTimer").textContent = s+"s";
-    if(s<=0) clearInterval(countdownTimer);
+    if(s<=0) clearInterval(S.claimTimer);
   };
-  refresh(); countdownTimer = setInterval(refresh, 1000);
+  refresh(); S.claimTimer = setInterval(refresh, 1000);
 }
 function closeClaimModal(){
   $("#modalClaim").classList.add("hidden");
-  clearInterval(countdownTimer);
+  clearInterval(S.claimTimer);
 }
 
 // ---------- Utils ----------
 function debounce(fn, d=300){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), d); }; }
 
 // ---------- Boot ----------
-document.addEventListener("DOMContentLoaded", initAuth);
+document.addEventListener("DOMContentLoaded", async ()=>{
+  try{
+    await waitSupabase();
+    initAuth();
+  }catch(e){
+    console.error(e);
+    alert("Erreur d'initialisation: "+e.message);
+  }
+});
