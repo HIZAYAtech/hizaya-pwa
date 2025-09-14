@@ -11,14 +11,14 @@
   <link rel="icon" href="icons/icon-192.png" sizes="192x192">
   <link rel="apple-touch-icon" href="icons/icon-192.png"/>
 
-  <!-- Tailwind (ok pour proto; le warning en console est normal) -->
+  <!-- Tailwind (ok pour proto) -->
   <script src="https://cdn.tailwindcss.com"></script>
 
   <!-- Auth Supabase : DOIT être un module et chargé AVANT app.js -->
-  <script type="module" src="supabase-auth.js"></script>
+  <script type="module" src="supabase-auth.js?v=6"></script>
 
   <!-- App -->
-  <script defer src="app.js"></script>
+  <script defer src="app.js?v=6"></script>
 
   <style>
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace }
@@ -40,8 +40,6 @@
     <div class="bg-white border border-slate-200 rounded-3xl shadow-sm p-6">
       <h1 class="text-xl font-semibold text-slate-900 mb-2">Connexion</h1>
       <p class="text-slate-600 text-sm mb-4">Connecte-toi avec Google pour accéder à ton matériel.</p>
-
-      <!-- Bouton Google qui appelle directement l’OAuth -->
       <button id="btnGoogle"
         onclick="window.hzAuth && window.hzAuth.loginWithGoogle()"
         class="w-full px-4 py-2 rounded-2xl bg-slate-900 text-white hover:bg-black transition">
@@ -87,7 +85,6 @@
   </div>
 
   <script>
-    // (optionnel) enregistrement du Service Worker si tu utilises sw.js
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch(()=>{});
     }
