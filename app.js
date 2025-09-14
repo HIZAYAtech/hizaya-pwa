@@ -1,18 +1,19 @@
-// app.js — UI minimale: bascule login/main et hooks de base
+// app.js — bascule login/main et logs utiles
 
 const $  = (s) => document.querySelector(s);
 const log = (...a) => { const el=$("#log"); if(!el) return; el.textContent += a.join(" ")+"\n"; el.scrollTop = el.scrollHeight; };
 
-// Attendre que supabase (injecté par supabase-auth.js) soit prêt
-async function waitSupabase(maxMs = 3000) {
+async function waitSupabase(maxMs = 5000) {
   const t0 = Date.now();
   while (!window.supabase && (Date.now() - t0) < maxMs) {
     await new Promise(r => setTimeout(r, 50));
   }
-  if (!window.supabase) throw new Error("Supabase non initialisé (supabase-auth.js manquant ?)");
+  if (!window.supabase) {
+    const why = window.__SUPABASE_BOOT_ERROR__ ? ` (${window.__SUPABASE_BOOT_ERROR__})` : "";
+    throw new Error("Supabase non initialisé (supabase-auth.js manquant ?)" + why);
+  }
 }
 
-// UI helpers
 function show(sel){ $(sel).classList.remove("hidden"); }
 function hide(sel){ $(sel).classList.add("hidden"); }
 
@@ -26,31 +27,29 @@ function applySession(session){
   }
 }
 
-// Init général
 async function initApp(){
+  console.log("[app] init…");
   await waitSupabase();
+  console.log("[app] supabase OK");
 
-  // Écoute les changements d’auth (événement dispatché par supabase-auth.js)
   window.addEventListener("supabase-auth", (e)=>{
     const session = e.detail?.session || null;
+    console.log("[app] event session:", !!session);
     applySession(session);
   });
 
-  // État initial (au cas où)
   const { data:{ session } } = await window.supabase.auth.getSession();
+  console.log("[app] initial session:", !!session);
   applySession(session);
 
-  // Bouton Déconnexion
   $("#btnLogout")?.addEventListener("click", async ()=>{
     try { await window.hzAuth?.logout?.(); } catch(e){ console.error(e); }
   });
 
-  // Boutons modale “Lier un Master” (UI seulement)
   $("#btnPairMaster")?.addEventListener("click", ()=>{
     $("#claimCode").textContent = "------";
     $("#claimTimer").textContent = "…";
     $("#modalClaim").classList.remove("hidden");
-    // ici tu peux appeler ton Edge Function create_claim si tu veux
     log("[UI] Ouverture modale d’appairage");
   });
   $("#btnClaimClose")?.addEventListener("click", ()=> $("#modalClaim").classList.add("hidden"));
