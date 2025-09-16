@@ -1,5 +1,7 @@
 // HIZAYA PWA — App Shell cache pour GitHub Pages (sous-dossier)
-const CACHE_NAME = "hizaya-cache-v10"; // ⬅️ incrémente la version à chaque déploiement
+// Incrémente la version à chaque mise en production pour éviter les vieilles ressources en cache.
+const CACHE_NAME = "hizaya-cache-v11"; // ← bump!
+
 const ASSETS = [
   "./",
   "./index.html",
@@ -7,10 +9,13 @@ const ASSETS = [
   "./app.js",
   "./supabase-auth.js",
   "./favicon.ico",
-  "./icon-192.png",
-  "./icon-512.png",
+  "./icons/icon-192.png",
+  "./icons/icon-512.png",
   "./apple-touch-icon.png"
 ];
+
+/* ... (le reste inchangé) ... */
+
 
 // Install: pré-cache l'app shell
 self.addEventListener("install", (event) => {
@@ -70,4 +75,5 @@ self.addEventListener("fetch", (event) => {
   // Par défaut: réseau (laisser passer Tailwind CDN, MQTT.js, etc.)
   event.respondWith(fetch(req).catch(() => caches.match(req)));
 });
+
 
