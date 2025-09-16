@@ -1,93 +1,105 @@
 <!doctype html>
-<html lang="fr">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>HIZAYA</title>
-  <meta name="theme-color" content="#0ea5e9"/>
-
-  <!-- PWA -->
-  <link rel="manifest" href="manifest.json">
-  <link rel="icon" href="icons/icon-192.png" sizes="192x192">
-  <link rel="apple-touch-icon" href="icons/icon-192.png"/>
-
-  <!-- Tailwind (ok pour proto) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Auth Supabase : DOIT être un module et chargé AVANT app.js -->
-  <script type="module" src="supabase-auth.js?v=6"></script>
-
-  <!-- App -->
-  <script defer src="app.js?v=6"></script>
-
-  <style>
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace }
-  </style>
+<meta name="theme-color" content="#0ea5e9" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon-192.png" sizes="192x192" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<style>
+:root { --bg:#0b1220; --card:#0f172a; --ink:#e2e8f0; --muted:#94a3b8; --brand:#0ea5e9; }
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:960px;margin:0 auto;padding:24px}
+.card{background:var(--card);border-radius:16px;padding:20px;box-shadow:0 6px 24px rgba(0,0,0,.3)}
+h1{margin:0 0 16px;font-size:24px}
+h2{margin:20px 0 8px;font-size:18px}
+button{background:var(--brand);color:#001119;border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
+button.secondary{background:transparent;color:var(--ink);border:1px solid #1f2937}
+label{display:block;margin:8px 0 4px;color:var(--muted)}
+input,select{width:100%;padding:10px;border-radius:10px;border:1px solid #223;background:#0b132b;color:var(--ink)}
+.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+table{width:100%;border-collapse:collapse;margin-top:12px}
+th,td{padding:10px;border-bottom:1px solid #223;text-align:left}
+.muted{color:var(--muted)}
+.hidden{display:none}
+</style>
 </head>
-<body class="bg-gradient-to-b from-white to-slate-50 min-h-screen">
-  <header class="sticky top-0 bg-white/80 backdrop-blur border-b border-slate-200 z-10">
-    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-2xl bg-slate-900 text-white grid place-items-center font-bold">H</div>
-        <span class="font-semibold tracking-[-0.01em] text-slate-900">HIZAYA</span>
-      </div>
-      <div id="who" class="text-sm text-slate-600">Hors ligne</div>
-    </div>
-  </header>
+<body>
+<div class="wrap">
+<div class="card">
+<h1>HIZAYA — Pairing Console</h1>
+<p class="muted" id="status">Déconnecté.</p>
 
-  <!-- Page login -->
-  <main id="page-login" class="max-w-md mx-auto px-4 pt-10">
-    <div class="bg-white border border-slate-200 rounded-3xl shadow-sm p-6">
-      <h1 class="text-xl font-semibold text-slate-900 mb-2">Connexion</h1>
-      <p class="text-slate-600 text-sm mb-4">Connecte-toi avec Google pour accéder à ton matériel.</p>
-      <button id="btnGoogle"
-        onclick="window.hzAuth && window.hzAuth.loginWithGoogle()"
-        class="w-full px-4 py-2 rounded-2xl bg-slate-900 text-white hover:bg-black transition">
-        Se connecter avec Google
-      </button>
-    </div>
-  </main>
 
-  <!-- Page principale -->
-  <main id="page-main" class="max-w-5xl mx-auto px-4 py-6 hidden">
-    <div class="flex items-end justify-between mb-4">
-      <div>
-        <h2 class="text-2xl font-semibold text-slate-900">Bienvenue 👋</h2>
-        <p class="text-slate-600 text-sm">État en direct via Supabase Realtime (sans MQTT).</p>
-      </div>
-      <div class="flex gap-2">
-        <button id="btnPairMaster" class="px-3 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200">Lier un Master</button>
-        <button id="btnLogout" class="px-3 py-2 rounded-2xl bg-red-600 text-white hover:bg-red-700">Déconnexion</button>
-      </div>
-    </div>
+<div id="auth">
+<button id="btn-login">Se connecter avec Google</button>
+</div>
 
-    <div id="masters" class="grid gap-4"></div>
 
-    <div class="mt-6">
-      <h3 class="text-sm font-medium text-slate-700 mb-1">Journal</h3>
-      <pre id="log" class="bg-black text-slate-200 rounded-xl p-3 text-xs h-40 overflow-auto"></pre>
-    </div>
-  </main>
+<div id="authed" class="hidden">
+<p>Connecté en tant que <strong id="who"></strong></p>
+<button id="btn-logout" class="secondary">Se déconnecter</button>
 
-  <!-- Modal Claim -->
-  <div id="modalClaim" class="fixed inset-0 hidden items-center justify-center z-50">
-    <div class="absolute inset-0 bg-black/40" onclick="document.getElementById('modalClaim').classList.add('hidden')"></div>
-    <div class="relative bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-md p-5">
-      <h4 class="text-lg font-semibold text-slate-900 mb-2">Appairer un Master</h4>
-      <p class="text-sm text-slate-600">Entre ce code sur le Master (WiFiManager) :</p>
-      <div class="text-3xl font-bold tracking-widest mono my-3" id="claimCode">000000</div>
-      <div class="text-xs text-slate-500 mb-4">Expire dans <span id="claimTimer">…</span></div>
-      <div class="flex justify-end gap-2">
-        <button id="btnClaimClose" class="px-3 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200">Fermer</button>
-        <button id="btnClaimDone" class="px-3 py-2 rounded-2xl bg-blue-600 text-white hover:bg-blue-700">J’ai entré le code</button>
-      </div>
-    </div>
-  </div>
 
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').catch(()=>{});
-    }
-  </script>
+<hr style="margin:16px 0;opacity:.2" />
+
+
+<h2>Enregistrer un device</h2>
+<div class="row">
+<div>
+<label for="dev-name">Nom</label>
+<input id="dev-name" placeholder="ROOM-A, PSU-1, etc." />
+</div>
+<div>
+<label for="dev-mac">MAC</label>
+<input id="dev-mac" placeholder="A8:42:E3:91:75:78" />
+</div>
+<div>
+<label for="dev-role">Rôle</label>
+<select id="dev-role">
+<option>MASTER</option>
+<option>SLAVE</option>
+</select>
+</div>
+</div>
+<div class="row" style="margin-top:12px">
+<div>
+<label for="dev-channel">Canal (optionnel)</label>
+<input id="dev-channel" type="number" min="1" max="13" placeholder="6" />
+</div>
+<div style="align-self:end">
+<button id="btn-save">Enregistrer</button>
+</div>
+</div>
+
+
+<h2 style="margin-top:20px">Mes devices</h2>
+<table id="tbl">
+<thead>
+<tr>
+<th>Nom</th>
+<th>MAC</th>
+<th>Rôle</th>
+<th>Canal</th>
+<th>Créé</th>
+<th></th>
+</tr>
+</thead>
+<tbody id="rows"></tbody>
+</table>
+</div>
+</div>
+</div>
+
+
+<script>
+// En prod (GitHub Pages), enregistre le service worker (optionnel)
+if ('serviceWorker' in navigator) {
+window.addEventListener('load', () => {
+navigator.serviceWorker.register('./sw.js').catch(console.warn);
+});
+}
+</script>
+
+
+<!-- Modules JS -->
+<script type="module" src="./app.js"></script>
 </body>
 </html>
