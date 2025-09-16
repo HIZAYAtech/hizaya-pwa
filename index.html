@@ -11,28 +11,31 @@
   <link rel="icon" href="icons/icon-192.png" sizes="192x192">
   <link rel="apple-touch-icon" href="icons/icon-192.png"/>
 
-  <!-- Tailwind (ok pour proto) -->
+  <!-- Tailwind pour le proto -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Auth Supabase : DOIT être un module et chargé AVANT app.js -->
-  
-<!-- Supabase keys (ANON only) -->
-<script>
-  window.__SUPABASE_URL__  = "https://ctjljqmxjnfykskfgral.supabase.co";  // TODO: replace
-  window.__SUPABASE_ANON__ = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0amxqcW14am5meWtza2ZncmFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NzQzMDMsImV4cCI6MjA3MjA1MDMwM30.GoLM8CSHRh2KWOmrMLk2-JkFMz2hwAqyHaHxd8T51M4";              // TODO: replace
-</script>
-<script type="module" src="supabase-auth.js?v=6"></script>
+  <!-- Supabase : variables de projet (REMPLACE-LES) -->
+  <script>
+    window.__SUPABASE_URL__  = "https://ctjljqmxjnfykskfgral.supabase.co"; // ← change-moi !
+    window.__SUPABASE_ANON__ = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0amxqcW14am5meWtza2ZncmFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NzQzMDMsImV4cCI6MjA3MjA1MDMwM30.GoLM8CSHRh2KWOmrMLk2-JkFMz2hwAqyHaHxd8T51M4";                           // ← change-moi !
+  </script>
 
-  <!-- App -->
-  <script defer src="app.js?v=6"></script>
+  <!-- Auth (doit précéder app.js) -->
+  <script type="module" src="supabase-auth.js?v=7"></script>
 
+  <!-- App principale -->
+  <script defer src="app.js?v=7"></script>
+
+  <!-- Styles utilitaires -->
   <style>
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace }
+    .mono { font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace }
   </style>
 
+  <!-- état de l'app pour le service‑worker -->
   <meta name="app:status" content="init">
 </head>
 <body class="bg-gradient-to-b from-white to-slate-50 min-h-screen">
+  <!-- Barre de titre -->
   <header class="sticky top-0 bg-white/80 backdrop-blur border-b border-slate-200 z-10">
     <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
       <div class="flex items-center gap-3">
@@ -43,49 +46,52 @@
     </div>
   </header>
 
-  <!-- Page login -->
+  <!-- ——————————— SECTION LOGIN ——————————— -->
   <div id="auth">
-<main id="page-login" class="max-w-md mx-auto px-4 pt-10">
-    <div class="bg-white border border-slate-200 rounded-3xl shadow-sm p-6">
-      <h1 class="text-xl font-semibold text-slate-900 mb-2">Connexion</h1>
-      <p class="text-slate-600 text-sm mb-4">Connecte-toi avec Google pour accéder à ton matériel.</p>
-      <button id="btn-login"
-        onclick="window.hzAuth && window.hzAuth.loginWithGoogle()"
-        class="w-full px-4 py-2 rounded-2xl bg-slate-900 text-white hover:bg-black transition">
-        Se connecter avec Google
-      </button>
-    </div>
-<div id="authed" class="hidden">
-  </main>
-</div>
-
-  <!-- Page principale -->
-  <main id="page-main" class="max-w-5xl mx-auto px-4 py-6 hidden">
-    <div class="flex items-end justify-between mb-4">
-      <div>
-        <h2 class="text-2xl font-semibold text-slate-900">Bienvenue 👋</h2>
-        <p class="text-slate-600 text-sm">État en direct via Supabase Realtime (sans MQTT).</p>
+    <main id="page-login" class="max-w-md mx-auto px-4 pt-10">
+      <div class="bg-white border border-slate-200 rounded-3xl shadow-sm p-6">
+        <h1 class="text-xl font-semibold text-slate-900 mb-2">Connexion</h1>
+        <p class="text-slate-600 text-sm mb-4">Connecte‑toi avec Google pour accéder à ton matériel.</p>
+        <button id="btn-login"
+          class="w-full px-4 py-2 rounded-2xl bg-slate-900 text-white hover:bg-black transition">
+          Se connecter avec Google
+        </button>
       </div>
-      <div class="flex gap-2">
-        <button id="btnPairMaster" class="px-3 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200">Lier un Master</button>
-        <button id="btn-logout" class="px-3 py-2 rounded-2xl bg-red-600 text-white hover:bg-red-700">Déconnexion</button>
+    </main>
+  </div>
+
+  <!-- ——————————— SECTION AUTHED ——————————— -->
+  <!-- visible seulement quand la session Supabase est présente -->
+  <div id="authed" class="hidden">
+    <!-- L’UI détaillée est injectée dynamiquement par app.js (ensureUI) -->
+    <!-- On conserve néanmoins une page‑main basique pour compat avec l’ancienne version -->
+    <main id="page-main" class="max-w-5xl mx-auto px-4 py-6 hidden">
+      <div class="flex items-end justify-between mb-4">
+        <div>
+          <h2 class="text-2xl font-semibold text-slate-900">Bienvenue 👋</h2>
+          <p class="text-slate-600 text-sm">État en direct via Supabase Realtime (sans MQTT).</p>
+        </div>
+        <div class="flex gap-2">
+          <button id="btnPairMaster" class="px-3 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200">Lier un Master</button>
+          <button id="btn-logout" class="px-3 py-2 rounded-2xl bg-red-600 text-white hover:bg-red-700">Déconnexion</button>
+        </div>
       </div>
-    </div>
 
-    <div id="masters" class="grid gap-4"></div>
+      <div id="masters" class="grid gap-4"></div>
 
-    <div class="mt-6">
-      <h3 class="text-sm font-medium text-slate-700 mb-1">Journal</h3>
-      <pre id="log" class="bg-black text-slate-200 rounded-xl p-3 text-xs h-40 overflow-auto"></pre>
-    </div>
-  </main>
+      <div class="mt-6">
+        <h3 class="text-sm font-medium text-slate-700 mb-1">Journal</h3>
+        <pre id="log" class="bg-black text-slate-200 rounded-xl p-3 text-xs h-40 overflow-auto"></pre>
+      </div>
+    </main>
+  </div>
 
-  <!-- Modal Claim -->
+  <!-- ——————————— MODAL CLAIM ——————————— -->
   <div id="modalClaim" class="fixed inset-0 hidden items-center justify-center z-50">
     <div class="absolute inset-0 bg-black/40" onclick="document.getElementById('modalClaim').classList.add('hidden')"></div>
     <div class="relative bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-md p-5">
       <h4 class="text-lg font-semibold text-slate-900 mb-2">Appairer un Master</h4>
-      <p class="text-sm text-slate-600">Entre ce code sur le Master (WiFiManager) :</p>
+      <p class="text-sm text-slate-600">Entre ce code sur le Master (WiFiManager) :</p>
       <div class="text-3xl font-bold tracking-widest mono my-3" id="claimCode">000000</div>
       <div class="text-xs text-slate-500 mb-4">Expire dans <span id="claimTimer">…</span></div>
       <div class="flex justify-end gap-2">
@@ -93,9 +99,9 @@
         <button id="btnClaimDone" class="px-3 py-2 rounded-2xl bg-blue-600 text-white hover:bg-blue-700">J’ai entré le code</button>
       </div>
     </div>
-  </div></div>
+  </div>
 
-
+  <!-- ——————————— SW REGISTER ——————————— -->
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch(()=>{});
@@ -103,5 +109,3 @@
   </script>
 </body>
 </html>
-
-
