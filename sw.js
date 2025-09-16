@@ -1,5 +1,5 @@
 // HIZAYA PWA — App Shell cache pour GitHub Pages (sous-dossier)
-const CACHE_NAME = "hizaya-cache-v9"; // ⬅️ incrémente la version à chaque déploiement
+const CACHE_NAME = "hizaya-cache-v10"; // ⬅️ incrémente la version à chaque déploiement
 const ASSETS = [
   "./",
   "./index.html",
@@ -70,3 +70,4 @@ self.addEventListener("fetch", (event) => {
   // Par défaut: réseau (laisser passer Tailwind CDN, MQTT.js, etc.)
   event.respondWith(fetch(req).catch(() => caches.match(req)));
 });
+
