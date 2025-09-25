@@ -2,110 +2,211 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>HIZAYA</title>
-  <meta name="theme-color" content="#0ea5e9"/>
-
-  <!-- PWA -->
-  <link rel="manifest" href="manifest.json">
-  <link rel="icon" href="icons/icon-192.png" sizes="192x192">
-  <link rel="apple-touch-icon" href="icons/icon-192.png"/>
-
-  <!-- Tailwind pour le proto -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Supabase : variables de projet (REMPLACE-LES) -->
-  <script>
-    window.__SUPABASE_URL__  = "https://ctjljqmxjnfykskfgral.supabase.co"; // ← change-moi !
-    window.__SUPABASE_ANON__ = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0amxqcW14am5meWtza2ZncmFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NzQzMDMsImV4cCI6MjA3MjA1MDMwM30.GoLM8CSHRh2KWOmrMLk2-JkFMz2hwAqyHaHxd8T51M4";                           // ← change-moi !
-  </script>
-
-  <!-- Auth (doit précéder app.js) -->
-  <script type="module" src="supabase-auth.js?v=7"></script>
-
-  <!-- App principale -->
-  <script defer src="app.js?v=7"></script>
-
-  <!-- Styles utilitaires -->
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HIZAYA • Auth Test</title>
+  <meta name="theme-color" content="#0ea5e9" />
   <style>
-    .mono { font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace }
+    :root{--bg:#0b1220;--fg:#e6e9f0;--muted:#9aa3b2;--card:#121a2b;--accent:#3aa0ff}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px system-ui,Segoe UI,Roboto,Arial}
+    header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #1c2742}
+    .btn{padding:8px 12px;border:1px solid #2a3a60;background:#14203a;color:var(--fg);border-radius:10px;cursor:pointer}
+    .btn.primary{background:var(--accent);color:#001b2e;border:none}
+    main{max-width:760px;margin:24px auto;padding:0 16px}
+    .card{background:var(--card);border:1px solid #1c2742;border-radius:16px;padding:16px;margin-bottom:16px}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+    input,select{background:#0f1627;border:1px solid #273456;color:var(--fg);padding:10px;border-radius:10px}
+    .muted{color:var(--muted)}
+    .hidden{display:none}
+    .log{font-family:ui-monospace,Menlo,monospace;font-size:13px;white-space:pre-wrap}
+    .pill{padding:2px 8px;border-radius:999px;background:#1f2b47;border:1px solid #2f406a}
   </style>
-
-  <!-- état de l'app pour le service‑worker -->
-  <meta name="app:status" content="init">
 </head>
-<body class="bg-gradient-to-b from-white to-slate-50 min-h-screen">
-  <!-- Barre de titre -->
-  <header class="sticky top-0 bg-white/80 backdrop-blur border-b border-slate-200 z-10">
-    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-2xl bg-slate-900 text-white grid place-items-center font-bold">H</div>
-        <span class="font-semibold tracking-[-0.01em] text-slate-900">HIZAYA</span>
-      </div>
-      <div id="who" class="text-sm text-slate-600">Hors ligne</div>
+<body>
+  <header>
+    <strong>HIZAYA • Auth Test</strong>
+    <div id="auth-area">
+      <button class="btn" id="btn-login-google">Connexion Google</button>
+      <button class="btn hidden" id="btn-logout">Se déconnecter</button>
     </div>
   </header>
 
-  <!-- ——————————— SECTION LOGIN ——————————— -->
-  <div id="auth">
-    <main id="page-login" class="max-w-md mx-auto px-4 pt-10">
-      <div class="bg-white border border-slate-200 rounded-3xl shadow-sm p-6">
-        <h1 class="text-xl font-semibold text-slate-900 mb-2">Connexion</h1>
-        <p class="text-slate-600 text-sm mb-4">Connecte‑toi avec Google pour accéder à ton matériel.</p>
-        <button id="btn-login"
-          class="w-full px-4 py-2 rounded-2xl bg-slate-900 text-white hover:bg-black transition">
-          Se connecter avec Google
-        </button>
+  <main>
+    <section class="card" id="whoami" aria-live="polite">Non connecté.</section>
+
+    <section class="card hidden" id="devices">
+      <h3>Mes MASTERs</h3>
+      <div class="row">
+        <input id="new-device-id" placeholder="MASTER ID (ex: MASTER_001)" />
+        <input id="new-device-key" placeholder="Clé secrète (garde-la pour l'ESP32)" />
+        <input id="new-device-name" placeholder="Nom (optionnel)" />
+        <button class="btn primary" id="btn-add-device">+ Ajouter</button>
       </div>
-    </main>
-  </div>
+      <div id="device-list" style="margin-top:12px"></div>
+    </section>
 
-  <!-- ——————————— SECTION AUTHED ——————————— -->
-  <!-- visible seulement quand la session Supabase est présente -->
-  <div id="authed" class="hidden">
-    <!-- L’UI détaillée est injectée dynamiquement par app.js (ensureUI) -->
-    <!-- On conserve néanmoins une page‑main basique pour compat avec l’ancienne version -->
-    <main id="page-main" class="max-w-5xl mx-auto px-4 py-6 hidden">
-      <div class="flex items-end justify-between mb-4">
-        <div>
-          <h2 class="text-2xl font-semibold text-slate-900">Bienvenue 👋</h2>
-          <p class="text-slate-600 text-sm">État en direct via Supabase Realtime (sans MQTT).</p>
-        </div>
-        <div class="flex gap-2">
-          <button id="btnPairMaster" class="px-3 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200">Lier un Master</button>
-          <button id="btn-logout" class="px-3 py-2 rounded-2xl bg-red-600 text-white hover:bg-red-700">Déconnexion</button>
-        </div>
+    <section class="card hidden" id="commands">
+      <h3>Envoyer un ordre</h3>
+      <div class="row">
+        <select id="cmd-master"></select>
+        <input id="cmd-peer" placeholder="Peer MAC (optionnel)" />
+        <select id="cmd-action">
+          <option>POWER_ON</option>
+          <option>POWER_OFF</option>
+          <option>PULSE</option>
+          <option>RESET</option>
+        </select>
+        <input id="cmd-payload" placeholder='Payload JSON (ex: {"ms":500})' />
+        <button class="btn primary" id="btn-send-cmd">Envoyer</button>
       </div>
+      <p class="muted">Les ordres expirent après 10 minutes par défaut.</p>
+    </section>
 
-      <div id="masters" class="grid gap-4"></div>
+    <section class="card">
+      <h3>Journal</h3>
+      <div id="log" class="log">(prêt)</div>
+    </section>
+  </main>
 
-      <div class="mt-6">
-        <h3 class="text-sm font-medium text-slate-700 mb-1">Journal</h3>
-        <pre id="log" class="bg-black text-slate-200 rounded-xl p-3 text-xs h-40 overflow-auto"></pre>
-      </div>
-    </main>
-  </div>
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-  <!-- ——————————— MODAL CLAIM ——————————— -->
-  <div id="modalClaim" class="fixed inset-0 hidden items-center justify-center z-50">
-    <div class="absolute inset-0 bg-black/40" onclick="document.getElementById('modalClaim').classList.add('hidden')"></div>
-    <div class="relative bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-md p-5">
-      <h4 class="text-lg font-semibold text-slate-900 mb-2">Appairer un Master</h4>
-      <p class="text-sm text-slate-600">Entre ce code sur le Master (WiFiManager) :</p>
-      <div class="text-3xl font-bold tracking-widest mono my-3" id="claimCode">000000</div>
-      <div class="text-xs text-slate-500 mb-4">Expire dans <span id="claimTimer">…</span></div>
-      <div class="flex justify-end gap-2">
-        <button id="btnClaimClose" class="px-3 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200">Fermer</button>
-        <button id="btnClaimDone" class="px-3 py-2 rounded-2xl bg-blue-600 text-white hover:bg-blue-700">J’ai entré le code</button>
-      </div>
-    </div>
-  </div>
+    // ======= CONFIG À REMPLACER =======
+    const SUPABASE_URL = 'https://zeknluovgbsmtgupwkvo.supabase.co'       // Settings → API → Project URL
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4'                       // Settings → API → anon public key
+    const REDIRECT_URL = 'https://hizayatech.github.io/hizaya-pwa/' // ton GitHub Pages, avec le / final
+    // ==================================
 
-  <!-- ——————————— SW REGISTER ——————————— -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+    const $ = (q) => document.querySelector(q)
+    const log = (m) => { const el = $('#log'); el.textContent += `\n${new Date().toLocaleTimeString()}  ${m}`; el.scrollTop = el.scrollHeight }
+
+    const ui = {
+      who: $('#whoami'),
+      devicesCard: $('#devices'),
+      commandsCard: $('#commands'),
+      btnLoginGoogle: $('#btn-login-google'),
+      btnLogout: $('#btn-logout'),
+      btnAddDevice: $('#btn-add-device'),
+      deviceList: $('#device-list'),
+      cmdMaster: $('#cmd-master'),
+      cmdPeer: $('#cmd-peer'),
+      cmdAction: $('#cmd-action'),
+      cmdPayload: $('#cmd-payload'),
+      btnSendCmd: $('#btn-send-cmd')
     }
+
+    let currentUser = null
+
+    async function refreshSession() {
+      const { data: { user } } = await supabase.auth.getUser()
+      currentUser = user
+      if (user) {
+        ui.who.innerHTML = `<div>Connecté en tant que <strong>${user.email}</strong><div class="muted">id: ${user.id}</div></div>`
+        ui.devicesCard.classList.remove('hidden')
+        ui.commandsCard.classList.remove('hidden')
+        ui.btnLoginGoogle.classList.add('hidden')
+        ui.btnLogout.classList.remove('hidden')
+        await loadDevices()
+      } else {
+        ui.who.textContent = 'Non connecté.'
+        ui.devicesCard.classList.add('hidden')
+        ui.commandsCard.classList.add('hidden')
+        ui.btnLoginGoogle.classList.remove('hidden')
+        ui.btnLogout.classList.add('hidden')
+      }
+    }
+
+    ui.btnLoginGoogle?.addEventListener('click', async () => {
+      log('Redirection Google OAuth…')
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: REDIRECT_URL }
+      })
+      if (error) log(`[auth] ${error.message}`)
+    })
+
+    ui.btnLogout?.addEventListener('click', async () => {
+      await supabase.auth.signOut(); log('Déconnecté.'); refreshSession()
+    })
+
+    async function loadDevices() {
+      const { data, error } = await supabase
+        .from('devices')
+        .select('id,name,online,last_seen,created_at')
+        .order('created_at', { ascending: false })
+      if (error) { log(`[devices] ${error.message}`); return }
+
+      ui.deviceList.innerHTML = ''
+      ui.cmdMaster.innerHTML = ''
+
+      data.forEach(d => {
+        const row = document.createElement('div')
+        row.className = 'card'
+        row.innerHTML = `
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+            <div>
+              <div><strong>${d.name || d.id}</strong> <span class="pill">${d.id}</span></div>
+              <div class="muted">${d.online ? '🟢 en ligne' : '⚪ hors ligne'} · last_seen: ${d.last_seen || '—'}</div>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button class="btn" data-action="peek" data-id="${d.id}">Voir peers</button>
+              <button class="btn" data-action="delete" data-id="${d.id}">Suppr</button>
+            </div>
+          </div>`
+        ui.deviceList.appendChild(row)
+
+        const opt = document.createElement('option')
+        opt.value = d.id; opt.textContent = d.name || d.id
+        ui.cmdMaster.appendChild(opt)
+      })
+    }
+
+    ui.btnAddDevice?.addEventListener('click', async () => {
+      const id = $('#new-device-id').value.trim()
+      const key = $('#new-device-key').value.trim()
+      const name = $('#new-device-name').value.trim()
+      if (!id || !key) { log('id + clé requis.'); return }
+
+      const { data, error } = await supabase.rpc('new_device', { _id: id, _key: key, _name: name || null })
+      if (error) { log(`[new_device] ${error.message}`); return }
+      log(`MASTER ajouté: ${data.id}`)
+      $('#new-device-id').value = ''
+      $('#new-device-key').value = ''
+      $('#new-device-name').value = ''
+      await loadDevices()
+    })
+
+    document.querySelector('#device-list')?.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button'); if (!btn) return
+      const id = btn.dataset.id
+      if (btn.dataset.action === 'delete') {
+        if (!confirm(`Supprimer ${id} ?`)) return
+        const { error } = await supabase.from('devices').delete().eq('id', id)
+        if (error) log(`[devices delete] ${error.message}`); else { log(`Supprimé ${id}`); loadDevices() }
+      }
+      if (btn.dataset.action === 'peek') {
+        const { data, error } = await supabase.from('peers').select('*').eq('master_id', id).order('name')
+        if (error) { log(`[peers] ${error.message}`); return }
+        log(`Peers de ${id}: ` + (data.length ? data.map(p=>`${p.name}(${p.mac})`).join(', ') : 'aucun'))
+      }
+    })
+
+    ui.btnSendCmd?.addEventListener('click', async () => {
+      const master_id = $('#cmd-master').value
+      const peer_mac  = $('#cmd-peer').value.trim() || null
+      const action    = $('#cmd-action').value
+      let payload     = {}
+      const raw       = $('#cmd-payload').value.trim()
+      if (raw) { try { payload = JSON.parse(raw) } catch { log('Payload JSON invalide.'); return } }
+
+      const { error } = await supabase.from('commands').insert({ master_id, peer_mac, action, payload, created_by: currentUser.id })
+      if (error) { log(`[commands insert] ${error.message}`); return }
+      log(`Ordre ${action} créé pour ${master_id}${peer_mac? ' → '+peer_mac:''}`)
+    })
+
+    supabase.auth.onAuthStateChange((_e,_s)=>{ refreshSession() })
+    refreshSession().catch(console.error)
   </script>
 </body>
 </html>
