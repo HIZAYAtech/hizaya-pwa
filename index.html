@@ -19,6 +19,7 @@
     .hidden{display:none}
     .log{font-family:ui-monospace,Menlo,monospace;font-size:13px;white-space:pre-wrap}
     .pill{padding:2px 8px;border-radius:999px;background:#1f2b47;border:1px solid #2f406a}
+    select#cmd-master { min-width: 220px; }
   </style>
 </head>
 <body>
@@ -131,36 +132,55 @@
     })
 
     async function loadDevices() {
-      const { data, error } = await supabase
-        .from('devices')
-        .select('id,name,online,last_seen,created_at')
-        .order('created_at', { ascending: false })
-      if (error) { log(`[devices] ${error.message}`); return }
+  const { data, error } = await supabase
+    .from('devices')
+    .select('id,name,online,last_seen,created_at')
+    .order('created_at', { ascending: false });
 
-      ui.deviceList.innerHTML = ''
-      ui.cmdMaster.innerHTML = ''
+  if (error) { log(`[devices] ${error.message}`); return }
 
-      data.forEach(d => {
-        const row = document.createElement('div')
-        row.className = 'card'
-        row.innerHTML = `
-          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
-            <div>
-              <div><strong>${d.name || d.id}</strong> <span class="pill">${d.id}</span></div>
-              <div class="muted">${d.online ? '🟢 en ligne' : '⚪ hors ligne'} · last_seen: ${d.last_seen || '—'}</div>
-            </div>
-            <div style="display:flex;gap:6px;">
-              <button class="btn" data-action="peek" data-id="${d.id}">Voir peers</button>
-              <button class="btn" data-action="delete" data-id="${d.id}">Suppr</button>
-            </div>
-          </div>`
-        ui.deviceList.appendChild(row)
+  // Reset UI
+  ui.deviceList.innerHTML = ''
+  ui.cmdMaster.innerHTML = ''
 
-        const opt = document.createElement('option')
-        opt.value = d.id; opt.textContent = d.name || d.id
-        ui.cmdMaster.appendChild(opt)
-      })
-    }
+  // Placeholder dans le select
+  const ph = document.createElement('option')
+  ph.value = ''
+  ph.textContent = '— Choisir un MASTER —'
+  ph.disabled = true
+  ph.selected = true
+  ui.cmdMaster.appendChild(ph)
+
+  if (!data || data.length === 0) {
+    log('Aucun MASTER trouvé. Ajoute-en un dans la section Mes MASTERs.')
+    return
+  }
+
+  // Remplir la liste + le select
+  data.forEach(d => {
+    // carte liste
+    const row = document.createElement('div')
+    row.className = 'card'
+    row.innerHTML = `
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+        <div>
+          <div><strong>${d.name || d.id}</strong> <span class="pill">${d.id}</span></div>
+          <div class="muted">${d.online ? '🟢 en ligne' : '⚪ hors ligne'} · last_seen: ${d.last_seen || '—'}</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn" data-action="peek" data-id="${d.id}">Voir peers</button>
+          <button class="btn" data-action="delete" data-id="${d.id}">Suppr</button>
+        </div>
+      </div>`
+    ui.deviceList.appendChild(row)
+
+    // option select
+    const opt = document.createElement('option')
+    opt.value = d.id
+    opt.textContent = d.name || d.id
+    ui.cmdMaster.appendChild(opt)
+  })
+}
 
     ui.btnAddDevice?.addEventListener('click', async () => {
       const id = $('#new-device-id').value.trim()
@@ -210,3 +230,4 @@
   </script>
 </body>
 </html>
+
