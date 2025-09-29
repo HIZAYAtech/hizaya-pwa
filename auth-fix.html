@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HIZAYA • Auth Fix</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 24px }
+    button { padding: 10px 14px; border-radius: 10px; cursor: pointer }
+    #log { white-space: pre-wrap; background: #111; color: #eee; padding: 12px; border-radius: 8px; margin-top: 12px }
+  </style>
+</head>
+<body>
+  <h1>Test connexion Google</h1>
+  <button id="login">Connexion Google</button>
+  <button id="logout" style="display:none">Se déconnecter</button>
+  <div id="state">(init)</div>
+  <div id="log">(prêt)</div>
+
+  <!-- ✅ Version sans module, via CDN global -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    // ⚠️ REMPLACE ICI
+    const SUPABASE_URL = 'https://zeknluovgbsmtgupwkvo.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4';
+    const REDIRECT_URL = 'https://hizayatech.github.io/hizaya-pwa/';
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const $ = (id) => document.getElementById(id);
+    const log = (m) => { const el=$('log'); el.textContent += '\n' + m; el.scrollTop=el.scrollHeight; };
+
+    async function refresh() {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error) log('getUser error: ' + error.message);
+      $('state').textContent = user ? `Connecté: ${user.email}` : 'Non connecté';
+      $('login').style.display  = user ? 'none' : '';
+      $('logout').style.display = user ? '' : 'none';
+    }
+
+    // ✅ Click handler très visible
+    $('login').addEventListener('click', async () => {
+      log('clic -> OAuth…');
+      const { data, error, url } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: REDIRECT_URL }
+      });
+      if (error) { log('OAuth error: ' + error.message); return; }
+      // Certaines configs ne redirigent pas automatiquement : on force la redirection
+      if (url) { log('redirect: ' + url); window.location.href = url; }
+    });
+
+    $('logout').addEventListener('click', async () => {
+      await supabase.auth.signOut(); log('Déconnecté.'); refresh();
+    });
+
+    refresh();
+  </script>
+</body>
+</html>
