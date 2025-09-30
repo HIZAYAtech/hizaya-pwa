@@ -81,16 +81,14 @@
     const SUPABASE_URL = 'https://zeknluovgbsmtgupwkvo.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4';
     const REDIRECT_URL = 'https://hizayatech.github.io/hizaya-pwa/';
-    // =======================
+    // ======= LIVE STATUS =======
+    const ONLINE_THRESHOLD_MS = 8000; // 8s: au-delà, affichage "hors ligne"
 
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const $ = (q) => document.querySelector(q);
     const log = (m) => { const el = $('#log'); el.textContent += '\n' + new Date().toLocaleTimeString() + '  ' + m; el.scrollTop = el.scrollHeight; };
 
-    // ======= LIVE STATUS CONFIG =======
-    const ONLINE_THRESHOLD_MS = 8000; // 8s: si last_seen < 8s => en ligne
-
-    const state = { devices: [] }; // cache local
+    const state = { devices: [] }; // cache local: { id, name, mac, last_seen, released_at, _lastSeenDate: Date|null }
 
     function parseIso(s){ return s ? new Date(s) : null }
     function isOnlineFrom(d){ return d ? (Date.now() - d.getTime()) < ONLINE_THRESHOLD_MS : false }
@@ -250,6 +248,36 @@
       });
     }, 1000);
 
+    // Fail-safe: refresh minimal des last_seen / released_at toutes les 3s
+    async function softRefreshLastSeen() {
+      if (!currentUser || !state.devices.length) return;
+      const { data, error } = await supabase
+        .from('devices')
+        .select('id,last_seen,released_at')
+        .order('created_at', { ascending: false });
+      if (error) { log('[soft refresh] ' + error.message); return; }
+
+      const map = new Map((data||[]).map(d => [d.id, d]));
+      let changed = false;
+      state.devices = state.devices.map(d => {
+        const n = map.get(d.id);
+        if (!n) return d;
+        const newDate = n.last_seen ? new Date(n.last_seen) : null;
+        const sameDate = (!!d._lastSeenDate && !!newDate && d._lastSeenDate.getTime() === newDate.getTime());
+        const sameRel  = (d.released_at || null) === (n.released_at || null);
+        if (!sameDate || !sameRel) {
+          changed = true;
+          return { ...d, last_seen: n.last_seen, released_at: n.released_at, _lastSeenDate: newDate };
+        }
+        return d;
+      });
+      if (changed) {
+        // le tick visuel mettra à jour les libellés; on peut forcer un repaint si besoin:
+        // renderDevices();
+      }
+    }
+    setInterval(() => { softRefreshLastSeen().catch(()=>{}) }, 3000);
+
     // Realtime: maintient le cache sans refetch complet
     function subscribeDevices() {
       if (devicesChannel) return;
@@ -311,7 +339,7 @@
 
           const { error: delErr } = await supabase.from('devices').delete().eq('id', id);
           if (delErr) { log(`[devices delete] ${delErr.message}`); }
-          else { log(`Supprimé ${id}`); /* le realtime fera le rendu */ }
+          else { log(`Supprimé ${id}`); /* le realtime rafraîchira l'UI */ }
         } finally {
           if (document.body.contains(btn)) { btn.disabled = false; btn.textContent = original; }
         }
