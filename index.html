@@ -87,6 +87,22 @@
     const $ = (q) => document.querySelector(q);
     const log = (m) => { const el = $('#log'); el.textContent += '\n' + new Date().toLocaleTimeString() + '  ' + m; el.scrollTop = el.scrollHeight; };
 
+    // ======= LIVE STATUS CONFIG =======
+    const ONLINE_THRESHOLD_MS = 8000; // 8s: si last_seen < 8s => en ligne
+
+    const state = { devices: [] }; // cache local
+
+    function parseIso(s){ return s ? new Date(s) : null }
+    function isOnlineFrom(d){ return d ? (Date.now() - d.getTime()) < ONLINE_THRESHOLD_MS : false }
+    function fmtAgo(d){
+      if(!d) return '—'
+      const ms = Date.now() - d.getTime()
+      if (ms < 2000) return 'à l’instant'
+      const s = Math.floor(ms/1000); if (s < 60) return `${s}s`
+      const m = Math.floor(s/60);    if (m < 60) return `${m}m`
+      const h = Math.floor(m/60);    return `${h}h`
+    }
+
     const ui = {
       who: $('#whoami'),
       pairingCard: $('#pairing'),
@@ -159,45 +175,48 @@
       log(`Code d'appairage généré: ${code} (expire ${exp})`);
     });
 
-    // Realtime devices
-    function subscribeDevices() {
-      if (devicesChannel) return;
-      devicesChannel = supabase
-        .channel('devices-live')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, async (_payload) => {
-          await loadDevices();
-        })
-        .subscribe();
-    }
-
-    // Charger devices
+    // Charger devices -> maintient le cache + rendu
     async function loadDevices() {
       const { data, error } = await supabase
         .from('devices')
-        .select('id,name,mac,online,last_seen,released_at,created_at')
+        .select('id,name,mac,last_seen,released_at,created_at')
         .order('created_at', { ascending: false });
       if (error) { log('[devices] ' + error.message); return; }
 
-      ui.deviceList.innerHTML = '';
-      ui.cmdMaster.innerHTML = '';
+      state.devices = (data || []).map(d => ({ ...d, _lastSeenDate: parseIso(d.last_seen) }));
+      renderDevices();
+    }
 
+    // Rendu de la liste + du select de commande
+    function renderDevices() {
+      // Select
+      ui.cmdMaster.innerHTML = '';
       const ph = document.createElement('option');
       ph.value=''; ph.textContent='— Choisir un MASTER —'; ph.disabled=true; ph.selected=true;
       ui.cmdMaster.appendChild(ph);
 
-      if (!data || data.length === 0) { log('Aucun MASTER trouvé.'); return; }
+      // Liste
+      ui.deviceList.innerHTML = '';
+      if (!state.devices.length) { log('Aucun MASTER trouvé.'); return; }
 
-      data.forEach(d => {
-        const status = d.released_at ? `🟡 relâché le ${d.released_at ? new Date(d.released_at).toLocaleString() : ''}` :
-                       (d.online ? '🟢 en ligne' : '⚪ hors ligne');
-
+      state.devices.forEach(d => {
         const row = document.createElement('div');
         row.className = 'card';
+        row.dataset.id = d.id;
+
+        const onlineLive = isOnlineFrom(d._lastSeenDate);
+        const statusTxt = d.released_at
+          ? `🟡 relâché le ${d.released_at ? new Date(d.released_at).toLocaleString() : ''}`
+          : (onlineLive ? '🟢 en ligne' : '⚪ hors ligne');
+
         row.innerHTML = `
           <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
             <div>
               <div><strong>${d.name || d.id}</strong> <span class="pill">${d.id}</span> ${d.released_at ? '<span class="pill warn">relâché</span>':''}</div>
-              <div class="muted">${status} · MAC: ${d.mac || '—'} · last_seen: ${d.last_seen || '—'}</div>
+              <div class="muted">
+                <span data-online>${statusTxt}</span>
+                · MAC: ${d.mac || '—'} · last_seen: <span data-ago>${fmtAgo(d._lastSeenDate)}</span>
+              </div>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
               <button class="btn" data-action="rename" data-id="${d.id}" data-name="${d.name||''}">Renommer</button>
@@ -215,7 +234,54 @@
       });
     }
 
-    // Actions liste devices (Rename/Peek/Delete)
+    // Tick visuel: met à jour "en ligne / hors ligne" + "ago" chaque seconde
+    setInterval(() => {
+      state.devices.forEach(d => {
+        const card = ui.deviceList.querySelector(`.card[data-id="${d.id}"]`);
+        if (!card) return;
+        const onlineEl = card.querySelector('[data-online]');
+        const agoEl = card.querySelector('[data-ago]');
+        if (!onlineEl || !agoEl) return;
+        const onlineLive = isOnlineFrom(d._lastSeenDate);
+        onlineEl.textContent = d.released_at
+          ? `🟡 relâché le ${d.released_at ? new Date(d.released_at).toLocaleString() : ''}`
+          : (onlineLive ? '🟢 en ligne' : '⚪ hors ligne');
+        agoEl.textContent = fmtAgo(d._lastSeenDate);
+      });
+    }, 1000);
+
+    // Realtime: maintient le cache sans refetch complet
+    function subscribeDevices() {
+      if (devicesChannel) return;
+      devicesChannel = supabase
+        .channel('devices-live')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, async (payload) => {
+          const ev = payload.eventType;
+          const row = payload.new || payload.old;
+          if (!row) return;
+
+          if (ev === 'INSERT') {
+            state.devices.unshift({ ...payload.new, _lastSeenDate: parseIso(payload.new.last_seen) });
+            renderDevices();
+            log(`Nouveau MASTER: ${payload.new.id}`);
+          }
+          if (ev === 'UPDATE') {
+            const idx = state.devices.findIndex(x => x.id === payload.new.id);
+            if (idx >= 0) {
+              state.devices[idx] = { ...payload.new, _lastSeenDate: parseIso(payload.new.last_seen) };
+              renderDevices();
+            }
+          }
+          if (ev === 'DELETE') {
+            state.devices = state.devices.filter(x => x.id !== payload.old.id);
+            renderDevices();
+            log(`Supprimé: ${payload.old.id}`);
+          }
+        })
+        .subscribe();
+    }
+
+    // Actions liste devices
     document.querySelector('#device-list')?.addEventListener('click', async (e) => {
       const btn = e.target.closest('button'); if (!btn) return;
       const id = btn.dataset.id;
@@ -240,19 +306,14 @@
         const original = btn.textContent;
         btn.textContent = 'Suppression...';
         try {
-          // 1) Relâcher (si déjà relâché, l’RPC renverra juste false → on continue)
           const { error: relErr } = await supabase.rpc('release_device', { _device_id: id });
           if (relErr) log(`[release before delete] ${relErr.message}`); else log(`Relâché: ${id}`);
 
-          // 2) Supprimer
           const { error: delErr } = await supabase.from('devices').delete().eq('id', id);
           if (delErr) { log(`[devices delete] ${delErr.message}`); }
-          else { log(`Supprimé ${id}`); await loadDevices(); }
+          else { log(`Supprimé ${id}`); /* le realtime fera le rendu */ }
         } finally {
-          if (document.body.contains(btn)) {
-            btn.disabled = false;
-            btn.textContent = original;
-          }
+          if (document.body.contains(btn)) { btn.disabled = false; btn.textContent = original; }
         }
       }
     });
