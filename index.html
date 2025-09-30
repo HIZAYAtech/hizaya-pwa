@@ -2,10 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <meta
-    name="viewport"
-    content="width=device-width,initial-scale=1,viewport-fit=cover"
-  />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Hizaya — Masters</title>
   <style>
     :root { --bg:#0b0d10; --card:#141820; --muted:#7a88a1; --text:#e9eef7; --ok:#1db954; --bad:#ff4d4f; --prim:#4a90e2; }
@@ -46,16 +43,16 @@
     <header>
       <div class="row">
         <div class="brand">Hizaya — Masters</div>
-        <span id="me" class="pill"></span>
+        <span id="me" class="pill">Non connecté</span>
       </div>
       <div class="row">
         <button id="btnLogin" class="btn prim">Connexion Google</button>
-        <button id="btnLogout" class="btn">Déconnexion</button>
+        <button id="btnLogout" class="btn" style="display:none">Déconnexion</button>
       </div>
     </header>
 
     <div class="row" style="margin-bottom:10px">
-      <button id="btnAdd" class="btn prim">Ajouter un master</button>
+      <button id="btnAdd" class="btn prim" disabled>Ajouter un master</button>
       <span id="status" class="pill">Préparation…</span>
       <span class="right dim mono" id="ts"></span>
     </div>
@@ -72,7 +69,7 @@
       <button id="dlgClose" class="btn right">Fermer</button>
     </div>
     <div class="dlg-body">
-      <div class="hint">Sur ton MASTER: ouvre le portail WiFi, connecte-toi au Wi-Fi de la maison, puis saisis ce code :</div>
+      <div class="hint">Sur le MASTER : ouvre le portail WiFi, connecte-toi au Wi-Fi de la maison, puis saisis ce code :</div>
       <div class="code" id="dlgCode">••••••</div>
       <div class="hr"></div>
       <div>Expire dans <span id="dlgLeft" class="mono">—</span></div>
@@ -153,12 +150,13 @@
     }
 
     btnLogin.onclick = async () => {
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo: location.href, queryParams: { prompt: "select_account" } }
       });
       if (error) alert("Erreur OAuth: " + error.message);
     };
+
     btnLogout.onclick = async () => {
       await supabase.auth.signOut();
       list.innerHTML = "";
@@ -261,10 +259,7 @@
         .channel("devices_changes")
         .on("postgres_changes",
           { event: "*", schema: "public", table: "devices" },
-          (payload) => {
-            // Un changement -> recharger rapidement
-            loadDevices();
-          }
+          () => loadDevices()
         )
         .subscribe((status) => console.log("realtime:", status));
     }
@@ -280,47 +275,8 @@
       setupPolling();
     }
 
-    // ---------- PAIR CODE ----------
-    function random6() { return String(Math.floor(100000 + Math.random()*900000)); }
-
-async function createPairCode(){
-  const { data, error } = await supabase.rpc("create_pair_code", { _minutes: 10 });
-  if (error) throw error;
-  // data est un array car RETURNS TABLE — prendre la première ligne
-  const row = Array.isArray(data) ? data[0] : data;
-  return { code: row.code, expires_at: row.expires_at };
-}
-      // Essayons un RPC standard si present
-      let ok = false, respCode = code, respExp = expires_at;
-
-      try {
-        const { data, error } = await supabase.rpc("create_pair_code", {});
-        if (!error && data && data.code) {
-          respCode = data.code;
-          // data.expires_at si renvoyée
-          ok = true;
-        }
-      } catch(e){ /* ignore */ }
-
-      if (!ok) {
-        // Fallback: insert direct
-const { error: e2 } = await supabase
-  .from("pair_codes")
-  .insert([{
-    code,
-    expires_at,
-    owner_uid: session.user.id   // 👈 IMPORTANT
-  }]);
-if (e2) {
-  alert("Impossible de créer le code: " + (e2.message || JSON.stringify(e2)));
-  throw e2;
-}
-      }
-      return { code: respCode, expires_at: respExp };
-    }
-
-    function openPairDialog(code, expiresISO){
-      dlgCode.textContent = code;
+    // ---------- PAIR CODE (RPC only) ----------
+    function startCountdown(expiresISO){
       const end = new Date(expiresISO).getTime();
       function tick(){
         const left = Math.max(0, Math.floor((end - Date.now())/1000));
@@ -331,6 +287,19 @@ if (e2) {
       if (pairCountdownTimer) clearInterval(pairCountdownTimer);
       tick();
       pairCountdownTimer = setInterval(tick, 1000);
+    }
+
+    async function createPairCode(){
+      const { data, error } = await supabase.rpc("create_pair_code", { ttl_minutes: 10 });
+      if (error) { throw error; }
+      // data peut être un array si RETURNS TABLE
+      const row = Array.isArray(data) ? data[0] : data;
+      return { code: row.code, expires_at: row.expires_at };
+    }
+
+    function openPairDialog(code, expiresISO){
+      dlgCode.textContent = code;
+      startCountdown(expiresISO);
       dlg.showModal();
     }
 
@@ -339,7 +308,10 @@ if (e2) {
       try {
         const { code, expires_at } = await createPairCode();
         openPairDialog(code, expires_at);
-      } catch(e){}
+      } catch(e){
+        console.error(e);
+        alert("Impossible de créer le code: " + (e.message || JSON.stringify(e)));
+      }
     };
     dlgClose.onclick = () => dlg.close();
 
@@ -351,4 +323,3 @@ if (e2) {
   </script>
 </body>
 </html>
-
