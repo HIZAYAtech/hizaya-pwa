@@ -41,17 +41,11 @@
         <button class="btn primary" id="btn-gen-code">Générer un code (10 min)</button>
         <div id="pairing-info" class="muted"></div>
       </div>
-      <p class="muted">Donne ce code au MASTER pendant la config Wi-Fi. Il s’ajoutera automatiquement à ton compte.</p>
+      <p class="muted">Sur l’ESP32, entre ce code dans le portail Wi-Fi. Le MASTER s’ajoutera automatiquement à ton compte.</p>
     </section>
 
     <section class="card hidden" id="devices">
       <h3>Mes MASTERs</h3>
-      <div class="row">
-        <input id="new-device-id" placeholder="MASTER ID (ex: MASTER_001)" />
-        <input id="new-device-key" placeholder="Clé secrète (garde-la pour l'ESP32)" />
-        <input id="new-device-name" placeholder="Nom (optionnel)" />
-        <button class="btn primary" id="btn-add-device">+ Ajouter</button>
-      </div>
       <div id="device-list" style="margin-top:12px"></div>
     </section>
 
@@ -78,14 +72,14 @@
     </section>
   </main>
 
-  <!-- Supabase en global (pas de type="module") -->
+  <!-- Supabase (global, pas de module) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    // ======= CONFIG (prérempli) =======
+    // ======= CONFIG =======
     const SUPABASE_URL = 'https://zeknluovgbsmtgupwkvo.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4';
     const REDIRECT_URL = 'https://hizayatech.github.io/hizaya-pwa/';
-    // ===================================
+    // =======================
 
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const $ = (q) => document.querySelector(q);
@@ -100,7 +94,6 @@
       commandsCard: $('#commands'),
       btnLoginGoogle: $('#btn-login-google'),
       btnLogout: $('#btn-logout'),
-      btnAddDevice: $('#btn-add-device'),
       deviceList: $('#device-list'),
       cmdMaster: $('#cmd-master'),
       cmdPeer: $('#cmd-peer'),
@@ -110,11 +103,13 @@
     };
 
     let currentUser = null;
+    let devicesChannel = null;
 
     async function refreshSession() {
       const { data: { user }, error } = await supabase.auth.getUser();
       if (error) log('[auth] ' + error.message);
       currentUser = user;
+
       if (user) {
         ui.who.innerHTML = `<div>Connecté en tant que <strong>${user.email}</strong><div class="muted">id: ${user.id}</div></div>`;
         ui.pairingCard.classList.remove('hidden');
@@ -123,6 +118,7 @@
         ui.btnLoginGoogle.classList.add('hidden');
         ui.btnLogout.classList.remove('hidden');
         await loadDevices();
+        subscribeDevices();
       } else {
         ui.who.textContent = 'Non connecté.';
         ui.pairingCard.classList.add('hidden');
@@ -130,25 +126,22 @@
         ui.commandsCard.classList.add('hidden');
         ui.btnLoginGoogle.classList.remove('hidden');
         ui.btnLogout.classList.add('hidden');
+        if (devicesChannel) { supabase.removeChannel(devicesChannel); devicesChannel = null; }
       }
     }
 
-    // === Auth (fix: redirection forcée) ===
+    // Auth (redirection forcée)
     ui.btnLoginGoogle?.addEventListener('click', async () => {
       log('clic -> OAuth…');
-      const { data, error, url } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: REDIRECT_URL }
-      });
+      const { error, url } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: REDIRECT_URL } });
       if (error) { log('OAuth error: ' + error.message); return; }
       if (url) { log('redirect: ' + url); window.location.href = url; }
     });
-
     ui.btnLogout?.addEventListener('click', async () => {
       await supabase.auth.signOut(); log('Déconnecté.'); refreshSession();
     });
 
-    // === Pairing code (RPC create_pair_code) ===
+    // Générer un code (UI)
     ui.btnGenCode?.addEventListener('click', async () => {
       const { data, error } = await supabase.rpc('create_pair_code', { ttl_minutes: 10 });
       if (error) { log('[pairing] ' + error.message); ui.pairingInfo.textContent = 'Erreur lors de la génération du code.'; return; }
@@ -164,7 +157,22 @@
       log(`Code d'appairage généré: ${code} (expire ${exp})`);
     });
 
-    // === Devices ===
+    // Realtime: suivre les INSERT/UPDATE sur devices
+    function subscribeDevices() {
+      if (devicesChannel) return;
+      devicesChannel = supabase
+        .channel('devices-live')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, async (payload) => {
+          await loadDevices();
+          if (payload.eventType === 'INSERT') {
+            const d = payload.new;
+            log(`Nouveau MASTER appairé: ${d.id} — clique sur "Renommer" pour lui donner un nom.`);
+          }
+        })
+        .subscribe();
+    }
+
+    // Charger devices
     async function loadDevices() {
       const { data, error } = await supabase
         .from('devices')
@@ -191,6 +199,7 @@
               <div class="muted">${d.online ? '🟢 en ligne' : '⚪ hors ligne'} · last_seen: ${d.last_seen || '—'}</div>
             </div>
             <div style="display:flex;gap:6px;">
+              <button class="btn" data-action="rename" data-id="${d.id}" data-name="${d.name||''}">Renommer</button>
               <button class="btn" data-action="peek" data-id="${d.id}">Voir peers</button>
               <button class="btn" data-action="delete" data-id="${d.id}">Suppr</button>
             </div>
@@ -203,18 +212,7 @@
       });
     }
 
-    ui.btnAddDevice?.addEventListener('click', async () => {
-      const id = $('#new-device-id').value.trim();
-      const key = $('#new-device-key').value.trim();
-      const name = $('#new-device-name').value.trim();
-      if (!id || !key) { log('id + clé requis.'); return; }
-      const { data, error } = await supabase.rpc('new_device', { _id: id, _key: key, _name: name || null });
-      if (error) { log('[new_device] ' + error.message); return; }
-      log(`MASTER ajouté: ${data.id}`);
-      $('#new-device-id').value = ''; $('#new-device-key').value = ''; $('#new-device-name').value = '';
-      await loadDevices();
-    });
-
+    // Actions sur la liste devices
     document.querySelector('#device-list')?.addEventListener('click', async (e) => {
       const btn = e.target.closest('button'); if (!btn) return;
       const id = btn.dataset.id;
@@ -228,9 +226,16 @@
         if (error) { log('[peers] ' + error.message); return; }
         log(`Peers de ${id}: ` + (data.length ? data.map(p=>`${p.name}(${p.mac})`).join(', ') : 'aucun'));
       }
+      if (btn.dataset.action === 'rename') {
+        const current = btn.dataset.name || id;
+        const next = prompt(`Nouveau nom pour ${id}:`, current);
+        if (!next || next === current) return;
+        const { error } = await supabase.from('devices').update({ name: next }).eq('id', id);
+        if (error) log('[devices rename] ' + error.message); else { log(`Renommé ${id} → ${next}`); loadDevices(); }
+      }
     });
 
-    // === Commands ===
+    // Envoi d'ordre
     ui.btnSendCmd?.addEventListener('click', async () => {
       const master_id = ui.cmdMaster.value;
       if (!master_id) { log('Choisis un MASTER.'); return; }
@@ -244,7 +249,7 @@
       log(`Ordre ${action} créé pour ${master_id}${peer_mac? ' → '+peer_mac:''}`);
     });
 
-    // === Démarrage ===
+    // Boot
     supabase.auth.onAuthStateChange((_e,_s)=>{ refreshSession(); });
     refreshSession().catch(console.error);
   </script>
