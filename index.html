@@ -194,7 +194,7 @@
 async function deleteDevice(device_id){
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("Non connecté");
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/delete-device`, {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/release-device`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -205,7 +205,7 @@ async function deleteDevice(device_id){
   });
   if (!res.ok) throw new Error(await res.text());
   const out = await res.json();
-  LOG(`MASTER supprimé: ${device_id} ${out.released ? '(released)' : ''}`);
+  LOG(`MASTER supprimé: ${device_id} (soft)`);
 }
 
   function renderDevices(){
@@ -276,4 +276,5 @@ async function deleteDevice(device_id){
 </script>
 </body>
 </html>
+
 
