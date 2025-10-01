@@ -291,7 +291,7 @@
 
   async function createPairCode(){
     // on récupère la session pour avoir l’access_token de l’utilisateur connecté
-    const { data: { session }, error: sessErr } = await supabase.auth.getSession();
+const live = d.last_seen && (Date.now() - new Date(d.last_seen).getTime()) < 25000;
     if (sessErr) throw sessErr;
     if (!session) throw new Error("Non connecté");
 
@@ -323,4 +323,5 @@
   </script>
 </body>
 </html>
+
 
