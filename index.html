@@ -191,11 +191,22 @@
     LOG(`[commands] ${action} envoyé à ${device_id}`);
   }
 
-  async function deleteDevice(device_id){
-    const { error } = await supabase.from('devices').delete().eq('id', device_id);
-    if (error) throw error;
-    LOG(`MASTER supprimé: ${device_id}`);
-  }
+async function deleteDevice(device_id){
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error("Non connecté");
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/delete-device`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.access_token}`,
+      'apikey': SUPABASE_ANON_KEY
+    },
+    body: JSON.stringify({ device_id })
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const out = await res.json();
+  LOG(`MASTER supprimé: ${device_id} ${out.released ? '(released)' : ''}`);
+}
 
   function renderDevices(){
     devicesEl.innerHTML = "";
@@ -265,3 +276,4 @@
 </script>
 </body>
 </html>
+
