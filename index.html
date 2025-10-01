@@ -2,326 +2,257 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>Hizaya — Masters</title>
+  <title>Remote Power • MASTER</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root { --bg:#0b0d10; --card:#141820; --muted:#7a88a1; --text:#e9eef7; --ok:#1db954; --bad:#ff4d4f; --prim:#4a90e2; }
-    html,body { margin:0; height:100%; background:var(--bg); color:var(--text); font:14px/1.4 system-ui,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial;}
-    a{color:var(--prim); text-decoration:none}
-    .wrap { max-width:880px; margin:32px auto; padding:0 16px; }
-    header { display:flex; gap:12px; align-items:center; justify-content:space-between; margin-bottom:16px; }
-    .brand { font-weight:700; letter-spacing:.3px; }
-    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap }
-    .btn { padding:10px 14px; border-radius:10px; background:#1f2632; border:1px solid #2a3342; color:var(--text); cursor:pointer }
-    .btn:hover{ filter:brightness(1.05) }
-    .btn.prim{ background:var(--prim); border-color:var(--prim); color:#fff }
-    .btn.bad{ background:#3a1c1d; border-color:#532528; color:#ffb8b8 }
-    .btn.ghost{ background:transparent; border:1px dashed #2a3342 }
-    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px; }
-    .card { background:var(--card); border:1px solid #202633; border-radius:14px; padding:14px; display:flex; flex-direction:column; gap:10px; }
-    .title { font-weight:600; }
-    .sub { color:var(--muted); font-size:12px; }
-    .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #2a3342; }
-    .on { color:#bff0c7; background:#10351a; border-color:#1b5e20;}
-    .off{ color:#ffd4d4; background:#3a1c1d; border-color:#5c2326;}
-    .hint { color:var(--muted); margin:8px 0 16px }
-    .hr { height:1px; background:#222a37; margin:10px 0 }
-    .cmds { display:flex; flex-wrap:wrap; gap:8px }
-    .empty { padding:20px; border:1px dashed #2a3342; border-radius:12px; color:var(--muted); text-align:center }
-    .pill { font-size:12px; padding:4px 8px; border-radius:999px; background:#1b2331; border:1px solid #2a3342; color:#b6c3da }
-    .right { margin-left:auto }
-    dialog { background:var(--card); color:var(--text); border:1px solid #2a3342; border-radius:16px; padding:0; width:min(420px,calc(100% - 32px)); }
-    .dlg-head{ padding:14px 16px; border-bottom:1px solid #202633; display:flex; align-items:center; gap:10px; }
-    .dlg-body{ padding:16px }
-    .code { font:700 40px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing:2px; }
-    .dim { color:var(--muted) }
-    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace }
+    :root{--bg:#0f172a;--fg:#e2e8f0;--muted:#94a3b8;--card:#111827;--btn:#1f2937;--ok:#10b981;--ko:#ef4444;--warn:#f59e0b;}
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,Segoe UI,Roboto,Arial}
+    header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #243045}
+    h1{font-size:18px;margin:0}
+    .row{display:flex;gap:10px;align-items:center}
+    button,.btn{background:var(--btn);border:1px solid #2b364c;border-radius:8px;color:var(--fg);padding:8px 12px;cursor:pointer}
+    button:hover{filter:brightness(1.1)}
+    .primary{background:#2563eb;border-color:#1d4ed8}
+    .danger{background:#7f1d1d;border-color:#991b1b}
+    .ok{color:var(--ok)}
+    .ko{color:var(--ko)}
+    .muted{color:var(--muted)}
+    main{max-width:980px;margin:24px auto;padding:0 16px}
+    .card{background:var(--card);border:1px solid #243045;border-radius:12px;padding:14px 14px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+    .dev{display:flex;flex-direction:column;gap:8px}
+    .dev .head{display:flex;justify-content:space-between;gap:8px;align-items:center}
+    .badge{font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid #243045}
+    .badge.on{background:#0b3b2e;color:#86efac;border-color:#14532d}
+    .badge.off{background:#3b1a1a;color:#fecaca;border-color:#7f1d1d}
+    .dev .meta{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:2px}
+    .dev .actions{display:flex;flex-wrap:wrap;gap:6px}
+    .log{white-space:pre-wrap;background:#0b1220;border:1px solid #243045;border-radius:10px;padding:10px;height:120px;overflow:auto}
+    dialog{border:1px solid #243045;border-radius:12px;background:var(--card);color:var(--fg);padding:0;max-width:420px}
+    dialog .dlg{padding:16px;display:flex;flex-direction:column;gap:10px}
+    input[type=text]{background:#0b1220;border:1px solid #243045;border-radius:8px;color:var(--fg);padding:8px 10px;width:100%}
+    code{background:#0b1220;border:1px solid #243045;border-radius:6px;padding:2px 6px}
   </style>
+  <script src="https://esm.sh/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <div class="row">
-        <div class="brand">Hizaya — Masters</div>
-        <span id="me" class="pill">Non connecté</span>
-      </div>
-      <div class="row">
-        <button id="btnLogin" class="btn prim">Connexion Google</button>
-        <button id="btnLogout" class="btn" style="display:none">Déconnexion</button>
-      </div>
-    </header>
+<header>
+  <h1>Remote Power • MASTER</h1>
+  <div class="row">
+    <span id="userEmail" class="muted">non connecté</span>
+    <button id="btnLogin" class="primary">Connexion Google</button>
+    <button id="btnLogout" style="display:none">Déconnexion</button>
+  </div>
+</header>
 
-    <div class="row" style="margin-bottom:10px">
-      <button id="btnAdd" class="btn prim" disabled>Ajouter un master</button>
-      <span id="status" class="pill">Préparation…</span>
-      <span class="right dim mono" id="ts"></span>
-    </div>
-
-    <div id="devices" class="grid"></div>
-    <div id="empty" class="empty" style="display:none">
-      Aucun master pour ce compte. Utilise “Ajouter un master” pour générer un code d’appairage.
+<main>
+  <div class="row" style="justify-content:space-between;margin-bottom:12px">
+    <div class="muted">Compte: <span id="who"></span></div>
+    <div class="row">
+      <button id="btnAdd" class="primary">Ajouter un MASTER</button>
+      <button id="btnRefresh">Rafraîchir</button>
     </div>
   </div>
 
-  <dialog id="dlg">
-    <div class="dlg-head">
-      <div style="font-weight:600">Appairage master</div>
-      <button id="dlgClose" class="btn right">Fermer</button>
+  <div id="devices" class="grid"></div>
+
+  <h3>Journal</h3>
+  <div id="log" class="log"></div>
+</main>
+
+<!-- Dialog Pair Code -->
+<dialog id="dlgPair">
+  <div class="dlg">
+    <h3>Appairer un MASTER</h3>
+    <div>Code à 6 chiffres (valide <span id="pairExpires" class="muted"></span>) :</div>
+    <div style="font-size:28px;letter-spacing:4px;text-align:center">
+      <code id="pairCode">······</code>
     </div>
-    <div class="dlg-body">
-      <div class="hint">Sur le MASTER : ouvre le portail WiFi, connecte-toi au Wi-Fi de la maison, puis saisis ce code :</div>
-      <div class="code" id="dlgCode">••••••</div>
-      <div class="hr"></div>
-      <div>Expire dans <span id="dlgLeft" class="mono">—</span></div>
+    <div class="muted">
+      Sur l'ESP32 (portail Wi-Fi) : entre ton Wi-Fi + ce code + une clé (ex. <code>123456789</code>).
     </div>
-  </dialog>
+    <div class="row" style="justify-content:flex-end">
+      <button onclick="document.getElementById('dlgPair').close()">Fermer</button>
+    </div>
+  </div>
+</dialog>
 
-  <script type="module">
-    import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+<script>
+  // === CONFIG ===
+  const SUPABASE_URL = "https://zeknluovgbsmtgupwkvo.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4"; // <-- remplace par ta anon key si nécessaire
 
-    const SUPA_URL  = "https://zeknluovgbsmtgupwkvo.supabase.co";
-    const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4";
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const logEl = document.getElementById('log');
+  const devicesEl = document.getElementById('devices');
+  const whoEl = document.getElementById('who');
+  const userEmailEl = document.getElementById('userEmail');
+  const btnLogin = document.getElementById('btnLogin');
+  const btnLogout = document.getElementById('btnLogout');
+  const btnAdd = document.getElementById('btnAdd');
+  const btnRefresh = document.getElementById('btnRefresh');
+  const dlgPair = document.getElementById('dlgPair');
+  const pairCodeEl = document.getElementById('pairCode');
+  const pairExpiresEl = document.getElementById('pairExpires');
 
-    const supabase = createClient(SUPA_URL, SUPA_ANON);
+  let state = { user:null, devices:[], sub:null, tick:null };
 
-    // UI refs
-    const me     = document.getElementById("me");
-    const status = document.getElementById("status");
-    const ts     = document.getElementById("ts");
-    const list   = document.getElementById("devices");
-    const empty  = document.getElementById("empty");
-    const dlg    = document.getElementById("dlg");
-    const dlgClose = document.getElementById("dlgClose");
-    const dlgCode  = document.getElementById("dlgCode");
-    const dlgLeft  = document.getElementById("dlgLeft");
+  function log(msg){ logEl.textContent += (new Date().toLocaleTimeString()+"  "+msg+"\n"); logEl.scrollTop = logEl.scrollHeight; }
+  const el = (tag, cls, txt) => { const e=document.createElement(tag); if(cls) e.className=cls; if(txt!==undefined) e.textContent=txt; return e; };
 
-    const btnLogin  = document.getElementById("btnLogin");
-    const btnLogout = document.getElementById("btnLogout");
-    const btnAdd    = document.getElementById("btnAdd");
+  // === AUTH ===
+  async function refreshUser(){
+    const { data:{ user } } = await supabase.auth.getUser();
+    state.user = user;
+    userEmailEl.textContent = user ? (user.email || "(connecté)") : "non connecté";
+    whoEl.textContent = user ? user.email : "—";
+    btnLogin.style.display = user ? "none" : "inline-block";
+    btnLogout.style.display = user ? "inline-block" : "none";
+    if (user) { await attachRealtime(); await loadDevices(); } else { detachRealtime(); devicesEl.innerHTML=""; }
+  }
 
-    let session = null;
-    let realtimeSub = null;
-    let pollTimer = null;
-    let pairCountdownTimer = null;
-
-    function nowTS(){
-      const d = new Date();
-      ts.textContent = d.toLocaleTimeString();
-    }
-    nowTS(); setInterval(nowTS, 1000);
-
-    function fmtAgo(iso){
-      if(!iso) return "—";
-      const d = new Date(iso);
-      const s = Math.floor((Date.now()-d.getTime())/1000);
-      if (s < 60) return s+"s";
-      const m = Math.floor(s/60); if(m<60) return m+"m";
-      const h = Math.floor(m/60); if(h<24) return h+"h";
-      const dd= Math.floor(h/24); return dd+"j";
-    }
-
-    function el(tag, cls, html){
-      const e = document.createElement(tag);
-      if (cls) e.className = cls;
-      if (html!=null) e.innerHTML = html;
-      return e;
-    }
-
-    // ---------- AUTH ----------
-    async function ensureSession() {
-      const { data: { session: sess } } = await supabase.auth.getSession();
-      session = sess;
-      refreshAuthUI();
-      return session;
-    }
-
-    function refreshAuthUI(){
-      if (session?.user) {
-        me.textContent = session.user.email || session.user.id;
-        btnLogin.style.display = "none";
-        btnLogout.style.display = "";
-        btnAdd.disabled = false;
-      } else {
-        me.textContent = "Non connecté";
-        btnLogin.style.display = "";
-        btnLogout.style.display = "none";
-        btnAdd.disabled = true;
-      }
-    }
-
-    btnLogin.onclick = async () => {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: location.href, queryParams: { prompt: "select_account" } }
-      });
-      if (error) alert("Erreur OAuth: " + error.message);
-    };
-
-    btnLogout.onclick = async () => {
-      await supabase.auth.signOut();
-      list.innerHTML = "";
-      empty.style.display = "";
-      status.textContent = "Déconnecté";
-    };
-
-    supabase.auth.onAuthStateChange((_evt, sess) => {
-      session = sess;
-      refreshAuthUI();
-      if (session) { initData(); } else { teardownRealtime(); if (pollTimer) clearInterval(pollTimer); }
+  btnLogin.onclick = async () => {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.href }
     });
+    if (error) log("Login error: "+error.message);
+  };
+  btnLogout.onclick = async () => { await supabase.auth.signOut(); };
 
-    // ---------- DATA ----------
-    async function loadDevices(){
-      status.textContent = "Chargement...";
-      const { data, error } = await supabase
-        .from("devices")
-        .select("id,name,master_mac,last_seen,online,created_at")
-        .order("created_at", { ascending: false });
+  supabase.auth.onAuthStateChange(async () => { await refreshUser(); });
 
-      if (error) {
-        console.error("devices select error:", error);
-        status.textContent = "Erreur devices";
-        return;
-      }
-      renderDevices(data);
-      status.textContent = "OK";
-    }
-
-    function renderDevices(devs){
-      list.innerHTML = "";
-      if (!devs || devs.length === 0) {
-        empty.style.display = "";
-        return;
-      }
-      empty.style.display = "none";
-
-      for (const d of devs) {
-        const card = el("div","card");
-        const head = el("div","row");
-        head.append(
-          el("div","title", (d.name ?? d.id)),
-          el("span","badge " + (d.online ? "on":"off"), d.online ? "En ligne":"Hors ligne")
-        );
-        const sub = el("div","sub",
-          `ID: <span class="mono">${d.id}</span><br>
-           MAC: <span class="mono">${d.master_mac ?? "—"}</span><br>
-           Dernier vu: ${d.last_seen ? new Date(d.last_seen).toLocaleString() : "—"} (${fmtAgo(d.last_seen)})`
-        );
-
-        const cmds = el("div","cmds");
-        const bPulse = el("button","btn","PULSE");
-        const bOn    = el("button","btn","POWER_ON");
-        const bOff   = el("button","btn","POWER_OFF");
-        const bRst   = el("button","btn","RESET");
-        const bPair  = el("button","btn","START_PAIR");
-        const bDel   = el("button","btn bad","Supprimer");
-
-        bPulse.onclick = () => sendCmd(d.id,"PULSE",{ms:500});
-        bOn.onclick    = () => sendCmd(d.id,"POWER_ON",{});
-        bOff.onclick   = () => sendCmd(d.id,"POWER_OFF",{});
-        bRst.onclick   = () => sendCmd(d.id,"RESET",{});
-        bPair.onclick  = () => sendCmd(d.id,"START_PAIR",{seconds:120});
-        bDel.onclick   = () => deleteDevice(d.id);
-
-        cmds.append(bPulse,bOn,bOff,bRst,bPair,bDel);
-
-        card.append(head, sub, el("div","hr"), cmds);
-        list.append(card);
-      }
-    }
-
-    async function sendCmd(device_id, action, payload){
-      const { error } = await supabase
-        .from("commands")
-        .insert([{ device_id, action, payload }]);
-      if (error) {
-        alert("Commande refusée: " + (error.message || JSON.stringify(error)));
-      } else {
-        status.textContent = `Commande ${action} envoyée`;
-      }
-    }
-
-    async function deleteDevice(device_id){
-      if (!confirm(`Supprimer ${device_id} ?`)) return;
-      const { error } = await supabase.from("devices").delete().eq("id", device_id);
-      if (error) { alert("Suppression refusée: " + error.message); }
-      else { status.textContent = "Supprimé"; await loadDevices(); }
-    }
-
-    // ---------- REALTIME + POLL ----------
-    function teardownRealtime(){
-      if (realtimeSub) { supabase.removeChannel(realtimeSub); realtimeSub=null; }
-    }
-
-    async function setupRealtime(){
-      teardownRealtime();
-      realtimeSub = supabase
-        .channel("devices_changes")
-        .on("postgres_changes",
-          { event: "*", schema: "public", table: "devices" },
-          () => loadDevices()
-        )
-        .subscribe((status) => console.log("realtime:", status));
-    }
-
-    function setupPolling(){
-      if (pollTimer) clearInterval(pollTimer);
-      pollTimer = setInterval(loadDevices, 10000); // 10s
-    }
-
-    async function initData(){
-      await loadDevices();
-      await setupRealtime();
-      setupPolling();
-    }
-
-    // ---------- PAIR CODE (RPC only) ----------
-    function startCountdown(expiresISO){
-      const end = new Date(expiresISO).getTime();
-      function tick(){
-        const left = Math.max(0, Math.floor((end - Date.now())/1000));
-        const m = Math.floor(left/60), s = left%60;
-        dlgLeft.textContent = `${m}m ${s.toString().padStart(2,'0')}s`;
-        if (left<=0 && pairCountdownTimer){ clearInterval(pairCountdownTimer); pairCountdownTimer=null; }
-      }
-      if (pairCountdownTimer) clearInterval(pairCountdownTimer);
-      tick();
-      pairCountdownTimer = setInterval(tick, 1000);
-    }
-
+  // === EDGE: create-pair-code ===
   async function createPairCode(){
-    // on récupère la session pour avoir l’access_token de l’utilisateur connecté
-const live = d.last_seen && (Date.now() - new Date(d.last_seen).getTime()) < 25000;
-    if (sessErr) throw sessErr;
+    const { data:{ session } } = await supabase.auth.getSession();
     if (!session) throw new Error("Non connecté");
-
     const res = await fetch(`${SUPABASE_URL}/functions/v1/create-pair-code`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type":"application/json",
         "Authorization": `Bearer ${session.access_token}`,
-        // apikey facultatif mais ok de le mettre :
         "apikey": SUPABASE_ANON_KEY
       },
       body: JSON.stringify({ ttl_minutes: 10 })
     });
-
-    if (!res.ok) {
-      // renvoie le message de l’edge function si erreur
-      throw new Error(await res.text());
-    }
-
-    const { code, expires_at } = await res.json();
-    return { code, expires_at };
+    if (!res.ok) throw new Error(await res.text());
+    return await res.json(); // { code, expires_at }
   }
 
-    // ---------- BOOT ----------
-    (async () => {
-      await ensureSession();
-      if (session) { initData(); }
-    })();
-  </script>
+  btnAdd.onclick = async () => {
+    try{
+      const { code, expires_at } = await createPairCode();
+      pairCodeEl.textContent = code;
+      pairExpiresEl.textContent = new Date(expires_at).toLocaleTimeString();
+      dlgPair.showModal();
+      log(`Code d'appairage généré: ${code} (expire ${new Date(expires_at).toLocaleTimeString()})`);
+    }catch(e){ log("Erreur création code: "+(e.message||e)); }
+  };
+
+  // === DEVICES CRUD ===
+  function isLive(d){
+    if (!d.last_seen) return false;
+    const lag = Date.now() - new Date(d.last_seen).getTime();
+    return lag < 25000; // 25s
+  }
+
+  async function loadDevices(){
+    if (!state.user) return;
+    const { data, error } = await supabase
+      .from('devices')
+      .select('id,name,master_mac,last_seen,online,created_at')
+      .order('created_at', { ascending:false });
+    if (error) { log("Devices load error: "+error.message); return; }
+    state.devices = data || [];
+    renderDevices();
+  }
+
+  async function sendCommand(device_id, action, payload){
+    const { error } = await supabase.from('commands').insert({ device_id, action, payload: payload||{} });
+    if (error) throw error;
+    log(`[commands] ${action} envoyé à ${device_id}`);
+  }
+
+  async function deleteDevice(device_id){
+    // Un seul DELETE (pas de "release" + "delete") pour éviter le conflit "tuple modified"
+    const { error } = await supabase.from('devices').delete().eq('id', device_id);
+    if (error) throw error;
+    log(`MASTER supprimé: ${device_id}`);
+  }
+
+  function renderDevices(){
+    devicesEl.innerHTML = "";
+    if (!state.devices.length){ devicesEl.append(el("div","muted","Aucun MASTER pour l’instant.")); return; }
+
+    for (const d of state.devices){
+      const card = el("div","card dev");
+      const head = el("div","head");
+      const title = el("div",null, d.name || d.id);
+      const badge = el("span","badge "+(isLive(d)?"on":"off"), isLive(d)?"En ligne":"Hors ligne");
+      head.append(title, badge);
+
+      const meta = el("div","meta");
+      meta.append(
+        el("div",null, `ID: ${d.id}`),
+        el("div",null, `MAC: ${d.master_mac || "—"}`),
+        el("div",null, `Dernier contact: ${d.last_seen ? new Date(d.last_seen).toLocaleTimeString() : "jamais"}`)
+      );
+
+      const actions = el("div","actions");
+      const btnPulse = el("button",null,"Pulse 500ms");
+      btnPulse.onclick = () => sendCommand(d.id, "PULSE", { ms: 500 }).catch(e=>log("Err PULSE: "+e.message));
+
+      const btnOn = el("button",null,"Power ON");
+      btnOn.onclick = () => sendCommand(d.id, "POWER_ON", {}).catch(e=>log("Err ON: "+e.message));
+
+      const btnOff = el("button",null,"Power OFF");
+      btnOff.onclick = () => sendCommand(d.id, "POWER_OFF", {}).catch(e=>log("Err OFF: "+e.message));
+
+      const btnReset = el("button",null,"Reset");
+      btnReset.onclick = () => sendCommand(d.id, "RESET", {}).catch(e=>log("Err RESET: "+e.message));
+
+      const btnDel = el("button","danger","Supprimer");
+      btnDel.onclick = async () => {
+        if (!confirm(`Supprimer ${d.name || d.id} ?\nCette action le retirera de ton compte.`)) return;
+        try{ await deleteDevice(d.id); }catch(e){ log("Suppression refusée: "+(e.message||e)); }
+      };
+
+      actions.append(btnPulse, btnOn, btnOff, btnReset, btnDel);
+
+      card.append(head, meta, actions);
+      devicesEl.append(card);
+    }
+  }
+
+  // === REALTIME ===
+  async function attachRealtime(){
+    detachRealtime();
+    if (!state.user) return;
+
+    // Abonnement inserts/updates/deletes sur devices
+    state.sub = supabase.channel('devs')
+      .on('postgres_changes', { event:'*', schema:'public', table:'devices' }, (payload) => {
+        const e = payload.eventType;
+        const row = payload.new || payload.old;
+        if (!row) return;
+        // Filtrer grossièrement côté client : si owner_uid ne t'appartient pas, on ignore.
+        // (Astuce : si "new" n'est pas sélectionné avec owner_uid par RLS, on fera un refresh périodique.)
+        loadDevices(); // simple et robuste
+      })
+      .subscribe();
+
+    // Fallback refresh toutes les 15s (au cas où realtime est off)
+    state.tick = setInterval(loadDevices, 15000);
+  }
+
+  function detachRealtime(){
+    if (state.sub){ supabase.removeChannel(state.sub); state.sub = null; }
+    if (state.tick){ clearInterval(state.tick); state.tick = null; }
+  }
+
+  // === INIT ===
+  btnRefresh.onclick = loadDevices;
+  (async () => { await refreshUser(); })();
+</script>
 </body>
 </html>
-
-
