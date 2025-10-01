@@ -7,7 +7,7 @@
   <style>
     :root{--bg:#0f172a;--fg:#e2e8f0;--muted:#94a3b8;--card:#111827;--btn:#1f2937;--ok:#10b981;--ko:#ef4444;}
     html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,Segoe UI,Roboto,Arial}
-    header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #243045}
+    header{position:relative;z-index:10;display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #243045}
     h1{font-size:18px;margin:0}
     .row{display:flex;gap:10px;align-items:center}
     button{background:var(--btn);border:1px solid #2b364c;border-radius:8px;color:var(--fg);padding:8px 12px;cursor:pointer}
@@ -30,6 +30,8 @@
     dialog .dlg{padding:16px;display:flex;flex-direction:column;gap:10px}
     input[type=text]{background:#0b1220;border:1px solid #243045;border-radius:8px;color:var(--fg);padding:8px 10px;width:100%}
     code{background:#0b1220;border:1px solid #243045;border-radius:6px;padding:2px 6px}
+    /* Empêche un dialog fermé de capter les clics */
+    dialog:not([open]){display:none}
   </style>
   <script src="https://esm.sh/@supabase/supabase-js@2"></script>
 </head>
@@ -38,8 +40,9 @@
   <h1>Remote Power • MASTER</h1>
   <div class="row">
     <span id="userEmail" class="muted">non connecté</span>
-    <button id="btnLogin" class="primary">Connexion Google</button>
-    <button id="btnLogout" style="display:none">Déconnexion</button>
+    <!-- ⬇️ handler inline + type="button" -->
+    <button id="btnLogin" class="primary" type="button" onclick="onLoginClick(event)">Connexion Google</button>
+    <button id="btnLogout" type="button" style="display:none" onclick="onLogoutClick()">Déconnexion</button>
   </div>
 </header>
 
@@ -47,8 +50,8 @@
   <div class="row" style="justify-content:space-between;margin-bottom:12px">
     <div class="muted">Compte: <span id="who">—</span></div>
     <div class="row">
-      <button id="btnAdd" class="primary">Ajouter un MASTER</button>
-      <button id="btnRefresh">Rafraîchir</button>
+      <button id="btnAdd" class="primary" type="button" onclick="onAddClick()">Ajouter un MASTER</button>
+      <button id="btnRefresh" type="button" onclick="loadDevices()">Rafraîchir</button>
     </div>
   </div>
 
@@ -70,7 +73,7 @@
       Sur l'ESP32 (portail Wi-Fi) : entre ton Wi-Fi + ce code + une clé (ex. <code>123456789</code>).
     </div>
     <div class="row" style="justify-content:flex-end">
-      <button onclick="document.getElementById('dlgPair').close()">Fermer</button>
+      <button type="button" onclick="document.getElementById('dlgPair').close()">Fermer</button>
     </div>
   </div>
 </dialog>
@@ -78,7 +81,7 @@
 <script>
   // === CONFIG ===
   const SUPABASE_URL = "https://zeknluovgbsmtgupwkvo.supabase.co";
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4"; // ⬅️ remplace par TA vraie anon key
+  const SUPABASE_ANON_KEY = "TA_ANON_KEY"; // ⬅️ ta anon key
 
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -87,17 +90,18 @@
   const devicesEl = document.getElementById('devices');
   const whoEl = document.getElementById('who');
   const userEmailEl = document.getElementById('userEmail');
-  const btnLogin = document.getElementById('btnLogin');
-  const btnLogout = document.getElementById('btnLogout');
-  const btnAdd = document.getElementById('btnAdd');
-  const btnRefresh = document.getElementById('btnRefresh');
   const dlgPair = document.getElementById('dlgPair');
   const pairCodeEl = document.getElementById('pairCode');
   const pairExpiresEl = document.getElementById('pairExpires');
 
   let state = { user:null, devices:[], sub:null, tick:null };
 
-  function log(msg){ logEl.textContent += (new Date().toLocaleTimeString()+"  "+msg+"\n"); logEl.scrollTop = logEl.scrollHeight; }
+  function log(msg){ 
+    const line = (new Date().toLocaleTimeString()+"  "+msg+"\n");
+    logEl.textContent += line; 
+    console.log("[UI]", msg);
+    logEl.scrollTop = logEl.scrollHeight; 
+  }
   const el = (tag, cls, txt) => { const e=document.createElement(tag); if(cls) e.className=cls; if(txt!==undefined) e.textContent=txt; return e; };
 
   // === AUTH ===
@@ -106,43 +110,54 @@
       const { data:{ user } } = await supabase.auth.getUser();
       state.user = user;
       userEmailEl.textContent = user ? (user.email || "(connecté)") : "non connecté";
+      document.getElementById('btnLogin').style.display = user ? "none" : "inline-block";
+      document.getElementById('btnLogout').style.display = user ? "inline-block" : "none";
       whoEl.textContent = user ? user.email : "—";
-      btnLogin.style.display = user ? "none" : "inline-block";
-      btnLogout.style.display = user ? "inline-block" : "none";
       if (user) { await attachRealtime(); await loadDevices(); } else { detachRealtime(); devicesEl.innerHTML=""; }
     } catch (e) {
       log("refreshUser error: "+(e.message||e));
-      console.error(e);
     }
   }
 
-  // ⬇️ Login robuste : redirection EXPlicite
-  btnLogin.onclick = async () => {
+  // ⬇️ Handlers GLOBAUX (utilisés depuis le HTML inline)
+  window.onLoginClick = async (ev) => {
+    ev?.preventDefault();
+    log("Clique sur Connexion Google");
     try {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: window.location.origin + window.location.pathname, // même page
+          redirectTo: window.location.origin + window.location.pathname,
           queryParams: { prompt: "select_account" },
-          skipBrowserRedirect: true  // <- on redirige nous-mêmes
+          skipBrowserRedirect: true
         }
       });
       if (error) throw error;
       if (data?.url) {
-        // Essaye _self d'abord (plus fiable sur mobile / PWA)
-        window.location.href = data.url;
+        log("Redirection OAuth…");
+        window.location.href = data.url;    // redirection explicite
       } else {
         throw new Error("URL OAuth manquante");
       }
     } catch (e) {
-      log("Login error: " + (e.message || e));
-      console.error(e);
+      log("Login error: "+(e.message||e));
       alert("Connexion Google impossible : " + (e.message || e));
     }
   };
 
-  btnLogout.onclick = async () => {
+  window.onLogoutClick = async () => {
     await supabase.auth.signOut();
+    log("Déconnecté");
+  };
+
+  window.onAddClick = async () => {
+    try{
+      const { code, expires_at } = await createPairCode();
+      pairCodeEl.textContent = code;
+      pairExpiresEl.textContent = new Date(expires_at).toLocaleTimeString();
+      dlgPair.showModal();
+      log(`Code d'appairage: ${code} (expire ${new Date(expires_at).toLocaleTimeString()})`);
+    }catch(e){ log("Erreur création code: "+(e.message||e)); }
   };
 
   supabase.auth.onAuthStateChange(async () => { await refreshUser(); });
@@ -163,17 +178,6 @@
     if (!res.ok) throw new Error(await res.text());
     return await res.json(); // { code, expires_at }
   }
-
-  // UI: bouton Ajouter
-  btnAdd.onclick = async () => {
-    try{
-      const { code, expires_at } = await createPairCode();
-      pairCodeEl.textContent = code;
-      pairExpiresEl.textContent = new Date(expires_at).toLocaleTimeString();
-      dlgPair.showModal();
-      log(`Code d'appairage généré: ${code} (expire ${new Date(expires_at).toLocaleTimeString()})`);
-    }catch(e){ log("Erreur création code: "+(e.message||e)); }
-  };
 
   // === DEVICES ===
   function isLive(d){
@@ -255,13 +259,8 @@
     if (!state.user) return;
 
     state.sub = supabase.channel('devs')
-      .on('postgres_changes', { event:'*', schema:'public', table:'devices' }, () => {
-        // Simple & robuste : on recharge la liste
-        loadDevices();
-      })
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") log("Realtime devices: OK");
-      });
+      .on('postgres_changes', { event:'*', schema:'public', table:'devices' }, () => loadDevices())
+      .subscribe((status) => { if (status === "SUBSCRIBED") log("Realtime devices: OK"); });
 
     state.tick = setInterval(loadDevices, 15000); // fallback
   }
@@ -271,9 +270,9 @@
   }
 
   // === INIT ===
-  btnRefresh.onclick = loadDevices;
   (async () => {
-    try { await refreshUser(); } catch (e) { console.error(e); }
+    log("UI prête");
+    await refreshUser();
   })();
 </script>
 </body>
