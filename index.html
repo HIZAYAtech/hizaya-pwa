@@ -5,28 +5,26 @@
   <title>Remote Power • MASTER</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root{--bg:#0f172a;--fg:#e2e8f0;--muted:#94a3b8;--card:#111827;--btn:#1f2937;--ok:#10b981;--ko:#ef4444;--warn:#f59e0b;}
+    :root{--bg:#0f172a;--fg:#e2e8f0;--muted:#94a3b8;--card:#111827;--btn:#1f2937;--ok:#10b981;--ko:#ef4444;}
     html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,Segoe UI,Roboto,Arial}
     header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #243045}
     h1{font-size:18px;margin:0}
     .row{display:flex;gap:10px;align-items:center}
-    button,.btn{background:var(--btn);border:1px solid #2b364c;border-radius:8px;color:var(--fg);padding:8px 12px;cursor:pointer}
+    button{background:var(--btn);border:1px solid #2b364c;border-radius:8px;color:var(--fg);padding:8px 12px;cursor:pointer}
     button:hover{filter:brightness(1.1)}
     .primary{background:#2563eb;border-color:#1d4ed8}
     .danger{background:#7f1d1d;border-color:#991b1b}
-    .ok{color:var(--ok)}
-    .ko{color:var(--ko)}
     .muted{color:var(--muted)}
     main{max-width:980px;margin:24px auto;padding:0 16px}
-    .card{background:var(--card);border:1px solid #243045;border-radius:12px;padding:14px 14px}
+    .card{background:var(--card);border:1px solid #243045;border-radius:12px;padding:14px}
     .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
     .dev{display:flex;flex-direction:column;gap:8px}
-    .dev .head{display:flex;justify-content:space-between;gap:8px;align-items:center}
+    .head{display:flex;justify-content:space-between;gap:8px;align-items:center}
     .badge{font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid #243045}
-    .badge.on{background:#0b3b2e;color:#86efac;border-color:#14532d}
-    .badge.off{background:#3b1a1a;color:#fecaca;border-color:#7f1d1d}
-    .dev .meta{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:2px}
-    .dev .actions{display:flex;flex-wrap:wrap;gap:6px}
+    .on{background:#0b3b2e;color:#86efac;border-color:#14532d}
+    .off{background:#3b1a1a;color:#fecaca;border-color:#7f1d1d}
+    .meta{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:2px}
+    .actions{display:flex;flex-wrap:wrap;gap:6px}
     .log{white-space:pre-wrap;background:#0b1220;border:1px solid #243045;border-radius:10px;padding:10px;height:120px;overflow:auto}
     dialog{border:1px solid #243045;border-radius:12px;background:var(--card);color:var(--fg);padding:0;max-width:420px}
     dialog .dlg{padding:16px;display:flex;flex-direction:column;gap:10px}
@@ -47,7 +45,7 @@
 
 <main>
   <div class="row" style="justify-content:space-between;margin-bottom:12px">
-    <div class="muted">Compte: <span id="who"></span></div>
+    <div class="muted">Compte: <span id="who">—</span></div>
     <div class="row">
       <button id="btnAdd" class="primary">Ajouter un MASTER</button>
       <button id="btnRefresh">Rafraîchir</button>
@@ -80,9 +78,11 @@
 <script>
   // === CONFIG ===
   const SUPABASE_URL = "https://zeknluovgbsmtgupwkvo.supabase.co";
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4"; // <-- remplace par ta anon key si nécessaire
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4"; // ⬅️ remplace par TA vraie anon key
 
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // DOM refs
   const logEl = document.getElementById('log');
   const devicesEl = document.getElementById('devices');
   const whoEl = document.getElementById('who');
@@ -102,23 +102,48 @@
 
   // === AUTH ===
   async function refreshUser(){
-    const { data:{ user } } = await supabase.auth.getUser();
-    state.user = user;
-    userEmailEl.textContent = user ? (user.email || "(connecté)") : "non connecté";
-    whoEl.textContent = user ? user.email : "—";
-    btnLogin.style.display = user ? "none" : "inline-block";
-    btnLogout.style.display = user ? "inline-block" : "none";
-    if (user) { await attachRealtime(); await loadDevices(); } else { detachRealtime(); devicesEl.innerHTML=""; }
+    try {
+      const { data:{ user } } = await supabase.auth.getUser();
+      state.user = user;
+      userEmailEl.textContent = user ? (user.email || "(connecté)") : "non connecté";
+      whoEl.textContent = user ? user.email : "—";
+      btnLogin.style.display = user ? "none" : "inline-block";
+      btnLogout.style.display = user ? "inline-block" : "none";
+      if (user) { await attachRealtime(); await loadDevices(); } else { detachRealtime(); devicesEl.innerHTML=""; }
+    } catch (e) {
+      log("refreshUser error: "+(e.message||e));
+      console.error(e);
+    }
   }
 
+  // ⬇️ Login robuste : redirection EXPlicite
   btnLogin.onclick = async () => {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: window.location.href }
-    });
-    if (error) log("Login error: "+error.message);
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin + window.location.pathname, // même page
+          queryParams: { prompt: "select_account" },
+          skipBrowserRedirect: true  // <- on redirige nous-mêmes
+        }
+      });
+      if (error) throw error;
+      if (data?.url) {
+        // Essaye _self d'abord (plus fiable sur mobile / PWA)
+        window.location.href = data.url;
+      } else {
+        throw new Error("URL OAuth manquante");
+      }
+    } catch (e) {
+      log("Login error: " + (e.message || e));
+      console.error(e);
+      alert("Connexion Google impossible : " + (e.message || e));
+    }
   };
-  btnLogout.onclick = async () => { await supabase.auth.signOut(); };
+
+  btnLogout.onclick = async () => {
+    await supabase.auth.signOut();
+  };
 
   supabase.auth.onAuthStateChange(async () => { await refreshUser(); });
 
@@ -139,6 +164,7 @@
     return await res.json(); // { code, expires_at }
   }
 
+  // UI: bouton Ajouter
   btnAdd.onclick = async () => {
     try{
       const { code, expires_at } = await createPairCode();
@@ -149,7 +175,7 @@
     }catch(e){ log("Erreur création code: "+(e.message||e)); }
   };
 
-  // === DEVICES CRUD ===
+  // === DEVICES ===
   function isLive(d){
     if (!d.last_seen) return false;
     const lag = Date.now() - new Date(d.last_seen).getTime();
@@ -174,7 +200,6 @@
   }
 
   async function deleteDevice(device_id){
-    // Un seul DELETE (pas de "release" + "delete") pour éviter le conflit "tuple modified"
     const { error } = await supabase.from('devices').delete().eq('id', device_id);
     if (error) throw error;
     log(`MASTER supprimé: ${device_id}`);
@@ -229,22 +254,17 @@
     detachRealtime();
     if (!state.user) return;
 
-    // Abonnement inserts/updates/deletes sur devices
     state.sub = supabase.channel('devs')
-      .on('postgres_changes', { event:'*', schema:'public', table:'devices' }, (payload) => {
-        const e = payload.eventType;
-        const row = payload.new || payload.old;
-        if (!row) return;
-        // Filtrer grossièrement côté client : si owner_uid ne t'appartient pas, on ignore.
-        // (Astuce : si "new" n'est pas sélectionné avec owner_uid par RLS, on fera un refresh périodique.)
-        loadDevices(); // simple et robuste
+      .on('postgres_changes', { event:'*', schema:'public', table:'devices' }, () => {
+        // Simple & robuste : on recharge la liste
+        loadDevices();
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") log("Realtime devices: OK");
+      });
 
-    // Fallback refresh toutes les 15s (au cas où realtime est off)
-    state.tick = setInterval(loadDevices, 15000);
+    state.tick = setInterval(loadDevices, 15000); // fallback
   }
-
   function detachRealtime(){
     if (state.sub){ supabase.removeChannel(state.sub); state.sub = null; }
     if (state.tick){ clearInterval(state.tick); state.tick = null; }
@@ -252,7 +272,9 @@
 
   // === INIT ===
   btnRefresh.onclick = loadDevices;
-  (async () => { await refreshUser(); })();
+  (async () => {
+    try { await refreshUser(); } catch (e) { console.error(e); }
+  })();
 </script>
 </body>
 </html>
