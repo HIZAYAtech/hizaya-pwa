@@ -30,17 +30,16 @@
     dialog .dlg{padding:16px;display:flex;flex-direction:column;gap:10px}
     input[type=text]{background:#0b1220;border:1px solid #243045;border-radius:8px;color:var(--fg);padding:8px 10px;width:100%}
     code{background:#0b1220;border:1px solid #243045;border-radius:6px;padding:2px 6px}
-    /* Empêche un dialog fermé de capter les clics */
-    dialog:not([open]){display:none}
+    dialog:not([open]){display:none} /* évite qu'un dialog fermé bloque les clics */
   </style>
-  <script src="https://esm.sh/@supabase/supabase-js@2"></script>
+  <!-- ✅ UMD build => window.supabase disponible -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body>
 <header>
   <h1>Remote Power • MASTER</h1>
   <div class="row">
     <span id="userEmail" class="muted">non connecté</span>
-    <!-- ⬇️ handler inline + type="button" -->
     <button id="btnLogin" class="primary" type="button" onclick="onLoginClick(event)">Connexion Google</button>
     <button id="btnLogout" type="button" style="display:none" onclick="onLogoutClick()">Déconnexion</button>
   </div>
@@ -79,14 +78,25 @@
 </dialog>
 
 <script>
-  // === CONFIG ===
+  // ====== CONFIG ======
   const SUPABASE_URL = "https://zeknluovgbsmtgupwkvo.supabase.co";
-  const SUPABASE_ANON_KEY = "TA_ANON_KEY"; // ⬅️ ta anon key
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4"; // ⬅️ remplace par ta anon key
 
+  // ====== LIB CHECK ======
+  const LOG = (msg)=>{ 
+    const el=document.getElementById('log');
+    const line=new Date().toLocaleTimeString()+"  "+msg+"\n";
+    el.textContent+=line; el.scrollTop=el.scrollHeight; 
+    console.log("[UI]", msg);
+  };
+  if (!window.supabase) { 
+    alert("Supabase UMD n'a pas chargé. Vérifie le <script> CDN.");
+  }
+
+  // ====== SUPABASE CLIENT ======
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  // DOM refs
-  const logEl = document.getElementById('log');
+  // ====== DOM REFS ======
   const devicesEl = document.getElementById('devices');
   const whoEl = document.getElementById('who');
   const userEmailEl = document.getElementById('userEmail');
@@ -96,58 +106,42 @@
 
   let state = { user:null, devices:[], sub:null, tick:null };
 
-  function log(msg){ 
-    const line = (new Date().toLocaleTimeString()+"  "+msg+"\n");
-    logEl.textContent += line; 
-    console.log("[UI]", msg);
-    logEl.scrollTop = logEl.scrollHeight; 
-  }
+  // ====== HELPERS ======
   const el = (tag, cls, txt) => { const e=document.createElement(tag); if(cls) e.className=cls; if(txt!==undefined) e.textContent=txt; return e; };
+  const isLive = (d) => d.last_seen && (Date.now() - new Date(d.last_seen).getTime()) < 25000;
 
-  // === AUTH ===
+  // ====== AUTH ======
   async function refreshUser(){
-    try {
-      const { data:{ user } } = await supabase.auth.getUser();
-      state.user = user;
-      userEmailEl.textContent = user ? (user.email || "(connecté)") : "non connecté";
-      document.getElementById('btnLogin').style.display = user ? "none" : "inline-block";
-      document.getElementById('btnLogout').style.display = user ? "inline-block" : "none";
-      whoEl.textContent = user ? user.email : "—";
-      if (user) { await attachRealtime(); await loadDevices(); } else { detachRealtime(); devicesEl.innerHTML=""; }
-    } catch (e) {
-      log("refreshUser error: "+(e.message||e));
-    }
+    const { data:{ user } } = await supabase.auth.getUser();
+    state.user = user;
+    userEmailEl.textContent = user ? (user.email || "(connecté)") : "non connecté";
+    document.getElementById('btnLogin').style.display = user ? "none" : "inline-block";
+    document.getElementById('btnLogout').style.display = user ? "inline-block" : "none";
+    whoEl.textContent = user ? user.email : "—";
+    if (user) { await attachRealtime(); await loadDevices(); } 
+    else { detachRealtime(); devicesEl.innerHTML=""; }
   }
 
-  // ⬇️ Handlers GLOBAUX (utilisés depuis le HTML inline)
+  // Handlers GLOBAUX (utilisés par onclick HTML)
   window.onLoginClick = async (ev) => {
     ev?.preventDefault();
-    log("Clique sur Connexion Google");
-    try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: window.location.origin + window.location.pathname,
-          queryParams: { prompt: "select_account" },
-          skipBrowserRedirect: true
-        }
-      });
-      if (error) throw error;
-      if (data?.url) {
-        log("Redirection OAuth…");
-        window.location.href = data.url;    // redirection explicite
-      } else {
-        throw new Error("URL OAuth manquante");
+    LOG("Clique sur Connexion Google");
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: window.location.origin + window.location.pathname,
+        queryParams: { prompt: "select_account" },
+        skipBrowserRedirect: true
       }
-    } catch (e) {
-      log("Login error: "+(e.message||e));
-      alert("Connexion Google impossible : " + (e.message || e));
-    }
+    });
+    if (error) { LOG("Login error: "+error.message); alert(error.message); return; }
+    if (data?.url) { LOG("Redirection OAuth…"); window.location.href = data.url; }
+    else { alert("URL OAuth manquante"); }
   };
 
   window.onLogoutClick = async () => {
     await supabase.auth.signOut();
-    log("Déconnecté");
+    LOG("Déconnecté");
   };
 
   window.onAddClick = async () => {
@@ -156,13 +150,13 @@
       pairCodeEl.textContent = code;
       pairExpiresEl.textContent = new Date(expires_at).toLocaleTimeString();
       dlgPair.showModal();
-      log(`Code d'appairage: ${code} (expire ${new Date(expires_at).toLocaleTimeString()})`);
-    }catch(e){ log("Erreur création code: "+(e.message||e)); }
+      LOG(`Code d'appairage: ${code} (expire ${new Date(expires_at).toLocaleTimeString()})`);
+    }catch(e){ LOG("Erreur création code: "+(e.message||e)); }
   };
 
   supabase.auth.onAuthStateChange(async () => { await refreshUser(); });
 
-  // === EDGE: create-pair-code ===
+  // ====== EDGE create-pair-code ======
   async function createPairCode(){
     const { data:{ session } } = await supabase.auth.getSession();
     if (!session) throw new Error("Non connecté");
@@ -179,20 +173,14 @@
     return await res.json(); // { code, expires_at }
   }
 
-  // === DEVICES ===
-  function isLive(d){
-    if (!d.last_seen) return false;
-    const lag = Date.now() - new Date(d.last_seen).getTime();
-    return lag < 25000; // 25s
-  }
-
+  // ====== DEVICES ======
   async function loadDevices(){
     if (!state.user) return;
     const { data, error } = await supabase
       .from('devices')
       .select('id,name,master_mac,last_seen,online,created_at')
       .order('created_at', { ascending:false });
-    if (error) { log("Devices load error: "+error.message); return; }
+    if (error) { LOG("Devices load error: "+error.message); return; }
     state.devices = data || [];
     renderDevices();
   }
@@ -200,13 +188,13 @@
   async function sendCommand(device_id, action, payload){
     const { error } = await supabase.from('commands').insert({ device_id, action, payload: payload||{} });
     if (error) throw error;
-    log(`[commands] ${action} envoyé à ${device_id}`);
+    LOG(`[commands] ${action} envoyé à ${device_id}`);
   }
 
   async function deleteDevice(device_id){
     const { error } = await supabase.from('devices').delete().eq('id', device_id);
     if (error) throw error;
-    log(`MASTER supprimé: ${device_id}`);
+    LOG(`MASTER supprimé: ${device_id}`);
   }
 
   function renderDevices(){
@@ -229,21 +217,21 @@
 
       const actions = el("div","actions");
       const btnPulse = el("button",null,"Pulse 500ms");
-      btnPulse.onclick = () => sendCommand(d.id, "PULSE", { ms: 500 }).catch(e=>log("Err PULSE: "+e.message));
+      btnPulse.onclick = () => sendCommand(d.id, "PULSE", { ms: 500 }).catch(e=>LOG("Err PULSE: "+e.message));
 
       const btnOn = el("button",null,"Power ON");
-      btnOn.onclick = () => sendCommand(d.id, "POWER_ON", {}).catch(e=>log("Err ON: "+e.message));
+      btnOn.onclick = () => sendCommand(d.id, "POWER_ON", {}).catch(e=>LOG("Err ON: "+e.message));
 
       const btnOff = el("button",null,"Power OFF");
-      btnOff.onclick = () => sendCommand(d.id, "POWER_OFF", {}).catch(e=>log("Err OFF: "+e.message));
+      btnOff.onclick = () => sendCommand(d.id, "POWER_OFF", {}).catch(e=>LOG("Err OFF: "+e.message));
 
       const btnReset = el("button",null,"Reset");
-      btnReset.onclick = () => sendCommand(d.id, "RESET", {}).catch(e=>log("Err RESET: "+e.message));
+      btnReset.onclick = () => sendCommand(d.id, "RESET", {}).catch(e=>LOG("Err RESET: "+e.message));
 
       const btnDel = el("button","danger","Supprimer");
       btnDel.onclick = async () => {
         if (!confirm(`Supprimer ${d.name || d.id} ?\nCette action le retirera de ton compte.`)) return;
-        try{ await deleteDevice(d.id); }catch(e){ log("Suppression refusée: "+(e.message||e)); }
+        try{ await deleteDevice(d.id); }catch(e){ LOG("Suppression refusée: "+(e.message||e)); }
       };
 
       actions.append(btnPulse, btnOn, btnOff, btnReset, btnDel);
@@ -253,14 +241,14 @@
     }
   }
 
-  // === REALTIME ===
+  // ====== REALTIME ======
   async function attachRealtime(){
     detachRealtime();
     if (!state.user) return;
 
     state.sub = supabase.channel('devs')
       .on('postgres_changes', { event:'*', schema:'public', table:'devices' }, () => loadDevices())
-      .subscribe((status) => { if (status === "SUBSCRIBED") log("Realtime devices: OK"); });
+      .subscribe((status) => { if (status === "SUBSCRIBED") LOG("Realtime devices: OK"); });
 
     state.tick = setInterval(loadDevices, 15000); // fallback
   }
@@ -269,9 +257,9 @@
     if (state.tick){ clearInterval(state.tick); state.tick = null; }
   }
 
-  // === INIT ===
+  // ====== INIT ======
   (async () => {
-    log("UI prête");
+    LOG("UI prête");
     await refreshUser();
   })();
 </script>
