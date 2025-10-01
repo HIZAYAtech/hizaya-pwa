@@ -289,31 +289,31 @@
       pairCountdownTimer = setInterval(tick, 1000);
     }
 
-    async function createPairCode(){
-      const { data, error } = await supabase.rpc("create_pair_code", { ttl_minutes: 10 });
-      if (error) { throw error; }
-      // data peut être un array si RETURNS TABLE
-      const row = Array.isArray(data) ? data[0] : data;
-      return { code: row.code, expires_at: row.expires_at };
+  async function createPairCode(){
+    // on récupère la session pour avoir l’access_token de l’utilisateur connecté
+    const { data: { session }, error: sessErr } = await supabase.auth.getSession();
+    if (sessErr) throw sessErr;
+    if (!session) throw new Error("Non connecté");
+
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/create-pair-code`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+        // apikey facultatif mais ok de le mettre :
+        "apikey": SUPABASE_ANON_KEY
+      },
+      body: JSON.stringify({ ttl_minutes: 10 })
+    });
+
+    if (!res.ok) {
+      // renvoie le message de l’edge function si erreur
+      throw new Error(await res.text());
     }
 
-    function openPairDialog(code, expiresISO){
-      dlgCode.textContent = code;
-      startCountdown(expiresISO);
-      dlg.showModal();
-    }
-
-    btnAdd.onclick = async () => {
-      if (!session) { alert("Connecte-toi d'abord."); return; }
-      try {
-        const { code, expires_at } = await createPairCode();
-        openPairDialog(code, expires_at);
-      } catch(e){
-        console.error(e);
-        alert("Impossible de créer le code: " + (e.message || JSON.stringify(e)));
-      }
-    };
-    dlgClose.onclick = () => dlg.close();
+    const { code, expires_at } = await res.json();
+    return { code, expires_at };
+  }
 
     // ---------- BOOT ----------
     (async () => {
@@ -323,3 +323,4 @@
   </script>
 </body>
 </html>
+
