@@ -5,7 +5,7 @@
   <title>Remote Power • MASTER</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root{--bg:#0f172a;--fg:#e2e8f0;--muted:#94a3b8;--card:#111827;--btn:#1f2937;--ok:#10b981;--ko:#ef4444;}
+    :root{--bg:#0f172a;--fg:#e2e8f0;--muted:#94a3b8;--card:#111827;--btn:#1f2937;--ok:#10b981;--ko:#ef4444}
     html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,Segoe UI,Roboto,Arial}
     header{position:relative;z-index:10;display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #243045}
     h1{font-size:18px;margin:0}
@@ -25,14 +25,14 @@
     .off{background:#3b1a1a;color:#fecaca;border-color:#7f1d1d}
     .meta{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:2px}
     .actions{display:flex;flex-wrap:wrap;gap:6px}
-    .log{white-space:pre-wrap;background:#0b1220;border:1px solid #243045;border-radius:10px;padding:10px;height:120px;overflow:auto}
+    .log{white-space:pre-wrap;background:#0b1220;border:1px solid #243045;border-radius:10px;padding:10px;height:140px;overflow:auto}
     dialog{border:1px solid #243045;border-radius:12px;background:var(--card);color:var(--fg);padding:0;max-width:420px}
     dialog .dlg{padding:16px;display:flex;flex-direction:column;gap:10px}
     input[type=text]{background:#0b1220;border:1px solid #243045;border-radius:8px;color:var(--fg);padding:8px 10px;width:100%}
     code{background:#0b1220;border:1px solid #243045;border-radius:6px;padding:2px 6px}
-    dialog:not([open]){display:none} /* évite qu'un dialog fermé bloque les clics */
+    dialog:not([open]){display:none}
   </style>
-  <!-- ✅ UMD build => window.supabase disponible -->
+  <!-- UMD build => window.supabase dispo -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body>
@@ -47,7 +47,7 @@
 
 <main>
   <div class="row" style="justify-content:space-between;margin-bottom:12px">
-    <div class="muted">Compte: <span id="who">—</span></div>
+    <div class="muted">Compte : <span id="who">—</span></div>
     <div class="row">
       <button id="btnAdd" class="primary" type="button" onclick="onAddClick()">Ajouter un MASTER</button>
       <button id="btnRefresh" type="button" onclick="loadDevices()">Rafraîchir</button>
@@ -69,7 +69,7 @@
       <code id="pairCode">······</code>
     </div>
     <div class="muted">
-      Sur l'ESP32 (portail Wi-Fi) : entre ton Wi-Fi + ce code + une clé (ex. <code>123456789</code>).
+      Sur l’ESP32 (portail Wi-Fi) : connecte le Wi-Fi et saisis uniquement ce <b>code à 6 chiffres</b>.
     </div>
     <div class="row" style="justify-content:flex-end">
       <button type="button" onclick="document.getElementById('dlgPair').close()">Fermer</button>
@@ -80,23 +80,22 @@
 <script>
   // ====== CONFIG ======
   const SUPABASE_URL = "https://zeknluovgbsmtgupwkvo.supabase.co";
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4"; // ⬅️ remplace par ta anon key
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4"; // ← ta anon key
 
-  // ====== LIB CHECK ======
-  const LOG = (msg)=>{ 
-    const el=document.getElementById('log');
-    const line=new Date().toLocaleTimeString()+"  "+msg+"\n";
-    el.textContent+=line; el.scrollTop=el.scrollHeight; 
+  // ====== LOG ======
+  const LOG = (msg)=>{
+    const el = document.getElementById('log');
+    const line = new Date().toLocaleTimeString() + "  " + msg + "\n";
+    el.textContent += line; el.scrollTop = el.scrollHeight;
     console.log("[UI]", msg);
   };
-  if (!window.supabase) { 
-    alert("Supabase UMD n'a pas chargé. Vérifie le <script> CDN.");
-  }
+
+  if (!window.supabase) alert("Supabase UMD n'a pas chargé.");
 
   // ====== SUPABASE CLIENT ======
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  // ====== DOM REFS ======
+  // ====== DOM ======
   const devicesEl = document.getElementById('devices');
   const whoEl = document.getElementById('who');
   const userEmailEl = document.getElementById('userEmail');
@@ -107,8 +106,8 @@
   let state = { user:null, devices:[], sub:null, tick:null };
 
   // ====== HELPERS ======
-  const el = (tag, cls, txt) => { const e=document.createElement(tag); if(cls) e.className=cls; if(txt!==undefined) e.textContent=txt; return e; };
-  const isLive = (d) => d.last_seen && (Date.now() - new Date(d.last_seen).getTime()) < 25000;
+  const el = (tag, cls, txt)=>{ const e=document.createElement(tag); if(cls) e.className=cls; if(txt!==undefined) e.textContent=txt; return e; };
+  const isLiveFallback = (d)=> d.last_seen && (Date.now()-new Date(d.last_seen).getTime()) < 25000;
 
   // ====== AUTH ======
   async function refreshUser(){
@@ -118,14 +117,12 @@
     document.getElementById('btnLogin').style.display = user ? "none" : "inline-block";
     document.getElementById('btnLogout').style.display = user ? "inline-block" : "none";
     whoEl.textContent = user ? user.email : "—";
-    if (user) { await attachRealtime(); await loadDevices(); } 
-    else { detachRealtime(); devicesEl.innerHTML=""; }
+    if (user) { await attachRealtime(); await loadDevices(); } else { detachRealtime(); devicesEl.innerHTML=""; }
   }
 
-  // Handlers GLOBAUX (utilisés par onclick HTML)
-  window.onLoginClick = async (ev) => {
+  window.onLoginClick = async (ev)=>{
     ev?.preventDefault();
-    LOG("Clique sur Connexion Google");
+    LOG("Connexion Google…");
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
@@ -135,16 +132,15 @@
       }
     });
     if (error) { LOG("Login error: "+error.message); alert(error.message); return; }
-    if (data?.url) { LOG("Redirection OAuth…"); window.location.href = data.url; }
-    else { alert("URL OAuth manquante"); }
+    if (data?.url) window.location.href = data.url;
   };
 
-  window.onLogoutClick = async () => {
+  window.onLogoutClick = async ()=>{
     await supabase.auth.signOut();
     LOG("Déconnecté");
   };
 
-  window.onAddClick = async () => {
+  window.onAddClick = async ()=>{
     try{
       const { code, expires_at } = await createPairCode();
       pairCodeEl.textContent = code;
@@ -154,13 +150,13 @@
     }catch(e){ LOG("Erreur création code: "+(e.message||e)); }
   };
 
-  supabase.auth.onAuthStateChange(async () => { await refreshUser(); });
+  supabase.auth.onAuthStateChange(async()=>{ await refreshUser(); });
 
-  // ====== EDGE create-pair-code ======
+  // ====== EDGE: create_pair_code ======
   async function createPairCode(){
     const { data:{ session } } = await supabase.auth.getSession();
     if (!session) throw new Error("Non connecté");
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/create-pair-code`, {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`, {
       method: "POST",
       headers: {
         "Content-Type":"application/json",
@@ -176,9 +172,10 @@
   // ====== DEVICES ======
   async function loadDevices(){
     if (!state.user) return;
+    // utilise la vue devices_status (is_online calculé)
     const { data, error } = await supabase
-      .from('devices')
-      .select('id,name,master_mac,last_seen,online,created_at')
+      .from('devices_status')
+      .select('id,name,master_mac,last_seen,is_online,created_at')
       .order('created_at', { ascending:false });
     if (error) { LOG("Devices load error: "+error.message); return; }
     state.devices = data || [];
@@ -191,62 +188,70 @@
     LOG(`[commands] ${action} envoyé à ${device_id}`);
   }
 
-async function deleteDevice(device_id){
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error("Non connecté");
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/release-device`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`,
-      'apikey': SUPABASE_ANON_KEY
-    },
-    body: JSON.stringify({ device_id })
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const out = await res.json();
-  LOG(`MASTER supprimé: ${device_id} (soft)`);
-}
+  async function deleteDevice(device_id){
+    const { data:{ session } } = await supabase.auth.getSession();
+    if (!session) throw new Error("Non connecté");
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`, {
+      method: "POST",
+      headers: {
+        "Content-Type":"application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+        "apikey": SUPABASE_ANON_KEY
+      },
+      body: JSON.stringify({ device_id })
+    });
+    if (!res.ok) {
+      let txt = "";
+      try { txt = await res.text(); } catch(_){}
+      throw new Error(txt || `HTTP ${res.status}`);
+    }
+    // tolère 204 No Content
+    try { await res.json(); } catch(_){}
+    LOG(`MASTER supprimé: ${device_id}`);
+  }
 
   function renderDevices(){
     devicesEl.innerHTML = "";
-    if (!state.devices.length){ devicesEl.append(el("div","muted","Aucun MASTER pour l’instant.")); return; }
+    if (!state.devices.length){
+      devicesEl.append(el("div","muted","Aucun MASTER pour l’instant."));
+      return;
+    }
 
     for (const d of state.devices){
       const card = el("div","card dev");
       const head = el("div","head");
       const title = el("div",null, d.name || d.id);
-      const badge = el("span","badge "+(isLive(d)?"on":"off"), isLive(d)?"En ligne":"Hors ligne");
+      const live = (d.is_online !== null && d.is_online !== undefined) ? d.is_online : isLiveFallback(d);
+      const badge = el("span","badge "+(live?"on":"off"), live?"En ligne":"Hors ligne");
       head.append(title, badge);
 
       const meta = el("div","meta");
       meta.append(
-        el("div",null, `ID: ${d.id}`),
-        el("div",null, `MAC: ${d.master_mac || "—"}`),
-        el("div",null, `Dernier contact: ${d.last_seen ? new Date(d.last_seen).toLocaleTimeString() : "jamais"}`)
+        el("div",null, `ID : ${d.id}`),
+        el("div",null, `MAC : ${d.master_mac || "—"}`),
+        el("div",null, `Dernier contact : ${d.last_seen ? new Date(d.last_seen).toLocaleTimeString() : "jamais"}`)
       );
 
       const actions = el("div","actions");
       const btnPulse = el("button",null,"Pulse 500ms");
-      btnPulse.onclick = () => sendCommand(d.id, "PULSE", { ms: 500 }).catch(e=>LOG("Err PULSE: "+e.message));
+      btnPulse.onclick = ()=> sendCommand(d.id, "PULSE", { ms: 500 }).catch(e=>LOG("Err PULSE: "+e.message));
 
       const btnOn = el("button",null,"Power ON");
-      btnOn.onclick = () => sendCommand(d.id, "POWER_ON", {}).catch(e=>LOG("Err ON: "+e.message));
+      btnOn.onclick = ()=> sendCommand(d.id, "POWER_ON", {}).catch(e=>LOG("Err ON: "+e.message));
 
       const btnOff = el("button",null,"Power OFF");
-      btnOff.onclick = () => sendCommand(d.id, "POWER_OFF", {}).catch(e=>LOG("Err OFF: "+e.message));
+      btnOff.onclick = ()=> sendCommand(d.id, "POWER_OFF", {}).catch(e=>LOG("Err OFF: "+e.message));
 
       const btnReset = el("button",null,"Reset");
-      btnReset.onclick = () => sendCommand(d.id, "RESET", {}).catch(e=>LOG("Err RESET: "+e.message));
+      btnReset.onclick = ()=> sendCommand(d.id, "RESET", {}).catch(e=>LOG("Err RESET: "+e.message));
 
       const btnDel = el("button","danger","Supprimer");
-      btnDel.onclick = async () => {
+      btnDel.onclick = async ()=>{
         if (!confirm(`Supprimer ${d.name || d.id} ?\nCette action le retirera de ton compte.`)) return;
-        try{ await deleteDevice(d.id); }catch(e){ LOG("Suppression refusée: "+(e.message||e)); }
+        try { await deleteDevice(d.id); } catch(e){ LOG("Suppression refusée: "+(e.message||e)); }
       };
 
       actions.append(btnPulse, btnOn, btnOff, btnReset, btnDel);
-
       card.append(head, meta, actions);
       devicesEl.append(card);
     }
@@ -259,22 +264,18 @@ async function deleteDevice(device_id){
 
     state.sub = supabase.channel('devs')
       .on('postgres_changes', { event:'*', schema:'public', table:'devices' }, () => loadDevices())
-      .subscribe((status) => { if (status === "SUBSCRIBED") LOG("Realtime devices: OK"); });
+      .on('postgres_changes', { event:'*', schema:'public', table:'commands' }, () => loadDevices())
+      .subscribe((status)=>{ if (status==="SUBSCRIBED") LOG("Realtime: OK"); });
 
     state.tick = setInterval(loadDevices, 15000); // fallback
   }
   function detachRealtime(){
-    if (state.sub){ supabase.removeChannel(state.sub); state.sub = null; }
-    if (state.tick){ clearInterval(state.tick); state.tick = null; }
+    if (state.sub){ supabase.removeChannel(state.sub); state.sub=null; }
+    if (state.tick){ clearInterval(state.tick); state.tick=null; }
   }
 
   // ====== INIT ======
-  (async () => {
-    LOG("UI prête");
-    await refreshUser();
-  })();
+  (async ()=>{ LOG("UI prête"); await refreshUser(); })();
 </script>
 </body>
 </html>
-
-
