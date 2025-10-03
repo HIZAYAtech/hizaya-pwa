@@ -188,27 +188,32 @@
     LOG(`[commands] ${action} envoyé à ${device_id}`);
   }
 
-  async function deleteDevice(device_id){
-    const { data:{ session } } = await supabase.auth.getSession();
+<script>
+async function deleteDevice(device_id){
+  try{
+    const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error("Non connecté");
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`, {
-      method: "POST",
+
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/delete-device`, {
+      method: 'POST',
       headers: {
-        "Content-Type":"application/json",
-        "Authorization": `Bearer ${session.access_token}`,
-        "apikey": SUPABASE_ANON_KEY
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': SUPABASE_ANON_KEY
       },
       body: JSON.stringify({ device_id })
     });
-    if (!res.ok) {
-      let txt = "";
-      try { txt = await res.text(); } catch(_){}
-      throw new Error(txt || `HTTP ${res.status}`);
-    }
-    // tolère 204 No Content
-    try { await res.json(); } catch(_){}
+
+    if (!res.ok) throw new Error(await res.text());
+    const out = await res.json(); // { ok: true }
     LOG(`MASTER supprimé: ${device_id}`);
+    await loadDevices(); // refresh UI
+  } catch(e){
+    LOG(`Suppression refusée: ${e?.message||e}`);
+    alert(`Suppression refusée: ${e?.message||e}`);
   }
+}
+</script>
 
   function renderDevices(){
     devicesEl.innerHTML = "";
@@ -279,3 +284,4 @@
 </script>
 </body>
 </html>
+
