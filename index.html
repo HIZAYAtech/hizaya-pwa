@@ -5,9 +5,9 @@
     <title>Remote Power • MASTER</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <style>
-      :root{--bg:#0f172a;--fg:#e2e8f0;--muted:#94a3b8;--card:#111827;--btn:#1f2937;--ok:#10b981;--ko:#ef4444}
+      :root{--bg:#0f172a;--fg:#e2e8f0;--muted:#94a3b8;--card:#111827;--btn:#1f2937}
       html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,Segoe UI,Roboto,Arial}
-      header{position:relative;z-index:10;display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #243045}
+      header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #243045}
       h1{font-size:18px;margin:0}
       .row{display:flex;gap:10px;align-items:center}
       button{background:var(--btn);border:1px solid #2b364c;border-radius:8px;color:var(--fg);padding:8px 12px;cursor:pointer}
@@ -31,13 +31,11 @@
       code{background:#0b1220;border:1px solid #243045;border-radius:6px;padding:2px 6px}
       dialog:not([open]){display:none}
     </style>
-
     <!-- UMD => window.supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   </head>
 
   <body>
-    <!-- ========= HEADER ========= -->
     <header>
       <h1>Remote Power • MASTER</h1>
       <div class="row">
@@ -47,10 +45,9 @@
       </div>
     </header>
 
-    <!-- ========= MAIN ========= -->
     <main>
       <div class="row" style="justify-content:space-between;margin-bottom:12px">
-        <div class="muted">Compte: <span id="who">—</span></div>
+        <div class="muted">Compte : <span id="who">—</span></div>
         <div class="row">
           <button id="btnAdd" class="primary" type="button" onclick="onAddClick()">Ajouter un MASTER</button>
           <button id="btnRefresh" type="button" onclick="loadDevices()">Rafraîchir</button>
@@ -63,255 +60,227 @@
       <div id="log" class="log"></div>
     </main>
 
-    <!-- ========= DIALOG : Pair code ========= -->
+    <!-- Dialog pair code -->
     <dialog id="dlgPair">
       <div class="dlg">
         <h3>Appairer un MASTER</h3>
         <div>Code à 6 chiffres (valide <span id="pairExpires" class="muted"></span>) :</div>
-        <div style="font-size:28px;letter-spacing:4px;text-align:center">
-          <code id="pairCode">······</code>
-        </div>
-        <div class="muted">
-          Sur l’ESP32 (portail Wi-Fi) : saisis ton Wi-Fi + ce code. Rien d’autre.
-        </div>
-        <div class="row" style="justify-content:flex-end">
-          <button type="button" onclick="document.getElementById('dlgPair').close()">Fermer</button>
-        </div>
+        <div style="font-size:28px;letter-spacing:4px;text-align:center"><code id="pairCode">······</code></div>
+        <div class="muted">Sur l’ESP32 (portail Wi-Fi) : saisis ton Wi-Fi + ce code. Rien d’autre.</div>
+        <div class="row" style="justify-content:flex-end"><button type="button" onclick="dlgPair.close()">Fermer</button></div>
       </div>
     </dialog>
 
-    <!-- ========= SCRIPT PRINCIPAL ========= -->
     <script>
-      /* ===== CONFIG SUPABASE ===== */
+      /* ========== CONFIG ========== */
       const SUPABASE_URL      = "https://zeknluovgbsmtgupwkvo.supabase.co";
-      const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4"; // ← ta vraie clé ici
+      const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4"; // ← remplace par ta clé anon
 
-      /* ===== SETUP ===== */
-      const LOG = (msg) => {
+      /* ========== INIT SUPABASE ========== */
+      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+      /* ========== PERSISTENCE SESSION (cookie fallback) ========== */
+      const COOKIE_NAME = "sb-master-session";
+
+      // 1) Si un cookie existe → restaure la session
+      (() => {
+        const raw = document.cookie.split("; ").find(c => c.startsWith(COOKIE_NAME+"="));
+        if (!raw) return;
+        try {
+          const sess = JSON.parse(decodeURIComponent(raw.split("=")[1]));
+          // supabase-js v2 : setSession({ access_token, refresh_token })
+          supabase.auth.setSession(sess).catch(console.error);
+        } catch(e){ console.error("cookie parse", e); }
+      })();
+
+      // 2) À chaque changement d'état auth → écrit / supprime le cookie
+      supabase.auth.onAuthStateChange((_evt, session) => {
+        if (session) {
+          const maxAge = 7*24*3600; // 7 jours
+          document.cookie =
+            `${COOKIE_NAME}=${encodeURIComponent(JSON.stringify(session))};`
+          + ` Max-Age=${maxAge}; Path=/; SameSite=Lax`;
+        } else {
+          document.cookie = `${COOKIE_NAME}=; Max-Age=0; Path=/; SameSite=Lax`;
+        }
+      });
+
+      /* ========== LOG UTILITY ========== */
+      const LOG = msg => {
         const el = document.getElementById("log");
-        el.textContent += new Date().toLocaleTimeString() + "  " + msg + "\n";
+        el.textContent += new Date().toLocaleTimeString()+"  "+msg+"\n";
         el.scrollTop = el.scrollHeight;
         console.log("[UI]", msg);
       };
 
-      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      /* ========== DOM REFS ========== */
+      const devicesEl     = document.getElementById("devices");
+      const whoEl         = document.getElementById("who");
+      const userEmailEl   = document.getElementById("userEmail");
+      const dlgPair       = document.getElementById("dlgPair");
+      const pairCodeEl    = document.getElementById("pairCode");
+      const pairExpiresEl = document.getElementById("pairExpires");
 
-      /* ===== DOM refs ===== */
-      const devicesEl      = document.getElementById("devices");
-      const whoEl          = document.getElementById("who");
-      const userEmailEl    = document.getElementById("userEmail");
-      const dlgPair        = document.getElementById("dlgPair");
-      const pairCodeEl     = document.getElementById("pairCode");
-      const pairExpiresEl  = document.getElementById("pairExpires");
+      /* ========== HELPERS ========== */
+      const el     = (tag, cls, txt)=>{const e=document.createElement(tag);if(cls) e.className=cls;if(txt!==undefined) e.textContent=txt;return e;};
+      const isLive = d => d.last_seen && Date.now()-new Date(d.last_seen).getTime()<25_000;
+      const pad6   = n => String(n).padStart(6,"0");
 
-      /* ===== ÉTAT GLOBAL ===== */
-      let state = {
-        user:               null,
-        devices:            [],
-        realtimeSub:        null,
-        refreshTimer:       null,
-        countdownTimer:     null
-      };
+      /* ========== GLOBAL STATE ========== */
+      let state = { user:null, devices:[], sub:null, tick:null, countdownTimer:null };
 
-      /* ===== PETITES UTILS ===== */
-      const el = (tag, cls, txt) => {
-        const e = document.createElement(tag);
-        if (cls) e.className = cls;
-        if (txt !== undefined) e.textContent = txt;
-        return e;
-      };
-      const isLive     = (d) => d.last_seen && Date.now() - new Date(d.last_seen).getTime() < 25_000;
-      const pad6       = (n) => String(n).padStart(6, "0");
-      const q          = (sel) => document.querySelector(sel);
-
-      /* ===== AUTH ===== */
-      async function refreshUser() {
-        const { data: { user } } = await supabase.auth.getUser();
+      /* ========== AUTH FLOW ========== */
+      async function refreshUser(){
+        const { data:{ user } } = await supabase.auth.getUser();
         state.user = user;
 
-        userEmailEl.textContent                    = user ? (user.email || "(connecté)") : "non connecté";
-        q("#btnLogin").style.display               = user ? "none"         : "inline-block";
-        q("#btnLogout").style.display              = user ? "inline-block" : "none";
-        whoEl.textContent                          = user ? user.email     : "—";
+        userEmailEl.textContent         = user ? (user.email || "(connecté)") : "non connecté";
+        document.getElementById("btnLogin").style.display  = user ? "none":"inline-block";
+        document.getElementById("btnLogout").style.display = user ? "inline-block":"none";
+        whoEl.textContent = user? user.email:"—";
 
-        if (user) {
-          await attachRealtime();
-          await loadDevices();
-        } else {
-          detachRealtime();
-          devicesEl.innerHTML = "";
-        }
+        if(user){ await attachRealtime(); await loadDevices(); }
+        else    { detachRealtime(); devicesEl.innerHTML=""; }
       }
-
-      window.onLoginClick = async (ev) => {
-        ev?.preventDefault();
-        LOG("Connexion Google…");
-        const { data, error } = await supabase.auth.signInWithOAuth({
-          provider: "google",
-          options: {
-            redirectTo: location.origin + location.pathname,
-            queryParams: { prompt: "select_account" },
-            skipBrowserRedirect: true
-          }
-        });
-        if (error) return alert(error.message);
-        if (data?.url) window.location = data.url;
-      };
-
-      window.onLogoutClick = async () => {
-        await supabase.auth.signOut();
-        LOG("Déconnecté");
-      };
 
       supabase.auth.onAuthStateChange(refreshUser);
 
-      /* ===== EDGE FUNCTION : create_pair_code ===== */
-      async function createPairCode() {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error("Non connecté");
-
-        const r = await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-            apikey: SUPABASE_ANON_KEY
-          },
-          body: JSON.stringify({ ttl_minutes: 10 })
+      window.onLoginClick = async ev=>{
+        ev?.preventDefault();
+        LOG("Connexion Google…");
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider:"google",
+          options:{ redirectTo:location.origin+location.pathname, queryParams:{ prompt:"select_account" }, skipBrowserRedirect:true }
         });
-        if (!r.ok) throw new Error(await r.text());
-        return r.json();   // { code, expires_at }
+        if(error) return alert(error.message);
+        if(data?.url) location.href = data.url;
+      };
+
+      window.onLogoutClick = async ()=>{ await supabase.auth.signOut(); LOG("Déconnecté"); };
+
+      /* ========== EDGE: create_pair_code ========== */
+      async function createPairCode(){
+        const { data:{ session } } = await supabase.auth.getSession();
+        if(!session) throw new Error("Non connecté");
+        const r = await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`,{
+          method:"POST",
+          headers:{ "Content-Type":"application/json", Authorization:`Bearer ${session.access_token}`, apikey:SUPABASE_ANON_KEY },
+          body:JSON.stringify({ ttl_minutes:10 })
+        });
+        if(!r.ok) throw new Error(await r.text());
+        return await r.json(); // { code, expires_at }
       }
 
-      /* ===== DEVICES ===== */
-      async function loadDevices() {
-        if (!state.user) return;
-        const { data, error } = await supabase
-          .from("devices")
+      /* ========== DEVICES CRUD ========== */
+      async function loadDevices(){
+        if(!state.user) return;
+        const { data, error } = await supabase.from("devices")
           .select("id,name,master_mac,last_seen,online,created_at")
-          .order("created_at", { ascending: false });
-        if (error) { LOG("Erreur chargement: " + error.message); return; }
-        state.devices = data || [];
+          .order("created_at",{ ascending:false });
+        if(error){ LOG("Erreur chargement: "+error.message); return; }
+        state.devices = data||[];
         renderDevices();
       }
 
-      async function sendCommand(device_id, action, payload = {}) {
+      async function sendCommand(device_id, action, payload={}){
         const { error } = await supabase.from("commands").insert({ device_id, action, payload });
-        if (error) throw error;
+        if(error) throw error;
         LOG(`[cmd] ${action} -> ${device_id}`);
       }
 
-      async function deleteDevice(device_id) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error("Non connecté");
-        const r = await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-            apikey: SUPABASE_ANON_KEY
-          },
-          body: JSON.stringify({ device_id })
+      async function deleteDevice(device_id){
+        const { data:{ session } } = await supabase.auth.getSession();
+        if(!session) throw new Error("Non connecté");
+        const r = await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`,{
+          method:"POST",
+          headers:{ "Content-Type":"application/json", Authorization:`Bearer ${session.access_token}`, apikey:SUPABASE_ANON_KEY },
+          body:JSON.stringify({ device_id })
         });
-        if (!r.ok) throw new Error(await r.text());
+        if(!r.ok) throw new Error(await r.text());
         LOG(`MASTER supprimé: ${device_id}`);
       }
 
-      /* ===== RENDER ===== */
-      function renderDevices() {
-        devicesEl.innerHTML = "";
-        if (!state.devices.length) {
-          devicesEl.append(el("div", "muted", "Aucun MASTER pour l’instant."));
+      /* ========== UI RENDERING ========== */
+      function renderDevices(){
+        devicesEl.innerHTML="";
+        if(!state.devices.length){
+          devicesEl.append(el("div","muted","Aucun MASTER pour l’instant."));
           return;
         }
-
-        for (const d of state.devices) {
-          const card  = el("div", "card dev");
-          const head  = el("div", "head");
-          const title = el("div", null, d.name || d.id);
+        for(const d of state.devices){
+          const card  = el("div","card dev");
+          const head  = el("div","head");
+          const title = el("div",null,d.name||d.id);
           const live  = isLive(d);
-          const badge = el("span", "badge " + (live ? "on" : "off"), live ? "En ligne" : "Hors ligne");
-          head.append(title, badge);
+          const badge = el("span","badge "+(live?"on":"off"), live?"En ligne":"Hors ligne");
+          head.append(title,badge);
 
-          const meta = el("div", "meta");
+          const meta = el("div","meta");
           meta.append(
-            el("div", null, `ID : ${d.id}`),
-            el("div", null, `MAC : ${d.master_mac || "—"}`),
-            el("div", null, `Dernier contact : ${d.last_seen ? new Date(d.last_seen).toLocaleTimeString() : "jamais"}`)
+            el("div",null,`ID : ${d.id}`),
+            el("div",null,`MAC : ${d.master_mac||"—"}`),
+            el("div",null,`Dernier contact : ${d.last_seen? new Date(d.last_seen).toLocaleTimeString():"jamais"}`)
           );
 
-          /* ----- actions ----- */
-          const actions  = el("div", "actions");
-          const mkBtn    = (txt, cb, klass) => { const b=el("button", klass, txt); b.onclick=cb; return b; };
-
+          const btn = (txt,cb,cls)=>{const b=el("button",cls,txt);b.onclick=cb;return b;};
+          const actions = el("div","actions");
           actions.append(
-            mkBtn("Pulse 500ms", () => sendCommand(d.id, "PULSE",    { ms: 500 }).catch(e => LOG(e.message))),
-            mkBtn("Power ON",   () => sendCommand(d.id, "POWER_ON").catch(e => LOG(e.message))),
-            mkBtn("Power OFF",  () => sendCommand(d.id, "POWER_OFF").catch(e => LOG(e.message))),
-            mkBtn("Reset",      () => sendCommand(d.id, "RESET").catch(e => LOG(e.message))),
-            mkBtn("Supprimer",  async () => {
-              if (!confirm(`Supprimer ${d.name || d.id} ?`)) return;
-              try { await deleteDevice(d.id); } catch (e) { LOG("Suppression refusée: " + (e.message || e)); }
+            btn("Pulse 500 ms", ()=>sendCommand(d.id,"PULSE",{ms:500}).catch(e=>LOG(e.message))),
+            btn("Power ON",     ()=>sendCommand(d.id,"POWER_ON").catch(e=>LOG(e.message))),
+            btn("Power OFF",    ()=>sendCommand(d.id,"POWER_OFF").catch(e=>LOG(e.message))),
+            btn("Reset",        ()=>sendCommand(d.id,"RESET").catch(e=>LOG(e.message))),
+            btn("Supprimer",    async ()=>{
+              if(!confirm(`Supprimer ${d.name||d.id} ?`)) return;
+              try{ await deleteDevice(d.id);}catch(e){ LOG("Suppression refusée : "+(e.message||e)); }
             }, "danger")
           );
 
-          card.append(head, meta, actions);
+          card.append(head,meta,actions);
           devicesEl.append(card);
         }
       }
 
-      /* ===== REALTIME & POLLING ===== */
-      async function attachRealtime() {
+      /* ========== REALTIME ========== */
+      async function attachRealtime(){
         detachRealtime();
-        if (!state.user) return;
-
-        state.realtimeSub = supabase
-          .channel("devs")
-          .on("postgres_changes", { event: "*", schema: "public", table: "devices" }, loadDevices)
-          .subscribe(status => { if (status === "SUBSCRIBED") LOG("Realtime devices: OK"); });
-
-        state.refreshTimer = setInterval(loadDevices, 15_000);
+        if(!state.user) return;
+        state.sub = supabase.channel("devs")
+          .on("postgres_changes",{ event:"*", schema:"public", table:"devices" }, loadDevices)
+          .subscribe(s=>{ if(s==="SUBSCRIBED") LOG("Realtime devices : OK"); });
+        state.tick = setInterval(loadDevices,15000);
+      }
+      function detachRealtime(){
+        if(state.sub){ supabase.removeChannel(state.sub); state.sub=null; }
+        if(state.tick){ clearInterval(state.tick); state.tick=null; }
       }
 
-      function detachRealtime() {
-        if (state.realtimeSub) { supabase.removeChannel(state.realtimeSub); state.realtimeSub = null; }
-        if (state.refreshTimer) { clearInterval(state.refreshTimer); state.refreshTimer = null; }
-      }
-
-      /* ===== DIALOG / COUNTDOWN ===== */
-      function startCountdown(expiresISO) {
+      /* ========== COUNTDOWN DIALOG ========== */
+      function startCountdown(expiresISO){
         const end = new Date(expiresISO).getTime();
-        const update = () => {
-          const left = Math.max(0, Math.floor((end - Date.now()) / 1000));
-          const m = Math.floor(left / 60), s = left % 60;
-          pairExpiresEl.textContent = `${m}:${String(s).padStart(2, "0")}`;
-          if (left <= 0 && state.countdownTimer) { clearInterval(state.countdownTimer); state.countdownTimer = null; }
+        const tick = ()=>{
+          const left=Math.max(0,Math.floor((end-Date.now())/1000));
+          const m=Math.floor(left/60), s=left%60;
+          pairExpiresEl.textContent=`${m}:${String(s).padStart(2,"0")}`;
+          if(left<=0 && state.countdownTimer){ clearInterval(state.countdownTimer); state.countdownTimer=null; }
         };
-        if (state.countdownTimer) clearInterval(state.countdownTimer);
-        update();
-        state.countdownTimer = setInterval(update, 1_000);
+        if(state.countdownTimer) clearInterval(state.countdownTimer);
+        tick(); state.countdownTimer=setInterval(tick,1000);
       }
 
-      /* ===== HANDLERS ===== */
-      window.onAddClick = async () => {
-        try {
+      /* ========== UI HANDLERS ========== */
+      window.onAddClick = async ()=>{
+        try{
           const { code, expires_at } = await createPairCode();
-          const codeStr = pad6(code);
-          pairCodeEl.textContent = codeStr;
+          const cstr = pad6(code);
+          pairCodeEl.textContent = cstr;
           startCountdown(expires_at);
           dlgPair.showModal();
-          LOG(`Code d'appairage: ${codeStr} (expire ${new Date(expires_at).toLocaleTimeString()})`);
-        } catch (e) {
-          LOG("Erreur création code: " + (e.message || e));
-          alert("Erreur création du code.");
-        }
+          LOG(`Code d'appairage : ${cstr} (expire ${new Date(expires_at).toLocaleTimeString()})`);
+        }catch(e){ LOG("Erreur création code : "+(e.message||e)); alert("Erreur création du code."); }
       };
 
-      /* ===== BOOTSTRAP ===== */
-      (async () => {
-        LOG("UI prête");
-        await refreshUser();
-      })();
+      /* ========== BOOTSTRAP ========== */
+      (async ()=>{ LOG("UI prête"); await refreshUser(); })();
     </script>
   </body>
 </html>
