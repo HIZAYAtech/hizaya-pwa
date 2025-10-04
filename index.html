@@ -123,22 +123,33 @@ async function loadDevices(){
 }
 
 /* ---------- Send / delete ---------- */
-async function sendCommand(id,action,payload={}){
-  const { error } = await supabase.from("commands").insert({ device_id:id, action, payload });
-  if(error) throw error; log(`[cmd] ${action} -> ${id}`);
+async function sendCommand(id, action, payload = {}){
+  const { error } = await supabase
+    .from("commands")
+    .insert({ master_id: id, action, payload });        // ← master_id
+  if(error) throw error;
+  log(`[cmd] ${action} → ${id}`);
 }
 async function deleteDevice(id){
   const { data:{ session } } = await supabase.auth.getSession();
   if(!session) return;
   const r = await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`,{
     method:"POST",
-    headers:{ "Content-Type":"application/json", Authorization:`Bearer ${session.access_token}`, apikey:SUPABASE_ANON_KEY },
-    body: JSON.stringify({ master_id: device_id })
+    headers:{
+      "Content-Type":"application/json",
+      Authorization:`Bearer ${session.access_token}`,
+      apikey:SUPABASE_ANON_KEY
+    },
+    body: JSON.stringify({ master_id: id })              // ← correct
   });
-  if(!r.ok) log(await r.text()); else log(`MASTER supprimé : ${id}`);
+  if(!r.ok){
+    log(`❌ Suppression refusée : ${await r.text()}`);
+  }else{
+    log(`MASTER supprimé : ${id}`);
+  }
 }
 
-/* ---------- RENDER (avec tous les boutons) ---------- */
+/* ---------- RENDER ---------- */
 function render(){
   devicesEl.innerHTML = "";
   if(!devices.length){ devicesEl.textContent="Aucun MASTER."; return; }
@@ -160,13 +171,20 @@ function render(){
       <div class="actions"></div>
     `;
     const actions = card.querySelector(".actions");
-    const btn = (txt,cls,cb)=>{const b=document.createElement("button");b.textContent=txt;if(cls)b.className=cls;b.onclick=cb;actions.appendChild(b);};
+    const btn = (txt,cls,cb)=>{
+      const b=document.createElement("button");
+      b.textContent=txt;
+      if(cls)b.className=cls;
+      b.onclick=cb;
+      actions.appendChild(b);
+    };
 
     btn("Pulse 500 ms","",()=>sendCommand(d.id,"PULSE",{ms:500}).catch(e=>log(e.message)));
     btn("Power ON","",()=>sendCommand(d.id,"POWER_ON").catch(e=>log(e.message)));
     btn("Power OFF","",()=>sendCommand(d.id,"POWER_OFF").catch(e=>log(e.message)));
     btn("Reset","",()=>sendCommand(d.id,"RESET").catch(e=>log(e.message)));
-    btn("Supprimer","danger",()=>{if(confirm(`Supprimer ${d.name||d.id} ?`)) deleteDevice(d.id).catch(e=>log(e.message));});
+    btn("Supprimer","danger",
+        ()=>{ if(confirm(`Supprimer ${d.name||d.id} ?`)) deleteDevice(d.id); });
 
     devicesEl.append(card);
   }
@@ -178,14 +196,21 @@ async function onAdd(){
   if(!session){ alert("Non connecté"); return; }
   const r = await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`,{
     method:"POST",
-    headers:{ "Content-Type":"application/json", Authorization:`Bearer ${session.access_token}`, apikey:SUPABASE_ANON_KEY },
+    headers:{
+      "Content-Type":"application/json",
+      Authorization:`Bearer ${session.access_token}`,
+      apikey:SUPABASE_ANON_KEY
+    },
     body:JSON.stringify({ ttl_minutes:10 })
   });
   if(!r.ok){ alert(await r.text()); return; }
   const { code, expires_at } = await r.json();
   $("pairCode").textContent = pad6(code);
   const end = new Date(expires_at).getTime();
-  const tick = ()=>{ const l=Math.max(0,Math.floor((end-Date.now())/1000)); $("pairExpires").textContent=`${Math.floor(l/60)}:${String(l%60).padStart(2,'0')}`; };
+  const tick = ()=>{
+    const left=Math.max(0,Math.floor((end-Date.now())/1000));
+    $("pairExpires").textContent=`${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`;
+  };
   tick(); setInterval(tick,1000);
   $("dlgPair").showModal();
 }
@@ -203,4 +228,3 @@ log("UI prête");
 </script>
 </body>
 </html>
-
