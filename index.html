@@ -5,7 +5,6 @@
   <title>Remote Power • MASTER</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    /* --- même feuille de styles que d’habitude (raccourcie ici) --- */
     :root{--bg:#0f172a;--fg:#e2e8f0;--muted:#94a3b8;--card:#111827;--btn:#1f2937}
     html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,Segoe UI,Roboto,Arial}
     header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #243045}
@@ -73,35 +72,36 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 /* ---------- INIT ---------- */
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-/* ---------- DOM refs & utils ---------- */
+/* ---------- DOM refs ---------- */
 const $ = id => document.getElementById(id);
-const log = msg => { $('log').textContent += new Date().toLocaleTimeString()+"  "+msg+"\n"; };
-const isLive = d => d.last_seen && Date.now() - new Date(d.last_seen).getTime() < 25_000;
-const pad6 = n => String(n).padStart(6,"0");
+const devicesEl = $("devices");
 
-/* ---------- GLOBAL STATE ---------- */
+/* ---------- Utils ---------- */
+const log = m => { $('log').textContent += new Date().toLocaleTimeString()+"  "+m+"\n"; };
+const isLive = d => d.last_seen && Date.now() - new Date(d.last_seen).getTime() < 25_000;
+const pad6  = n => String(n).padStart(6,"0");
+
+/* ---------- Global ---------- */
 let devices = [];
 let sub = null, tick = null;
 
-/* ---------- AUTH --------- */
+/* ---------- Auth ---------- */
 function updateAuthUI(user){
-  $('userEmail').textContent = user ? user.email : "non connecté";
-  $('btnLogin').style.display  = user ? "none":"inline-block";
-  $('btnLogout').style.display = user ? "inline-block":"none";
-  $('who').textContent = user ? user.email : "—";
+  $("userEmail").textContent = user ? user.email : "non connecté";
+  $("btnLogin").style.display  = user ? "none":"inline-block";
+  $("btnLogout").style.display = user ? "inline-block":"none";
+  $("who").textContent = user ? user.email : "—";
 }
-
 async function onLogin(){
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider:"google",
     options:{ redirectTo:location.origin+location.pathname, queryParams:{ prompt:"select_account" }, skipBrowserRedirect:true }
   });
-  if(error) alert(error.message);
-  else if(data?.url) location.href = data.url;
+  if(error) alert(error.message); else if(data?.url) location.href=data.url;
 }
 const onLogout = () => supabase.auth.signOut();
 
-/* ---------- REALTIME & LOAD ---------- */
+/* ---------- Realtime & load ---------- */
 async function attachRealtime(){
   detachRealtime();
   sub = supabase.channel('devs')
@@ -122,56 +122,84 @@ async function loadDevices(){
   devices = data||[]; render();
 }
 
-/* ---------- RENDER ---------- */
+/* ---------- Send / delete ---------- */
+async function sendCommand(id,action,payload={}){
+  const { error } = await supabase.from("commands").insert({ device_id:id, action, payload });
+  if(error) throw error; log(`[cmd] ${action} -> ${id}`);
+}
+async function deleteDevice(id){
+  const { data:{ session } } = await supabase.auth.getSession();
+  if(!session) return;
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`,{
+    method:"POST",
+    headers:{ "Content-Type":"application/json", Authorization:`Bearer ${session.access_token}`, apikey:SUPABASE_ANON_KEY },
+    body:JSON.stringify({ device_id:id })
+  });
+  if(!r.ok) log(await r.text()); else log(`MASTER supprimé : ${id}`);
+}
+
+/* ---------- RENDER (avec tous les boutons) ---------- */
 function render(){
-  const root = $('devices'); root.innerHTML="";
-  if(!devices.length){ root.textContent="Aucun MASTER."; return; }
+  devicesEl.innerHTML = "";
+  if(!devices.length){ devicesEl.textContent="Aucun MASTER."; return; }
+
   for(const d of devices){
-    const card = document.createElement('div'); card.className='card dev';
+    const live = isLive(d);
+    const card = document.createElement("div");
+    card.className = "card dev";
     card.innerHTML = `
       <div class="head">
         <div>${d.name||d.id}</div>
-        <span class="badge ${isLive(d)?'on':'off'}">${isLive(d)?'En ligne':'Hors ligne'}</span>
+        <span class="badge ${live?'on':'off'}">${live?'En ligne':'Hors ligne'}</span>
       </div>
       <div class="meta">
         <div>ID : ${d.id}</div>
         <div>MAC : ${d.master_mac||'—'}</div>
         <div>Dernier contact : ${d.last_seen?new Date(d.last_seen).toLocaleTimeString():'jamais'}</div>
       </div>
+      <div class="actions"></div>
     `;
-    root.append(card);
+    const actions = card.querySelector(".actions");
+    const btn = (txt,cls,cb)=>{const b=document.createElement("button");b.textContent=txt;if(cls)b.className=cls;b.onclick=cb;actions.appendChild(b);};
+
+    btn("Pulse 500 ms","",()=>sendCommand(d.id,"PULSE",{ms:500}).catch(e=>log(e.message)));
+    btn("Power ON","",()=>sendCommand(d.id,"POWER_ON").catch(e=>log(e.message)));
+    btn("Power OFF","",()=>sendCommand(d.id,"POWER_OFF").catch(e=>log(e.message)));
+    btn("Reset","",()=>sendCommand(d.id,"RESET").catch(e=>log(e.message)));
+    btn("Supprimer","danger",()=>{if(confirm(`Supprimer ${d.name||d.id} ?`)) deleteDevice(d.id).catch(e=>log(e.message));});
+
+    devicesEl.append(card);
   }
 }
 
-/* ---------- PAIR CODE ---------- */
+/* ---------- Pair code ---------- */
 async function onAdd(){
   const { data:{ session } } = await supabase.auth.getSession();
   if(!session){ alert("Non connecté"); return; }
   const r = await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`,{
-    method:'POST',
-    headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`,apikey:SUPABASE_ANON_KEY},
-    body:JSON.stringify({ttl_minutes:10})
+    method:"POST",
+    headers:{ "Content-Type":"application/json", Authorization:`Bearer ${session.access_token}`, apikey:SUPABASE_ANON_KEY },
+    body:JSON.stringify({ ttl_minutes:10 })
   });
   if(!r.ok){ alert(await r.text()); return; }
   const { code, expires_at } = await r.json();
-  $('pairCode').textContent = pad6(code);
+  $("pairCode").textContent = pad6(code);
   const end = new Date(expires_at).getTime();
-  const tick = ()=>{ const l=Math.max(0,Math.floor((end-Date.now())/1000)); $('pairExpires').textContent=`${Math.floor(l/60)}:${String(l%60).padStart(2,'0')}`; };
+  const tick = ()=>{ const l=Math.max(0,Math.floor((end-Date.now())/1000)); $("pairExpires").textContent=`${Math.floor(l/60)}:${String(l%60).padStart(2,'0')}`; };
   tick(); setInterval(tick,1000);
-  $('dlgPair').showModal();
+  $("dlgPair").showModal();
 }
 
-/* ---------- INITIAL SESSION LISTENER ---------- */
-supabase.auth.onAuthStateChange((event, session)=>{
-  if(event === "INITIAL_SESSION"){
+/* ---------- Initial session ---------- */
+supabase.auth.onAuthStateChange((evt,session)=>{
+  if(evt==="INITIAL_SESSION"){
     updateAuthUI(session?.user ?? null);
     if(session?.user){ attachRealtime(); loadDevices(); }
   }
 });
 
-/* Boot log */
+/* ---------- Boot log ---------- */
 log("UI prête");
 </script>
 </body>
 </html>
-
