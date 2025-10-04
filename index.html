@@ -31,7 +31,6 @@
     code{background:#0b1220;border:1px solid #243045;border-radius:6px;padding:2px 6px}
     dialog:not([open]){display:none}
   </style>
-  <!-- UMD => window.supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 
@@ -65,118 +64,100 @@
     <h3>Appairer un MASTER</h3>
     <div>Code à 6 chiffres (valide <span id="pairExpires" class="muted"></span>) :</div>
     <div style="font-size:28px;letter-spacing:4px;text-align:center"><code id="pairCode">······</code></div>
-    <div class="muted">Sur l’ESP32 (portail Wi-Fi) : saisis ton Wi-Fi + ce code.</div>
+    <div class="muted">Sur l’ESP32 : sélectionne ton Wi-Fi, puis saisis ce code.</div>
     <div class="row" style="justify-content:flex-end"><button type="button" onclick="dlgPair.close()">Fermer</button></div>
   </div>
 </dialog>
 
 <script>
-/* ========== CONFIG ========== */
+/* ===== CONFIG ===== */
 const SUPABASE_URL      = "https://zeknluovgbsmtgupwkvo.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4";   // ← ta vraie clé anon
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4";   // ← ta clé anon complète
 
-/* ========== INIT SUPABASE ========== */
+/* ===== INIT ===== */
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-/* ========== SESSION ↔ COOKIE (compact < 4 kio) ========== */
-const CK = "sb_master_tok";
-
-/* Restaurer au démarrage */
-{
-  const raw = document.cookie.split("; ").find(c => c.startsWith(CK+"="));
-  if (raw){
-    try {
-      const {a,r} = JSON.parse(atob(raw.split("=")[1]));
-      if(a&&r) supabase.auth.setSession({ access_token:a, refresh_token:r });
-    } catch(e){ console.warn("cookie parse",e); }
-  }
-}
-
-/* Écrire / supprimer à chaque changement d’état */
-supabase.auth.onAuthStateChange((_evt,session)=>{
-  if(session){
-    const data = { a:session.access_token, r:session.refresh_token };
-    document.cookie = `${CK}=${btoa(JSON.stringify(data))}; Max-Age=${7*24*3600}; Path=/; SameSite=Lax`;
-  }else{
-    document.cookie = `${CK}=; Max-Age=0; Path=/; SameSite=Lax`;
-  }
-});
-
-/* ========== UTILS / STATE ========== */
-const LOG = m=>{const e=document.getElementById("log");e.textContent+=new Date().toLocaleTimeString()+"  "+m+"\n";e.scrollTop=e.scrollHeight;};
-const el   =(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!==void 0)e.textContent=x;return e;};
-const pad6 = n=>String(n).padStart(6,"0");
-const isLive=d=>d.last_seen && Date.now()-new Date(d.last_seen).getTime()<25000;
-
+/* ===== STATE & UTILS ===== */
+const devicesEl = document.getElementById("devices");
+const LOG=(m)=>{const l=document.getElementById("log");l.textContent+=new Date().toLocaleTimeString()+"  "+m+"\n";l.scrollTop=l.scrollHeight;};
+const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!==undefined)e.textContent=x;return e;};
+const pad6=n=>String(n).padStart(6,"0");
+const isLive=d=>d.last_seen && Date.now()-new Date(d.last_seen).getTime()<25_000;
 let state={user:null,devices:[],sub:null,tick:null,cd:null};
 
-/* ========== AUTH ========= */
+/* ===== AUTH ===== */
 async function refreshUser(){
-  const {data:{user}} = await supabase.auth.getUser();
+  const { data:{ session } } = await supabase.auth.getSession();   // ← charge la session
+  const user = session?.user ?? null;
   state.user=user;
-  document.getElementById("userEmail").textContent=user?(user.email||"(connecté)"):"non connecté";
+
+  document.getElementById("userEmail").textContent=user?user.email:"non connecté";
   document.getElementById("btnLogin").style.display = user?"none":"inline-block";
   document.getElementById("btnLogout").style.display= user?"inline-block":"none";
   document.getElementById("who").textContent=user?user.email:"—";
-  if(user){attachRealtime();loadDevices();}
-  else{detachRealtime();devicesEl.innerHTML="";}
-}
-supabase.auth.onAuthStateChange(refreshUser);
 
-window.onLoginClick=async ev=>{
+  if(user){ attachRealtime(); loadDevices(); }
+  else     { detachRealtime(); devicesEl.innerHTML=""; }
+}
+supabase.auth.onAuthStateChange(()=>refreshUser());
+
+window.onLoginClick=async(ev)=>{
   ev?.preventDefault();
-  const {data,error}=await supabase.auth.signInWithOAuth({
+  const { data, error } = await supabase.auth.signInWithOAuth({
     provider:"google",
-    options:{redirectTo:location.origin+location.pathname,queryParams:{prompt:"select_account"},skipBrowserRedirect:true}
+    options:{ redirectTo:location.origin+location.pathname, queryParams:{ prompt:"select_account" }, skipBrowserRedirect:true }
   });
   if(error) return alert(error.message);
   if(data?.url) location.href=data.url;
 };
 window.onLogoutClick=()=>supabase.auth.signOut();
 
-/* ========== EDGE create_pair_code ========= */
+/* ===== EDGE create_pair_code ===== */
 async function createPairCode(){
-  const {data:{session}}=await supabase.auth.getSession();
+  const { data:{ session } } = await supabase.auth.getSession();
   if(!session) throw new Error("Non connecté");
   const r = await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`,{
     method:"POST",
     headers:{ "Content-Type":"application/json", Authorization:`Bearer ${session.access_token}`, apikey:SUPABASE_ANON_KEY },
-    body:JSON.stringify({ttl_minutes:10})
+    body:JSON.stringify({ ttl_minutes:10 })
   });
   if(!r.ok) throw new Error(await r.text());
-  return r.json();        // {code,expires_at}
+  return r.json();  // { code, expires_at }
 }
 
-/* ========== DEVICES CRUD ========= */
+/* ===== DEVICES ===== */
 async function loadDevices(){
   if(!state.user) return;
-  const {data,error}=await supabase.from("devices")
+  const { data, error } = await supabase
+    .from("devices")
     .select("id,name,master_mac,last_seen,online,created_at")
     .order("created_at",{ascending:false});
   if(error){LOG("Erreur chargement : "+error.message);return;}
   state.devices=data||[]; renderDevices();
 }
 async function sendCommand(id,action,payload={}){
-  const {error}=await supabase.from("commands").insert({device_id:id,action,payload});
+  const { error } = await supabase.from("commands").insert({ device_id:id, action, payload });
   if(error) throw error; LOG(`[cmd] ${action} -> ${id}`);
 }
 async function deleteDevice(id){
-  const {data:{session}}=await supabase.auth.getSession();
+  const { data:{ session } } = await supabase.auth.getSession();
   if(!session) throw new Error("Non connecté");
-  const r=await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`,{
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`,{
     method:"POST",
     headers:{ "Content-Type":"application/json", Authorization:`Bearer ${session.access_token}`, apikey:SUPABASE_ANON_KEY },
-    body:JSON.stringify({device_id:id})
+    body:JSON.stringify({ device_id:id })
   });
   if(!r.ok) throw new Error(await r.text());
   LOG(`MASTER supprimé : ${id}`);
 }
 
-/* ========== RENDER ========= */
-const devicesEl=document.getElementById("devices");
+/* ===== RENDER ===== */
 function renderDevices(){
   devicesEl.innerHTML="";
-  if(!state.devices.length){devicesEl.append(el("div","muted","Aucun MASTER pour l’instant."));return;}
+  if(!state.devices.length){
+    devicesEl.append(el("div","muted","Aucun MASTER pour l’instant."));
+    return;
+  }
   for(const d of state.devices){
     const card=el("div","card dev");
     const head=el("div","head");
@@ -190,7 +171,7 @@ function renderDevices(){
     );
 
     const actions=el("div","actions");
-    const b=(txt,cb,cls)=>{const x=el("button",cls,txt);x.onclick=cb;return x;};
+    const b=(t,cb,cls)=>{const x=el("button",cls,t);x.onclick=cb;return x;};
     actions.append(
       b("Pulse 500 ms",()=>sendCommand(d.id,"PULSE",{ms:500}).catch(e=>LOG(e.message))),
       b("Power ON",    ()=>sendCommand(d.id,"POWER_ON").catch(e=>LOG(e.message))),
@@ -203,37 +184,38 @@ function renderDevices(){
   }
 }
 
-/* ========== REALTIME ========= */
+/* ===== REALTIME ===== */
 function attachRealtime(){
   detachRealtime();
-  state.sub=supabase.channel("devs")
+  state.sub = supabase.channel("devs")
     .on("postgres_changes",{event:"*",schema:"public",table:"devices"},loadDevices)
-    .subscribe(s=>{if(s==="SUBSCRIBED") LOG("Realtime ON");});
+    .subscribe(s=>{ if(s==="SUBSCRIBED") LOG("Realtime ON"); });
   state.tick=setInterval(loadDevices,15000);
 }
 function detachRealtime(){
-  if(state.sub){supabase.removeChannel(state.sub);state.sub=null;}
-  if(state.tick){clearInterval(state.tick);state.tick=null;}
+  if(state.sub){ supabase.removeChannel(state.sub); state.sub=null; }
+  if(state.tick){ clearInterval(state.tick); state.tick=null; }
 }
 
-/* ========== COUNTDOWN ========= */
+/* ===== PAIR CODE DIALOG ===== */
 function startCountdown(iso){
   const end=new Date(iso).getTime();
-  const t=()=>{const l=Math.max(0,Math.floor((end-Date.now())/1000));pairExpiresEl.textContent=`${Math.floor(l/60)}:${String(l%60).padStart(2,"0")}`;};
+  const t=()=>{ const l=Math.max(0,Math.floor((end-Date.now())/1000)); pairExpires.textContent=`${Math.floor(l/60)}:${String(l%60).padStart(2,"0")}`; };
   if(state.cd) clearInterval(state.cd); t(); state.cd=setInterval(t,1000);
 }
-
-/* ========== HANDLERS ========= */
 window.onAddClick=async()=>{
   try{
-    const {code,expires_at}=await createPairCode();
-    const c=pad6(code); pairCodeEl.textContent=c; startCountdown(expires_at); dlgPair.showModal();
+    const { code, expires_at } = await createPairCode();
+    const c=pad6(code);
+    pairCode.textContent=c;
+    startCountdown(expires_at);
+    dlgPair.showModal();
     LOG(`Code d'appairage : ${c} (expire ${new Date(expires_at).toLocaleTimeString()})`);
-  }catch(e){LOG("Erreur : "+e.message);alert("Impossible de créer le code.");}
+  }catch(e){ LOG(e.message); alert("Impossible de créer le code."); }
 };
 
-/* ========== START ========= */
-LOG("UI prête"); refreshUser();
+/* ===== BOOT ===== */
+LOG("UI prête");
 </script>
 </body>
 </html>
