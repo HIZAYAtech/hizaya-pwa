@@ -5,6 +5,7 @@
   <title>Remote Power • MASTER</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
+    /* --- même feuille de styles que d’habitude (raccourcie ici) --- */
     :root{--bg:#0f172a;--fg:#e2e8f0;--muted:#94a3b8;--card:#111827;--btn:#1f2937}
     html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,Segoe UI,Roboto,Arial}
     header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #243045}
@@ -29,7 +30,6 @@
     dialog{border:1px solid #243045;border-radius:12px;background:var(--card);color:var(--fg);padding:0;max-width:420px}
     dialog .dlg{padding:16px;display:flex;flex-direction:column;gap:10px}
     code{background:#0b1220;border:1px solid #243045;border-radius:6px;padding:2px 6px}
-    dialog:not([open]){display:none}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
@@ -39,8 +39,8 @@
   <h1>Remote Power • MASTER</h1>
   <div class="row">
     <span id="userEmail" class="muted">non connecté</span>
-    <button id="btnLogin"  class="primary" type="button" onclick="onLoginClick(event)">Connexion Google</button>
-    <button id="btnLogout" type="button" style="display:none" onclick="onLogoutClick()">Déconnexion</button>
+    <button id="btnLogin"  class="primary" type="button" onclick="onLogin()">Connexion Google</button>
+    <button id="btnLogout" type="button" style="display:none" onclick="onLogout()">Déconnexion</button>
   </div>
 </header>
 
@@ -48,174 +48,129 @@
   <div class="row" style="justify-content:space-between;margin-bottom:12px">
     <div class="muted">Compte : <span id="who">—</span></div>
     <div class="row">
-      <button id="btnAdd" class="primary" type="button" onclick="onAddClick()">Ajouter un MASTER</button>
+      <button id="btnAdd" class="primary" type="button" onclick="onAdd()">Ajouter un MASTER</button>
       <button id="btnRefresh" type="button" onclick="loadDevices()">Rafraîchir</button>
     </div>
   </div>
-
   <div id="devices" class="grid"></div>
-
-  <h3>Journal</h3>
-  <div id="log" class="log"></div>
+  <h3>Journal</h3><div id="log" class="log"></div>
 </main>
 
 <dialog id="dlgPair">
   <div class="dlg">
     <h3>Appairer un MASTER</h3>
-    <div>Code à 6 chiffres (valide <span id="pairExpires" class="muted"></span>) :</div>
-    <div style="font-size:28px;letter-spacing:4px;text-align:center"><code id="pairCode">······</code></div>
-    <div class="muted">Sur l’ESP32 : sélectionne ton Wi-Fi, puis saisis ce code.</div>
-    <div class="row" style="justify-content:flex-end"><button type="button" onclick="dlgPair.close()">Fermer</button></div>
+    <div>Code : <code id="pairCode">······</code> (expire <span id="pairExpires" class="muted"></span>)</div>
+    <div class="muted">Saisis ce code dans le portail Wi-Fi de l’ESP32.</div>
+    <div class="row" style="justify-content:flex-end"><button onclick="dlgPair.close()">Fermer</button></div>
   </div>
 </dialog>
 
 <script>
-/* ===== CONFIG ===== */
-const SUPABASE_URL      = "https://zeknluovgbsmtgupwkvo.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4";   // ← ta clé anon complète
+/* ---------- CONFIG ---------- */
+const SUPABASE_URL = "https://zeknluovgbsmtgupwkvo.supabase.co";
+const SUPABASE_ANON_KEY = "PASTE_YOUR_ANON_KEY_HERE";
 
-/* ===== INIT ===== */
+/* ---------- INIT ---------- */
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-/* ===== STATE & UTILS ===== */
-const devicesEl = document.getElementById("devices");
-const LOG=(m)=>{const l=document.getElementById("log");l.textContent+=new Date().toLocaleTimeString()+"  "+m+"\n";l.scrollTop=l.scrollHeight;};
-const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!==undefined)e.textContent=x;return e;};
-const pad6=n=>String(n).padStart(6,"0");
-const isLive=d=>d.last_seen && Date.now()-new Date(d.last_seen).getTime()<25_000;
-let state={user:null,devices:[],sub:null,tick:null,cd:null};
+/* ---------- DOM refs & utils ---------- */
+const $ = id => document.getElementById(id);
+const log = msg => { $('log').textContent += new Date().toLocaleTimeString()+"  "+msg+"\n"; };
+const isLive = d => d.last_seen && Date.now() - new Date(d.last_seen).getTime() < 25_000;
+const pad6 = n => String(n).padStart(6,"0");
 
-/* ===== AUTH ===== */
-async function refreshUser(){
-  const { data:{ session } } = await supabase.auth.getSession();   // ← charge la session
-  const user = session?.user ?? null;
-  state.user=user;
+/* ---------- GLOBAL STATE ---------- */
+let devices = [];
+let sub = null, tick = null;
 
-  document.getElementById("userEmail").textContent=user?user.email:"non connecté";
-  document.getElementById("btnLogin").style.display = user?"none":"inline-block";
-  document.getElementById("btnLogout").style.display= user?"inline-block":"none";
-  document.getElementById("who").textContent=user?user.email:"—";
-
-  if(user){ attachRealtime(); loadDevices(); }
-  else     { detachRealtime(); devicesEl.innerHTML=""; }
+/* ---------- AUTH --------- */
+function updateAuthUI(user){
+  $('userEmail').textContent = user ? user.email : "non connecté";
+  $('btnLogin').style.display  = user ? "none":"inline-block";
+  $('btnLogout').style.display = user ? "inline-block":"none";
+  $('who').textContent = user ? user.email : "—";
 }
-supabase.auth.onAuthStateChange(()=>refreshUser());
 
-window.onLoginClick=async(ev)=>{
-  ev?.preventDefault();
+async function onLogin(){
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider:"google",
     options:{ redirectTo:location.origin+location.pathname, queryParams:{ prompt:"select_account" }, skipBrowserRedirect:true }
   });
-  if(error) return alert(error.message);
-  if(data?.url) location.href=data.url;
-};
-window.onLogoutClick=()=>supabase.auth.signOut();
-
-/* ===== EDGE create_pair_code ===== */
-async function createPairCode(){
-  const { data:{ session } } = await supabase.auth.getSession();
-  if(!session) throw new Error("Non connecté");
-  const r = await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`,{
-    method:"POST",
-    headers:{ "Content-Type":"application/json", Authorization:`Bearer ${session.access_token}`, apikey:SUPABASE_ANON_KEY },
-    body:JSON.stringify({ ttl_minutes:10 })
-  });
-  if(!r.ok) throw new Error(await r.text());
-  return r.json();  // { code, expires_at }
+  if(error) alert(error.message);
+  else if(data?.url) location.href = data.url;
 }
+const onLogout = () => supabase.auth.signOut();
 
-/* ===== DEVICES ===== */
-async function loadDevices(){
-  if(!state.user) return;
-  const { data, error } = await supabase
-    .from("devices")
-    .select("id,name,master_mac,last_seen,online,created_at")
-    .order("created_at",{ascending:false});
-  if(error){LOG("Erreur chargement : "+error.message);return;}
-  state.devices=data||[]; renderDevices();
-}
-async function sendCommand(id,action,payload={}){
-  const { error } = await supabase.from("commands").insert({ device_id:id, action, payload });
-  if(error) throw error; LOG(`[cmd] ${action} -> ${id}`);
-}
-async function deleteDevice(id){
-  const { data:{ session } } = await supabase.auth.getSession();
-  if(!session) throw new Error("Non connecté");
-  const r = await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`,{
-    method:"POST",
-    headers:{ "Content-Type":"application/json", Authorization:`Bearer ${session.access_token}`, apikey:SUPABASE_ANON_KEY },
-    body:JSON.stringify({ device_id:id })
-  });
-  if(!r.ok) throw new Error(await r.text());
-  LOG(`MASTER supprimé : ${id}`);
-}
-
-/* ===== RENDER ===== */
-function renderDevices(){
-  devicesEl.innerHTML="";
-  if(!state.devices.length){
-    devicesEl.append(el("div","muted","Aucun MASTER pour l’instant."));
-    return;
-  }
-  for(const d of state.devices){
-    const card=el("div","card dev");
-    const head=el("div","head");
-    head.append(el("div",null,d.name||d.id),el("span","badge "+(isLive(d)?"on":"off"),isLive(d)?"En ligne":"Hors ligne"));
-
-    const meta=el("div","meta");
-    meta.append(
-      el("div",null,`ID : ${d.id}`),
-      el("div",null,`MAC : ${d.master_mac||"—"}`),
-      el("div",null,`Dernier contact : ${d.last_seen?new Date(d.last_seen).toLocaleTimeString():"jamais"}`)
-    );
-
-    const actions=el("div","actions");
-    const b=(t,cb,cls)=>{const x=el("button",cls,t);x.onclick=cb;return x;};
-    actions.append(
-      b("Pulse 500 ms",()=>sendCommand(d.id,"PULSE",{ms:500}).catch(e=>LOG(e.message))),
-      b("Power ON",    ()=>sendCommand(d.id,"POWER_ON").catch(e=>LOG(e.message))),
-      b("Power OFF",   ()=>sendCommand(d.id,"POWER_OFF").catch(e=>LOG(e.message))),
-      b("Reset",       ()=>sendCommand(d.id,"RESET").catch(e=>LOG(e.message))),
-      b("Supprimer",   ()=>{if(confirm(`Supprimer ${d.name||d.id} ?`)) deleteDevice(d.id).catch(e=>LOG(e.message));},"danger")
-    );
-
-    card.append(head,meta,actions); devicesEl.append(card);
-  }
-}
-
-/* ===== REALTIME ===== */
-function attachRealtime(){
+/* ---------- REALTIME & LOAD ---------- */
+async function attachRealtime(){
   detachRealtime();
-  state.sub = supabase.channel("devs")
-    .on("postgres_changes",{event:"*",schema:"public",table:"devices"},loadDevices)
-    .subscribe(s=>{ if(s==="SUBSCRIBED") LOG("Realtime ON"); });
-  state.tick=setInterval(loadDevices,15000);
+  sub = supabase.channel('devs')
+    .on('postgres_changes',{event:'*',schema:'public',table:'devices'},loadDevices)
+    .subscribe();
+  tick = setInterval(loadDevices,15000);
 }
 function detachRealtime(){
-  if(state.sub){ supabase.removeChannel(state.sub); state.sub=null; }
-  if(state.tick){ clearInterval(state.tick); state.tick=null; }
+  if(sub){ supabase.removeChannel(sub); sub=null; }
+  if(tick){ clearInterval(tick); tick=null; }
+}
+async function loadDevices(){
+  const { data, error } = await supabase
+    .from('devices')
+    .select('id,name,master_mac,last_seen,online')
+    .order('created_at',{ascending:false});
+  if(error){ log("Erreur chargement : "+error.message); return; }
+  devices = data||[]; render();
 }
 
-/* ===== PAIR CODE DIALOG ===== */
-function startCountdown(iso){
-  const end=new Date(iso).getTime();
-  const t=()=>{ const l=Math.max(0,Math.floor((end-Date.now())/1000)); pairExpires.textContent=`${Math.floor(l/60)}:${String(l%60).padStart(2,"0")}`; };
-  if(state.cd) clearInterval(state.cd); t(); state.cd=setInterval(t,1000);
+/* ---------- RENDER ---------- */
+function render(){
+  const root = $('devices'); root.innerHTML="";
+  if(!devices.length){ root.textContent="Aucun MASTER."; return; }
+  for(const d of devices){
+    const card = document.createElement('div'); card.className='card dev';
+    card.innerHTML = `
+      <div class="head">
+        <div>${d.name||d.id}</div>
+        <span class="badge ${isLive(d)?'on':'off'}">${isLive(d)?'En ligne':'Hors ligne'}</span>
+      </div>
+      <div class="meta">
+        <div>ID : ${d.id}</div>
+        <div>MAC : ${d.master_mac||'—'}</div>
+        <div>Dernier contact : ${d.last_seen?new Date(d.last_seen).toLocaleTimeString():'jamais'}</div>
+      </div>
+    `;
+    root.append(card);
+  }
 }
-window.onAddClick=async()=>{
-  try{
-    const { code, expires_at } = await createPairCode();
-    const c=pad6(code);
-    pairCode.textContent=c;
-    startCountdown(expires_at);
-    dlgPair.showModal();
-    LOG(`Code d'appairage : ${c} (expire ${new Date(expires_at).toLocaleTimeString()})`);
-  }catch(e){ LOG(e.message); alert("Impossible de créer le code."); }
-};
 
-/* ===== BOOT ===== */
-LOG("UI prête");
+/* ---------- PAIR CODE ---------- */
+async function onAdd(){
+  const { data:{ session } } = await supabase.auth.getSession();
+  if(!session){ alert("Non connecté"); return; }
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`,apikey:SUPABASE_ANON_KEY},
+    body:JSON.stringify({ttl_minutes:10})
+  });
+  if(!r.ok){ alert(await r.text()); return; }
+  const { code, expires_at } = await r.json();
+  $('pairCode').textContent = pad6(code);
+  const end = new Date(expires_at).getTime();
+  const tick = ()=>{ const l=Math.max(0,Math.floor((end-Date.now())/1000)); $('pairExpires').textContent=`${Math.floor(l/60)}:${String(l%60).padStart(2,'0')}`; };
+  tick(); setInterval(tick,1000);
+  $('dlgPair').showModal();
+}
+
+/* ---------- INITIAL SESSION LISTENER ---------- */
+supabase.auth.onAuthStateChange((event, session)=>{
+  if(event === "INITIAL_SESSION"){
+    updateAuthUI(session?.user ?? null);
+    if(session?.user){ attachRealtime(); loadDevices(); }
+  }
+});
+
+/* Boot log */
+log("UI prête");
 </script>
 </body>
 </html>
