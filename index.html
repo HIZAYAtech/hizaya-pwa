@@ -133,7 +133,7 @@ async function deleteDevice(id){
   const r = await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`,{
     method:"POST",
     headers:{ "Content-Type":"application/json", Authorization:`Bearer ${session.access_token}`, apikey:SUPABASE_ANON_KEY },
-    body:JSON.stringify({ device_id:id })
+    body: JSON.stringify({ master_id: device_id })
   });
   if(!r.ok) log(await r.text()); else log(`MASTER supprimé : ${id}`);
 }
@@ -203,3 +203,4 @@ log("UI prête");
 </script>
 </body>
 </html>
+
