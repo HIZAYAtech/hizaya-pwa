@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="fr">
 <head>
-<meta charset="utf-8" />
+<meta charset="utf-8"/>
 <title>Remote Power • MASTER</title>
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
 <style>
 :root{--bg:#0f172a;--fg:#e2e8f0;--muted:#94a3b8;--card:#111827;--btn:#1f2937}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);
@@ -17,7 +17,7 @@ button{background:var(--btn);border:1px solid #2b364c;border-radius:8px;
 button:hover{filter:brightness(1.08)}
 .primary{background:#2563eb;border-color:#1d4ed8}
 .danger{background:#7f1d1d;border-color:#991b1b}
-.muted {color:var(--muted)}
+.muted{color:var(--muted)}
 main{max-width:980px;margin:24px auto;padding:0 16px}
 .card{background:var(--card);border:1px solid #243045;border-radius:12px;padding:14px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
@@ -54,7 +54,7 @@ code{background:#0b1220;border:1px solid #243045;border-radius:6px;padding:2px 6
     <div class="muted">Compte : <span id="who">—</span></div>
     <div class="row">
       <button id="btnAdd" class="primary" type="button" onclick="onAdd()">Ajouter un MASTER</button>
-      <button id="btnRefresh" type="button" onclick="loadEverything()">Rafraîchir</button>
+      <button id="btnRefresh" type="button" onclick="loadAll()">Rafraîchir</button>
     </div>
   </div>
   <div id="devices" class="grid"></div>
@@ -64,18 +64,15 @@ code{background:#0b1220;border:1px solid #243045;border-radius:6px;padding:2px 6
 <!-- Dialog Pair Code -->
 <dialog id="dlgPair"><div class="dlg">
   <h3>Appairer un MASTER</h3>
-  <div>Code : <code id="pairCode">······</code>
-       (expire <span id="pairExpires" class="muted"></span>)</div>
+  <div>Code : <code id="pairCode">······</code> (expire <span id="pairExpires" class="muted"></span>)</div>
   <div class="muted">Saisis ce code dans le portail Wi-Fi de l’ESP32.</div>
-  <div class="row" style="justify-content:flex-end">
-    <button onclick="dlgPair.close()">Fermer</button>
-  </div>
+  <div class="row" style="justify-content:flex-end"><button onclick="dlgPair.close()">Fermer</button></div>
 </div></dialog>
 
 <script>
 /* ---------- CONFIG ---------- */
 const SUPABASE_URL = "https://zeknluovgbsmtgupwkvo.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4";          // ← ta clé anon
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4";                     // ← clé anon
 
 /* ---------- INIT ---------- */
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -83,40 +80,35 @@ const $ = id => document.getElementById(id);
 const log = m => { $('log').textContent += new Date().toLocaleTimeString()+"  "+m+"\n"; };
 
 /* ---------- Globals ---------- */
-let devices = [];          // masters
-let nodesByMaster = {};    // { master_id : [mac,mac,…] }
-let sub = null;
+let devices=[], nodesByMaster={}, sub;
 
 /* ---------- Auth ---------- */
 function updateAuthUI(u){
-  $("userEmail").textContent = u ? u.email : "non connecté";
-  $("btnLogin").style.display  = u ? "none":"inline-block";
-  $("btnLogout").style.display = u ? "inline-block":"none";
-  $("who").textContent = u ? u.email : "—";
+  $("userEmail").textContent = u?u.email:"non connecté";
+  $("btnLogin").style.display  = u?"none":"inline-block";
+  $("btnLogout").style.display = u?"inline-block":"none";
+  $("who").textContent = u?u.email:"—";
 }
 async function onLogin(){
-  const { data,error } = await supabase.auth.signInWithOAuth({
+  const {data,error}=await supabase.auth.signInWithOAuth({
     provider:"google",
-    options:{ redirectTo:location.origin+location.pathname,
-      queryParams:{ prompt:"select_account" }, skipBrowserRedirect:true }
+    options:{redirectTo:location.href,queryParams:{prompt:"select_account"},skipBrowserRedirect:true}
   });
   if(error) alert(error.message); else if(data?.url) location.href=data.url;
 }
-const onLogout = () => supabase.auth.signOut();
+const onLogout = ()=>supabase.auth.signOut();
 
-/* ---------- LOAD masters + slaves ---------- */
-async function loadEverything(){
-  const { data:devs,error:edev } = await supabase
-    .from('devices')
-    .select('id,name,master_mac,last_seen')
+/* ---------- Load devices + nodes ---------- */
+async function loadAll(){
+  const {data:devs,error:ed}=await supabase.from('devices')
+    .select('id,name,master_mac,last_seen,online')
     .order('created_at',{ascending:false});
-  if(edev){ log("Err devices: "+edev.message); return; }
+  if(ed){ log("Err devices : "+ed.message); return; }
   devices = devs||[];
 
-  const { data:nodes,error:en } = await supabase
-    .from('nodes')
+  const {data:nodes,error:en}=await supabase.from('nodes')   // ← 'slaves' si tu renommes
     .select('master_id,slave_mac');
-  if(en){ log("Err nodes: "+en.message); return; }
+  if(en){ log("Err nodes : "+en.message); return; }
   nodesByMaster={};
   (nodes||[]).forEach(n=>{
     if(!nodesByMaster[n.master_id]) nodesByMaster[n.master_id]=[];
@@ -129,20 +121,29 @@ async function loadEverything(){
 /* ---------- COMMANDS ---------- */
 async function sendCommand(masterId,targetMac,action,payload={})
 {
-  const { error } = await supabase
-    .from("commands")
-    .insert({
-      master_id : masterId,          // ← colonne correcte
-      target_mac: targetMac || null,
-      action,
-      payload
-    });
+  const { error } = await supabase.from("commands").insert({
+    master_id : masterId,
+    target_mac: targetMac || null,
+    action,
+    payload
+  });
   if(error){ log(error.message); return; }
   log(`[cmd] ${action} → ${masterId}${targetMac?" → "+targetMac:""}`);
 }
+async function deleteDevice(id){
+  const {data:{session}}=await supabase.auth.getSession();
+  if(!session) return;
+  const r=await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`,{
+    method:"POST",
+    headers:{ "Content-Type":"application/json",
+      Authorization:`Bearer ${session.access_token}`, apikey:SUPABASE_ANON_KEY },
+    body: JSON.stringify({ master_id:id })
+  });
+  log(r.ok?`MASTER supprimé : ${id}`:`❌ Suppression : ${await r.text()}`);
+}
 
 /* ---------- Helpers ---------- */
-function isLive(d){ return d.last_seen && Date.now()-new Date(d.last_seen).getTime()<25000; }
+const isLive=d=>d.last_seen&&Date.now()-new Date(d.last_seen).getTime()<25e3;
 
 /* ---------- RENDER ---------- */
 function render(){
@@ -151,20 +152,17 @@ function render(){
 
   devices.forEach(d=>{
     const card=document.createElement("div"); card.className="card dev";
-
-    /* head */
     card.innerHTML=`<div class="head">
         <div>${d.name||d.id}</div>
         <span class="badge ${isLive(d)?"on":"off"}">${isLive(d)?"En ligne":"Hors ligne"}</span>
       </div>`;
+    card.insertAdjacentHTML("beforeend",
+      `<div class="meta">
+         ID : ${d.id}<br>MAC : ${d.master_mac||'—'}<br>
+         Dernier contact : ${d.last_seen?new Date(d.last_seen).toLocaleTimeString():'jamais'}
+       </div>`);
 
-    /* meta */
-    const meta=document.createElement("div"); meta.className="meta";
-    meta.innerHTML=`ID : ${d.id}<br>MAC : ${d.master_mac||'—'}<br>
-      Dernier contact : ${d.last_seen?new Date(d.last_seen).toLocaleTimeString():'jamais'}`;
-    card.appendChild(meta);
-
-    /* slaves */
+    /* slaves list */
     const slaves=nodesByMaster[d.id]||[];
     const sDiv=document.createElement("div"); sDiv.className="slaves";
     if(slaves.length){
@@ -178,16 +176,20 @@ function render(){
 
     /* actions master */
     const act=document.createElement("div"); act.className="actions";
-    const add=(txt,cb)=>{ const b=document.createElement("button"); b.textContent=txt; b.onclick=cb; act.appendChild(b);}
-    add("Pulse", ()=>sendCommand(d.id,null,"PULSE",{ms:300}));
-    add("RESET", ()=>sendCommand(d.id,null,"RESET"));
+    const add=(txt,cls,cb)=>{const b=document.createElement("button");
+      if(cls) b.className=cls; b.textContent=txt; b.onclick=cb; act.appendChild(b);}
+    add("Pulse", "", ()=>sendCommand(d.id,null,"PULSE",{ms:300}));
+    add("Power ON","", ()=>sendCommand(d.id,null,"POWER_ON"));
+    add("Power OFF","",()=>sendCommand(d.id,null,"POWER_OFF"));
+    add("Reset","",   ()=>sendCommand(d.id,null,"RESET"));
+    add("Supprimer","danger", ()=>{ if(confirm(`Supprimer ${d.name||d.id} ?`)) deleteDevice(d.id);});
     card.appendChild(act);
 
     /* actions par slave */
     if(slaves.length){
       const a2=document.createElement("div"); a2.className="actions";
       slaves.forEach(mac=>{
-        const on = document.createElement("button"); on.textContent="LED ON";
+        const on=document.createElement("button"); on.textContent="LED ON";
         on.onclick=()=>sendCommand(d.id,mac,"LED",{on:true});
         const off=document.createElement("button"); off.textContent="OFF";
         off.onclick=()=>sendCommand(d.id,mac,"LED",{on:false});
@@ -202,20 +204,20 @@ function render(){
 /* ---------- Realtime ---------- */
 function attachRealtime(){
   if(sub) supabase.removeChannel(sub);
-  sub = supabase.channel("ui")
-    .on('postgres_changes',{event:"*",schema:"public",table:"devices"},loadEverything)
-    .on('postgres_changes',{event:"*",schema:"public",table:"nodes"},loadEverything)
-    .subscribe(s=>{ if(s==="SUBSCRIBED") log("Realtime ON"); });
+  sub=supabase.channel("ui")
+    .on('postgres_changes',{event:"*",schema:"public",table:"devices"},loadAll)
+    .on('postgres_changes',{event:"*",schema:"public",table:"nodes"},  loadAll) // 'slaves' si renommé
+    .subscribe();
 }
 
-/* ---------- Pair-code dialog (inchangé) ---------- */
-async function onAdd(){ /* ton code existant ici */ }
+/* ---------- Pair code dialog (inchangé) ---------- */
+async function onAdd(){ /* … ton code existant … */ }
 
 /* ---------- Bootstrap ---------- */
 supabase.auth.onAuthStateChange((evt,sess)=>{
   if(evt==="INITIAL_SESSION"){
     updateAuthUI(sess?.user||null);
-    if(sess?.user){ attachRealtime(); loadEverything(); }
+    if(sess?.user){ attachRealtime(); loadAll(); }
   }
 });
 
