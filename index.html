@@ -1,37 +1,42 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <title>Remote Power • MASTER</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    :root{--bg:#0f172a;--fg:#e2e8f0;--muted:#94a3b8;--card:#111827;--btn:#1f2937}
-    html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,Segoe UI,Roboto,Arial}
-    header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #243045}
-    h1{font-size:18px;margin:0}
-    .row{display:flex;gap:10px;align-items:center}
-    button{background:var(--btn);border:1px solid #2b364c;border-radius:8px;color:var(--fg);padding:8px 12px;cursor:pointer}
-    button:hover{filter:brightness(1.08)}
-    .primary{background:#2563eb;border-color:#1d4ed8}
-    .danger{background:#7f1d1d;border-color:#991b1b}
-    .muted{color:var(--muted)}
-    main{max-width:980px;margin:24px auto;padding:0 16px}
-    .card{background:var(--card);border:1px solid #243045;border-radius:12px;padding:14px}
-    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
-    .dev{display:flex;flex-direction:column;gap:8px}
-    .head{display:flex;justify-content:space-between;gap:8px;align-items:center}
-    .badge{font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid #243045}
-    .on{background:#0b3b2e;color:#86efac;border-color:#14532d}
-    .off{background:#3b1a1a;color:#fecaca;border-color:#7f1d1d}
-    .meta,.slaves{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:2px}
-    .actions{display:flex;flex-wrap:wrap;gap:6px}
-    .chip{display:inline-block;background:#334155;border-radius:999px;padding:2px 8px;margin:1px}
-    .log{white-space:pre-wrap;background:#0b1220;border:1px solid #243045;border-radius:10px;padding:10px;height:120px;overflow:auto}
-    dialog{border:1px solid #243045;border-radius:12px;background:var(--card);color:var(--fg);padding:0;max-width:420px}
-    dialog .dlg{padding:16px;display:flex;flex-direction:column;gap:10px}
-    code{background:#0b1220;border:1px solid #243045;border-radius:6px;padding:2px 6px}
-  </style>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<meta charset="utf-8" />
+<title>Remote Power • MASTER</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+:root{--bg:#0f172a;--fg:#e2e8f0;--muted:#94a3b8;--card:#111827;--btn:#1f2937}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);
+          font:14px/1.4 system-ui,Segoe UI,Roboto,Arial}
+header{display:flex;justify-content:space-between;align-items:center;
+       padding:16px 20px;border-bottom:1px solid #243045}
+h1{font-size:18px;margin:0}
+.row{display:flex;gap:10px;align-items:center}
+button{background:var(--btn);border:1px solid #2b364c;border-radius:8px;
+       color:var(--fg);padding:8px 12px;cursor:pointer}
+button:hover{filter:brightness(1.08)}
+.primary{background:#2563eb;border-color:#1d4ed8}
+.danger{background:#7f1d1d;border-color:#991b1b}
+.muted {color:var(--muted)}
+main{max-width:980px;margin:24px auto;padding:0 16px}
+.card{background:var(--card);border:1px solid #243045;border-radius:12px;padding:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.dev{display:flex;flex-direction:column;gap:8px}
+.head{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.badge{font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid #243045}
+.on{background:#0b3b2e;color:#86efac;border-color:#14532d}
+.off{background:#3b1a1a;color:#fecaca;border-color:#7f1d1d}
+.meta,.slaves{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:2px}
+.actions{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-block;background:#334155;border-radius:999px;padding:2px 8px;margin:1px}
+.log{white-space:pre-wrap;background:#0b1220;border:1px solid #243045;border-radius:10px;
+     padding:10px;height:120px;overflow:auto}
+dialog{border:1px solid #243045;border-radius:12px;background:var(--card);
+       color:var(--fg);padding:0;max-width:420px}
+dialog .dlg{padding:16px;display:flex;flex-direction:column;gap:10px}
+code{background:#0b1220;border:1px solid #243045;border-radius:6px;padding:2px 6px}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 
 <body>
@@ -59,15 +64,18 @@
 <!-- Dialog Pair Code -->
 <dialog id="dlgPair"><div class="dlg">
   <h3>Appairer un MASTER</h3>
-  <div>Code : <code id="pairCode">······</code> (expire <span id="pairExpires" class="muted"></span>)</div>
+  <div>Code : <code id="pairCode">······</code>
+       (expire <span id="pairExpires" class="muted"></span>)</div>
   <div class="muted">Saisis ce code dans le portail Wi-Fi de l’ESP32.</div>
-  <div class="row" style="justify-content:flex-end"><button onclick="dlgPair.close()">Fermer</button></div>
+  <div class="row" style="justify-content:flex-end">
+    <button onclick="dlgPair.close()">Fermer</button>
+  </div>
 </div></dialog>
 
 <script>
 /* ---------- CONFIG ---------- */
 const SUPABASE_URL = "https://zeknluovgbsmtgupwkvo.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4";          // ← ta clé anon
 
 /* ---------- INIT ---------- */
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -76,15 +84,15 @@ const log = m => { $('log').textContent += new Date().toLocaleTimeString()+"  "+
 
 /* ---------- Globals ---------- */
 let devices = [];          // masters
-let nodesByMaster = {};    // slaves groupés par master_id
+let nodesByMaster = {};    // { master_id : [mac,mac,…] }
 let sub = null;
 
 /* ---------- Auth ---------- */
-function updateAuthUI(user){
-  $("userEmail").textContent = user ? user.email : "non connecté";
-  $("btnLogin").style.display  = user ? "none":"inline-block";
-  $("btnLogout").style.display = user ? "inline-block":"none";
-  $("who").textContent = user ? user.email : "—";
+function updateAuthUI(u){
+  $("userEmail").textContent = u ? u.email : "non connecté";
+  $("btnLogin").style.display  = u ? "none":"inline-block";
+  $("btnLogout").style.display = u ? "inline-block":"none";
+  $("who").textContent = u ? u.email : "—";
 }
 async function onLogin(){
   const { data,error } = await supabase.auth.signInWithOAuth({
@@ -119,71 +127,74 @@ async function loadEverything(){
 }
 
 /* ---------- COMMANDS ---------- */
-async function sendCommand(masterId,targetMac,action,payload={}){
+async function sendCommand(masterId,targetMac,action,payload={})
+{
   const { error } = await supabase
     .from("commands")
-    .insert({ device_id: masterId, target_mac: targetMac||null,
-              action, payload });
+    .insert({
+      master_id : masterId,          // ← colonne correcte
+      target_mac: targetMac || null,
+      action,
+      payload
+    });
   if(error){ log(error.message); return; }
   log(`[cmd] ${action} → ${masterId}${targetMac?" → "+targetMac:""}`);
 }
 
-/* ---------- RENDER ---------- */
+/* ---------- Helpers ---------- */
 function isLive(d){ return d.last_seen && Date.now()-new Date(d.last_seen).getTime()<25000; }
 
+/* ---------- RENDER ---------- */
 function render(){
   const el=$("devices"); el.innerHTML="";
   if(!devices.length){ el.textContent="Aucun MASTER."; return; }
 
   devices.forEach(d=>{
-    const live=isLive(d);
     const card=document.createElement("div"); card.className="card dev";
 
     /* head */
     card.innerHTML=`<div class="head">
         <div>${d.name||d.id}</div>
-        <span class="badge ${live?'on':'off'}">${live?'En ligne':'Hors ligne'}</span>
+        <span class="badge ${isLive(d)?"on":"off"}">${isLive(d)?"En ligne":"Hors ligne"}</span>
       </div>`;
+
     /* meta */
     const meta=document.createElement("div"); meta.className="meta";
     meta.innerHTML=`ID : ${d.id}<br>MAC : ${d.master_mac||'—'}<br>
       Dernier contact : ${d.last_seen?new Date(d.last_seen).toLocaleTimeString():'jamais'}`;
     card.appendChild(meta);
 
-    /* SLAVES */
-    const slaves = nodesByMaster[d.id] || [];
-    const slvDiv = document.createElement("div"); slvDiv.className="slaves";
+    /* slaves */
+    const slaves=nodesByMaster[d.id]||[];
+    const sDiv=document.createElement("div"); sDiv.className="slaves";
     if(slaves.length){
-      slvDiv.innerHTML="Slaves :";
+      sDiv.innerHTML="Slaves :";
       slaves.forEach(m=>{
         const c=document.createElement("span"); c.className="chip"; c.textContent=m;
-        slvDiv.appendChild(c);
+        sDiv.appendChild(c);
       });
-    }else slvDiv.textContent="Aucun slave.";
-    card.appendChild(slvDiv);
+    }else sDiv.textContent="Aucun slave.";
+    card.appendChild(sDiv);
 
     /* actions master */
     const act=document.createElement("div"); act.className="actions";
-    const addBtn=(txt,cb)=>{
-      const b=document.createElement("button"); b.textContent=txt; b.onclick=cb; act.appendChild(b);
-    };
-    addBtn("Pulse", ()=>sendCommand(d.id,null,"PULSE",{ms:300}));
-    addBtn("RESET", ()=>sendCommand(d.id,null,"RESET"));
+    const add=(txt,cb)=>{ const b=document.createElement("button"); b.textContent=txt; b.onclick=cb; act.appendChild(b);}
+    add("Pulse", ()=>sendCommand(d.id,null,"PULSE",{ms:300}));
+    add("RESET", ()=>sendCommand(d.id,null,"RESET"));
     card.appendChild(act);
 
     /* actions par slave */
     if(slaves.length){
-      const act2=document.createElement("div"); act2.className="actions";
+      const a2=document.createElement("div"); a2.className="actions";
       slaves.forEach(mac=>{
         const on = document.createElement("button"); on.textContent="LED ON";
         on.onclick=()=>sendCommand(d.id,mac,"LED",{on:true});
         const off=document.createElement("button"); off.textContent="OFF";
         off.onclick=()=>sendCommand(d.id,mac,"LED",{on:false});
-        act2.append(on,off);
+        a2.append(on,off);
       });
-      card.appendChild(act2);
+      card.appendChild(a2);
     }
-
     el.appendChild(card);
   });
 }
@@ -194,11 +205,11 @@ function attachRealtime(){
   sub = supabase.channel("ui")
     .on('postgres_changes',{event:"*",schema:"public",table:"devices"},loadEverything)
     .on('postgres_changes',{event:"*",schema:"public",table:"nodes"},loadEverything)
-    .subscribe(status=>{ if(status==="SUBSCRIBED") log("Realtime ON"); });
+    .subscribe(s=>{ if(s==="SUBSCRIBED") log("Realtime ON"); });
 }
 
 /* ---------- Pair-code dialog (inchangé) ---------- */
-async function onAdd(){ /* code existant… */ }
+async function onAdd(){ /* ton code existant ici */ }
 
 /* ---------- Bootstrap ---------- */
 supabase.auth.onAuthStateChange((evt,sess)=>{
@@ -211,4 +222,3 @@ supabase.auth.onAuthStateChange((evt,sess)=>{
 log("UI prête");
 </script>
 </body></html>
-
