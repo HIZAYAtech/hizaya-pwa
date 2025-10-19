@@ -148,7 +148,7 @@ async function deleteDevice(id){
     method:"POST",
     headers:{
       "Content-Type":"application/json",
-      apikey:SOPA_ANON,   // <-- ta clé anon
+      apikey:SUPA_ANON,   // <-- ta clé anon
       Authorization:`Bearer ${session.access_token}`
     },
     body:JSON.stringify({ master_id:id })
@@ -231,7 +231,7 @@ async function onAdd(){
       method:"POST",
       headers:{
         "Content-Type":"application/json",
-        apikey:SOPA_ANON,
+        apikey:SUPA_ANON,
         Authorization:`Bearer ${session.access_token}`
       },
       body:JSON.stringify({ ttl_minutes:10 })
@@ -262,3 +262,4 @@ log("UI prête");
 </script>
 </body>
 </html>
+
