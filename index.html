@@ -5,36 +5,36 @@
 <title>Remote Power • MASTER</title>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <style>
-:root{--bg:#0f172a;--fg:#e2e8f0;--muted:#94a3b8;--card:#111827;--btn:#1f2937}
-html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);
-          font:14px/1.4 system-ui,Segoe UI,Roboto,Arial}
-header{display:flex;justify-content:space-between;align-items:center;
-       padding:16px 20px;border-bottom:1px solid #243045}
-h1{font-size:18px;margin:0}
-.row{display:flex;gap:10px;align-items:center}
-button{background:var(--btn);border:1px solid #2b364c;border-radius:8px;
-       color:var(--fg);padding:8px 12px;cursor:pointer}
-button:hover{filter:brightness(1.08)}
-.primary{background:#2563eb;border-color:#1d4ed8}
-.danger{background:#7f1d1d;border-color:#991b1b}
-.muted{color:var(--muted)}
-main{max-width:980px;margin:24px auto;padding:0 16px}
-.card{background:var(--card);border:1px solid #243045;border-radius:12px;padding:14px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
-.dev{display:flex;flex-direction:column;gap:8px}
-.head{display:flex;justify-content:space-between;gap:8px;align-items:center}
-.badge{font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid #243045}
-.on{background:#0b3b2e;color:#86efac;border-color:#14532d}
-.off{background:#3b1a1a;color:#fecaca;border-color:#7f1d1d}
-.meta,.slaves{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:2px}
-.actions{display:flex;flex-wrap:wrap;gap:6px}
-.chip{display:inline-block;background:#334155;border-radius:999px;padding:2px 8px;margin:1px}
-.log{white-space:pre-wrap;background:#0b1220;border:1px solid #243045;border-radius:10px;
-     padding:10px;height:120px;overflow:auto}
-dialog{border:1px solid #243045;border-radius:12px;background:var(--card);
-       color:var(--fg);padding:0;max-width:420px}
-dialog .dlg{padding:16px;display:flex;flex-direction:column;gap:10px}
-code{background:#0b1220;border:1px solid #243045;border-radius:6px;padding:2px 6px}
+ :root{--bg:#0f172a;--fg:#e2e8f0;--muted:#94a3b8;--card:#111827;--btn:#1f2937}
+ html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);
+           font:14px/1.4 system-ui,Segoe UI,Roboto,Arial}
+ header{display:flex;justify-content:space-between;align-items:center;
+        padding:16px 20px;border-bottom:1px solid #243045}
+ h1{font-size:18px;margin:0}
+ .row{display:flex;gap:10px;align-items:center}
+ button{background:var(--btn);border:1px solid #2b364c;border-radius:8px;
+        color:var(--fg);padding:8px 12px;cursor:pointer}
+ button:hover{filter:brightness(1.08)}
+ .primary{background:#2563eb;border-color:#1d4ed8}
+ .danger{background:#7f1d1d;border-color:#991b1b}
+ .muted{color:var(--muted)}
+ main{max-width:980px;margin:24px auto;padding:0 16px}
+ .card{background:var(--card);border:1px solid #243045;border-radius:12px;padding:14px}
+ .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+ .dev{display:flex;flex-direction:column;gap:8px}
+ .head{display:flex;justify-content:space-between;gap:8px;align-items:center}
+ .badge{font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid #243045}
+ .on{background:#0b3b2e;color:#86efac;border-color:#14532d}
+ .off{background:#3b1a1a;color:#fecaca;border-color:#7f1d1d}
+ .meta,.slaves{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:2px}
+ .actions{display:flex;flex-wrap:wrap;gap:6px}
+ .chip{display:inline-block;background:#334155;border-radius:999px;padding:2px 8px;margin:1px}
+ .log{white-space:pre-wrap;background:#0b1220;border:1px solid #243045;border-radius:10px;
+      padding:10px;height:120px;overflow:auto}
+ dialog{border:1px solid #243045;border-radius:12px;background:var(--card);
+        color:var(--fg);padding:0;max-width:420px}
+ dialog .dlg{padding:16px;display:flex;flex-direction:column;gap:10px}
+ code{background:#0b1220;border:1px solid #243045;border-radius:6px;padding:2px 6px}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
@@ -75,89 +75,95 @@ code{background:#0b1220;border:1px solid #243045;border-radius:6px;padding:2px 6
 <script>
 /* ---------- CONFIG ---------- */
 const SUPABASE_URL = "https://zeknluovgbsmtgupwkvo.supabase.co";
-const SUPA_ANON    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4";   // <-- ta clé anon
+const SUPA_ANON    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4";
 
 /* ---------- INIT ---------- */
-const sb = window.supabase.createClient(SUPABASE_URL, SUPA_ANON);
-const $  = id => document.getElementById(id);
-const log= txt=>{$('log').textContent+=new Date().toLocaleTimeString()+"  "+txt+"\n";};
+const sb   = window.supabase.createClient(SUPABASE_URL, SUPA_ANON);
+const $    = id => document.getElementById(id);
+const log  = t => { $('log').textContent += new Date().toLocaleTimeString()+"  "+t+"\n"; };
 
-/* ---------- Globals ---------- */
-let devices=[], nodesByMaster={};  // nodes = slaves
+/* ---------- État ---------- */
+let devices = [];           // masters
+let nodesByMaster = {};     // { master_id : [ slave_mac, ... ] }
 let chanRealtime;
 
-/* ---------- Helper ---------- */
-const isLive=d=>d.last_seen&&Date.now()-new Date(d.last_seen).getTime()<25e3;
+/* ---------- Helpers ---------- */
+const isLive = d => d.last_seen && Date.now()-new Date(d.last_seen) < 25_000;
 
 /* ---------- Auth ---------- */
 function updateAuth(u){
-  $("userEmail").textContent=u?u.email:"non connecté";
-  $("btnLogin").style.display=u?"none":"inline-block";
-  $("btnLogout").style.display=u?"inline-block":"none";
-  $("who").textContent=u?u.email:"—";
+  $("userEmail").textContent = u ? u.email : "non connecté";
+  $("btnLogin").style.display = u ? "none":"inline-block";
+  $("btnLogout").style.display= u ? "inline-block":"none";
+  $("who").textContent = u ? u.email : "—";
 }
 async function onLogin(){
-  const {data,error}=await sb.auth.signInWithOAuth({
+  const {data,error} = await sb.auth.signInWithOAuth({
     provider:"google",
-    options:{redirectTo:location.href,queryParams:{prompt:"select_account"},skipBrowserRedirect:true}
+    options:{redirectTo:location.href, queryParams:{prompt:"select_account"}, skipBrowserRedirect:true}
   });
   if(error) alert(error.message); else if(data?.url) location.href=data.url;
 }
 function onLogout(){ sb.auth.signOut(); }
 
-/* ---------- Load ALL (masters + slaves) ---------- */
+/* ---------- Chargement complet ---------- */
 async function loadAll(){
-  const {data:devs,error:ed}=await sb.from('devices')
+  /* masters */
+  const {data:devs,error:ed} = await sb
+    .from('devices')
     .select('id,name,master_mac,last_seen,online')
     .order('created_at',{ascending:false});
-  if(ed){log("Err devices: "+ed.message);return;}
-  devices=devs||[];
+  if(ed){ log("Err devices: "+ed.message); return; }
+  devices = devs || [];
 
-  const {data:nodes,error:en}=await sb.from('nodes')   // table slaves si renommée
+  /* slaves (table nodes) */
+  const {data:nodes,error:en} = await sb
+    .from('nodes')
     .select('master_id,slave_mac');
-  if(en){log("Err nodes: "+en.message);return;}
-  nodesByMaster={};
-  (nodes||[]).forEach(n=>{
-    (nodesByMaster[n.master_id]??=[]).push(n.slave_mac);
+  if(en){ log("Err nodes: "+en.message); return; }
+  nodesByMaster = {};
+  (nodes||[]).forEach(n => {
+    (nodesByMaster[n.master_id] ??= []).push(n.slave_mac);
   });
 
   render();
 }
 
-/* ---------- Commands & delete ---------- */
-async function sendCmd(masterId,targetMac,action,payload={}){
-  const {error}=await sb.from('commands').insert({
-    master_id:masterId,
-    target_mac: targetMac||null,
+/* ---------- Commandes & suppression ---------- */
+async function sendCmd(masterId, targetMac, action, payload={}){
+  const {error} = await sb.from('commands').insert({
+    master_id : masterId,
+    target_mac: targetMac || null,
     action,
     payload
   });
   if(error) log("cmd err: "+error.message);
-  else log(`[cmd] ${action} -> ${masterId}${targetMac?" → "+targetMac:""}`);
+  else log(`[cmd] ${action} → ${masterId}${targetMac?" ▶ "+targetMac:""}`);
 }
 async function deleteDevice(id){
-  const {data:{session}}=await sb.auth.getSession();
+  if(!confirm(`Supprimer ${id} ?`)) return;
+  const {data:{session}} = await sb.auth.getSession();
   if(!session){alert("Non connecté"); return;}
-  const r=await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`,{
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`,{
     method:"POST",
     headers:{
       "Content-Type":"application/json",
-      apikey:SUPA_ANON,
+      apikey:SOPA_ANON,   // <-- ta clé anon
       Authorization:`Bearer ${session.access_token}`
     },
     body:JSON.stringify({ master_id:id })
   });
-  log(r.ok?`MASTER supprimé: ${id}`:`❌ Suppression: ${await r.text()}`);
+  log(r.ok ? `MASTER supprimé : ${id}` : `❌ Suppression : ${await r.text()}`);
 }
 
-/* ---------- Render ---------- */
+/* ---------- Rendu ---------- */
 function render(){
   const root=$("devices"); root.innerHTML="";
-  if(!devices.length){root.textContent="Aucun MASTER.";return;}
+  if(!devices.length){ root.textContent="Aucun MASTER."; return; }
 
   devices.forEach(d=>{
-    const card=document.createElement("div"); card.className="card dev";
     const live=isLive(d);
+    const card=document.createElement("div"); card.className="card dev";
     card.innerHTML=`
       <div class="head">
         <div>${d.name||d.id}</div>
@@ -167,40 +173,40 @@ function render(){
         ID : ${d.id}<br>MAC : ${d.master_mac||'—'}<br>
         Dernier contact : ${d.last_seen?new Date(d.last_seen).toLocaleTimeString():'jamais'}
       </div>`;
-    /* slaves list */
-    const slaves=(nodesByMaster[d.id]||[]);
-    const sDiv=document.createElement("div"); sDiv.className="slaves";
+    /* liste slaves */
+    const slavesDiv=document.createElement("div"); slavesDiv.className="slaves";
+    const slaves = nodesByMaster[d.id] || [];
     if(slaves.length){
-      sDiv.textContent="Slaves : ";
-      slaves.forEach(m=>{
-        const c=document.createElement("span"); c.className="chip"; c.textContent=m;
-        sDiv.appendChild(c);
+      slavesDiv.textContent="Slaves : ";
+      slaves.forEach(mac=>{
+        const chip=document.createElement("span"); chip.className="chip"; chip.textContent=mac;
+        slavesDiv.appendChild(chip);
       });
-    }else sDiv.textContent="Aucun slave.";
-    card.appendChild(sDiv);
+    }else slavesDiv.textContent="Aucun slave.";
+    card.appendChild(slavesDiv);
 
     /* actions master */
     const act=document.createElement("div"); act.className="actions";
     const add=(t,cls,cb)=>{const b=document.createElement("button");
       b.textContent=t;if(cls)b.className=cls;b.onclick=cb;act.appendChild(b);}
-    add("Pulse","",()=>sendCmd(d.id,null,"PULSE",{ms:500}));
-    add("Power ON","",()=>sendCmd(d.id,null,"POWER_ON"));
-    add("Power OFF","",()=>sendCmd(d.id,null,"POWER_OFF"));
-    add("Reset","",()=>sendCmd(d.id,null,"RESET"));
-    add("Supprimer","danger",()=>{if(confirm("Supprimer?")) deleteDevice(d.id);});
+    add("Pulse 500 ms","", ()=>sendCmd(d.id,null,"PULSE",{ms:500}));
+    add("Power ON",""      , ()=>sendCmd(d.id,null,"POWER_ON"));
+    add("Power OFF",""     , ()=>sendCmd(d.id,null,"POWER_OFF"));
+    add("Reset",""         , ()=>sendCmd(d.id,null,"RESET"));
+    add("Supprimer","danger",()=>deleteDevice(d.id));
     card.appendChild(act);
 
     /* actions slaves */
     if(slaves.length){
-      const a2=document.createElement("div"); a2.className="actions";
+      const act2=document.createElement("div"); act2.className="actions";
       slaves.forEach(mac=>{
-        const on=document.createElement("button");on.textContent="LED ON";
-        on.onclick=()=>sendCmd(d.id,mac,"LED",{on:true});
-        const off=document.createElement("button");off.textContent="OFF";
-        off.onclick=()=>sendCmd(d.id,mac,"LED",{on:false});
-        a2.append(on,off);
+        const on = document.createElement("button"); on.textContent="LED ON";
+        on.onclick = ()=>sendCmd(d.id,mac,"LED",{on:true});
+        const off= document.createElement("button"); off.textContent="OFF";
+        off.onclick= ()=>sendCmd(d.id,mac,"LED",{on:false});
+        act2.append(on,off);
       });
-      card.appendChild(a2);
+      card.appendChild(act2);
     }
     root.appendChild(card);
   });
@@ -209,41 +215,40 @@ function render(){
 /* ---------- Realtime ---------- */
 function attachRealtime(){
   if(chanRealtime) sb.removeChannel(chanRealtime);
-  chanRealtime=sb.channel("ui")
-    .on('postgres_changes',{event:"*",schema:"public",table:"devices"},loadAll)
-    .on('postgres_changes',{event:"*",schema:"public",table:"nodes"},  loadAll) // 'slaves' si renommé
-    .subscribe(status=>{if(status==="SUBSCRIBED") log("Realtime ON");});
+  chanRealtime = sb.channel("ui")
+    .on('postgres_changes',{event:"*",schema:"public",table:"devices"}, loadAll)
+    .on('postgres_changes',{event:"*",schema:"public",table:"nodes"},   loadAll)
+    .subscribe(s=>{ if(s==="SUBSCRIBED") log("Realtime ON"); });
 }
 
 /* ---------- Pair-code ---------- */
 async function onAdd(){
-  const {data:{session}}=await sb.auth.getSession();
-  if(!session){alert("Non connecté"); return;}
+  const {data:{session}} = await sb.auth.getSession();
+  if(!session){alert("Non connecté");return;}
 
   try{
     const r=await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`,{
       method:"POST",
       headers:{
         "Content-Type":"application/json",
-        apikey:SUPA_ANON,
+        apikey:SOPA_ANON,
         Authorization:`Bearer ${session.access_token}`
       },
       body:JSON.stringify({ ttl_minutes:10 })
     });
-    if(!r.ok){alert(await r.text()); return;}
+    if(!r.ok){alert(await r.text());return;}
     const {code,expires_at}=await r.json();
     $("pairCode").textContent=String(code).padStart(6,"0");
     const end=new Date(expires_at).getTime();
     const tick=()=>{
-      const left=Math.max(0,Math.floor((end-Date.now())/1000));
-      $("pairExpires").textContent=
-        `${Math.floor(left/60)}:${String(left%60).padStart(2,"0")}`;
-      if(left<=0) clearInterval(id);
+      const l=Math.max(0,Math.floor((end-Date.now())/1000));
+      $("pairExpires").textContent=`${Math.floor(l/60)}:${String(l%60).padStart(2,'0')}`;
+      if(l<=0) clearInterval(intv);
     };
-    tick(); const id=setInterval(tick,1000);
+    tick(); const intv=setInterval(tick,1000);
     $("dlgPair").showModal();
-    log(`Pair-code ${code} (expire ${new Date(expires_at).toLocaleTimeString()})`);
-  }catch(e){ log("create_pair_code: "+e); alert("Erreur."); }
+    log(`Pair-code ${code}`);
+  }catch(e){log("Erreur pair-code: "+e);}
 }
 
 /* ---------- Boot ---------- */
@@ -255,5 +260,5 @@ sb.auth.onAuthStateChange((ev,session)=>{
 });
 log("UI prête");
 </script>
-</body></html>
-
+</body>
+</html>
