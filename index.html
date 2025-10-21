@@ -30,11 +30,14 @@
  .actions{display:flex;flex-wrap:wrap;gap:6px}
  .chip{display:inline-block;background:#334155;border-radius:999px;padding:2px 8px;margin:1px}
  .log{white-space:pre-wrap;background:#0b1220;border:1px solid #243045;border-radius:10px;
-      padding:10px;height:120px;overflow:auto}
+      padding:10px;height:160px;overflow:auto}
  dialog{border:1px solid #243045;border-radius:12px;background:var(--card);
         color:var(--fg);padding:0;max-width:420px}
  dialog .dlg{padding:16px;display:flex;flex-direction:column;gap:10px}
  code{background:#0b1220;border:1px solid #243045;border-radius:6px;padding:2px 6px}
+ .cmds{margin:6px 0 0;padding-left:18px;font-size:12px}
+ .sep{height:1px;background:#243045;margin:8px 0}
+ .right{margin-left:auto}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
@@ -80,15 +83,17 @@ const SUPA_ANON    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 /* ---------- INIT ---------- */
 const sb   = window.supabase.createClient(SUPABASE_URL, SUPA_ANON);
 const $    = id => document.getElementById(id);
-const log  = t => { $('log').textContent += new Date().toLocaleTimeString()+"  "+t+"\n"; };
+const log  = t => { const L=$('log'); L.textContent += new Date().toLocaleTimeString()+"  "+t+"\n"; L.scrollTop=L.scrollHeight; };
 
 /* ---------- État ---------- */
-let devices = [];           // masters
-let nodesByMaster = {};     // { master_id : [ slave_mac, ... ] }
-let chanRealtime;
+let devices = [];                       // masters (array)
+let nodesByMaster = {};                 // { master_id : [ slave_mac, ... ] }
+const cards = new Map();                // master_id -> DOM elements bundle
+let chDevices, chNodes, chCmds;
 
 /* ---------- Helpers ---------- */
 const isLive = d => d.last_seen && Date.now()-new Date(d.last_seen) < 25_000;
+const fmtTS  = s => s ? new Date(s).toLocaleString() : "—";
 
 /* ---------- Auth ---------- */
 function updateAuth(u){
@@ -116,7 +121,7 @@ async function loadAll(){
   if(ed){ log("Err devices: "+ed.message); return; }
   devices = devs || [];
 
-  /* slaves (table nodes) */
+  /* slaves */
   const {data:nodes,error:en} = await sb
     .from('nodes')
     .select('master_id,slave_mac');
@@ -126,10 +131,14 @@ async function loadAll(){
     (nodesByMaster[n.master_id] ??= []).push(n.slave_mac);
   });
 
-  render();
+  /* rendu cartes + initial commands par master */
+  renderAll();
+  for (const d of devices) {
+    await refreshCommands(d.id); // charge top 20 par carte
+  }
 }
 
-/* ---------- Commandes & suppression ---------- */
+/* ---------- Commandes ---------- */
 async function sendCmd(masterId, targetMac, action, payload={}){
   const {error} = await sb.from('commands').insert({
     master_id : masterId,
@@ -140,6 +149,8 @@ async function sendCmd(masterId, targetMac, action, payload={}){
   if(error) log("cmd err: "+error.message);
   else log(`[cmd] ${action} → ${masterId}${targetMac?" ▶ "+targetMac:""}`);
 }
+
+/* ---------- Supprimer device via Edge (existant) ---------- */
 async function deleteDevice(id){
   if(!confirm(`Supprimer ${id} ?`)) return;
   const {data:{session}} = await sb.auth.getSession();
@@ -148,7 +159,7 @@ async function deleteDevice(id){
     method:"POST",
     headers:{
       "Content-Type":"application/json",
-      apikey:SUPA_ANON,   // <-- ta clé anon
+      apikey:SUPA_ANON,
       Authorization:`Bearer ${session.access_token}`
     },
     body:JSON.stringify({ master_id:id })
@@ -156,69 +167,191 @@ async function deleteDevice(id){
   log(r.ok ? `MASTER supprimé : ${id}` : `❌ Suppression : ${await r.text()}`);
 }
 
-/* ---------- Rendu ---------- */
-function render(){
+/* ---------- Rendu : créer/MAJ une carte ---------- */
+function renderAll(){
   const root=$("devices"); root.innerHTML="";
+  cards.clear();
   if(!devices.length){ root.textContent="Aucun MASTER."; return; }
 
   devices.forEach(d=>{
-    const live=isLive(d);
-    const card=document.createElement("div"); card.className="card dev";
-    card.innerHTML=`
+    const live = isLive(d);
+    const card = document.createElement("div"); card.className="card dev";
+    card.innerHTML = `
       <div class="head">
-        <div>${d.name||d.id}</div>
+        <div class="title">${d.name||d.id}</div>
         <span class="badge ${live?'on':'off'}">${live?'En ligne':'Hors ligne'}</span>
       </div>
       <div class="meta">
-        ID : ${d.id}<br>MAC : ${d.master_mac||'—'}<br>
-        Dernier contact : ${d.last_seen?new Date(d.last_seen).toLocaleTimeString():'jamais'}
-      </div>`;
-    /* liste slaves */
-    const slavesDiv=document.createElement("div"); slavesDiv.className="slaves";
+        ID : <span class="id">${d.id}</span><br>
+        MAC : <span class="mac">${d.master_mac||'—'}</span><br>
+        Dernier contact : <span class="last">${fmtTS(d.last_seen) || 'jamais'}</span>
+      </div>
+      <div class="slaves"></div>
+      <div class="actions"></div>
+      <div class="sep"></div>
+      <div class="muted" style="font-size:12px">Commandes (20 dernières)</div>
+      <ul class="cmds"></ul>
+    `;
+
+    // Slaves chips
+    const slavesDiv = card.querySelector(".slaves");
     const slaves = nodesByMaster[d.id] || [];
-    if(slaves.length){
-      slavesDiv.textContent="Slaves : ";
+    if (slaves.length){
+      slavesDiv.textContent = "Slaves : ";
       slaves.forEach(mac=>{
-        const chip=document.createElement("span"); chip.className="chip"; chip.textContent=mac;
+        const chip=document.createElement("span");
+        chip.className="chip"; chip.textContent=mac;
         slavesDiv.appendChild(chip);
       });
-    }else slavesDiv.textContent="Aucun slave.";
-    card.appendChild(slavesDiv);
-
-    /* actions master */
-    const act=document.createElement("div"); act.className="actions";
-    const add=(t,cls,cb)=>{const b=document.createElement("button");
-      b.textContent=t;if(cls)b.className=cls;b.onclick=cb;act.appendChild(b);}
-    add("Pulse 500 ms","", ()=>sendCmd(d.id,null,"PULSE",{ms:500}));
-    add("Power ON",""      , ()=>sendCmd(d.id,null,"POWER_ON"));
-    add("Power OFF",""     , ()=>sendCmd(d.id,null,"POWER_OFF"));
-    add("Reset",""         , ()=>sendCmd(d.id,null,"RESET"));
-    add("Supprimer","danger",()=>deleteDevice(d.id));
-    card.appendChild(act);
-
-    /* actions slaves */
-    if(slaves.length){
-      const act2=document.createElement("div"); act2.className="actions";
-      slaves.forEach(mac=>{
-        const on = document.createElement("button"); on.textContent="LED ON";
-        on.onclick = ()=>sendCmd(d.id,mac,"LED",{on:true});
-        const off= document.createElement("button"); off.textContent="OFF";
-        off.onclick= ()=>sendCmd(d.id,mac,"LED",{on:false});
-        act2.append(on,off);
-      });
-      card.appendChild(act2);
+    } else {
+      slavesDiv.textContent = "Aucun slave.";
     }
+
+    // Actions
+    const act=card.querySelector(".actions");
+    const addBtn=(txt,cls,cb)=>{const b=document.createElement("button"); b.textContent=txt; if(cls) b.className=cls; b.onclick=cb; act.appendChild(b);};
+    addBtn("Pulse 500 ms","", ()=>sendCmd(d.id,null,"PULSE",{ms:500}));
+    addBtn("Power ON","",      ()=>sendCmd(d.id,null,"POWER_ON"));
+    addBtn("Power OFF","",     ()=>sendCmd(d.id,null,"POWER_OFF"));
+    addBtn("Reset","",         ()=>sendCmd(d.id,null,"RESET"));
+    const del=document.createElement("button"); del.textContent="Supprimer"; del.className="danger right"; del.onclick=()=>deleteDevice(d.id); act.appendChild(del);
+
     root.appendChild(card);
+
+    // Enregistre les hooks DOM pour MAJ ciblées
+    cards.set(d.id, {
+      card,
+      badge: card.querySelector(".badge"),
+      title: card.querySelector(".title"),
+      metaId: card.querySelector(".id"),
+      metaMac: card.querySelector(".mac"),
+      metaLast: card.querySelector(".last"),
+      slavesDiv,
+      cmdsEl: card.querySelector(".cmds"),
+    });
   });
 }
 
-/* ---------- Realtime ---------- */
+/* --- met à jour seulement les éléments de la carte concernée --- */
+function patchDeviceRow(dev){
+  const ref = cards.get(dev.id);
+  if(!ref) return;
+  const live = isLive(dev);
+  ref.badge.textContent = live ? "En ligne" : "Hors ligne";
+  ref.badge.className = `badge ${live?'on':'off'}`;
+  if (dev.name) ref.title.textContent = dev.name;
+  if (dev.master_mac) ref.metaMac.textContent = dev.master_mac;
+  if (dev.last_seen) ref.metaLast.textContent = fmtTS(dev.last_seen);
+}
+
+/* --- recharge la liste des slaves pour un master --- */
+function refreshSlavesFor(masterId){
+  const ref = cards.get(masterId);
+  if(!ref) return;
+  sb.from('nodes').select('slave_mac').eq('master_id', masterId).then(({data})=>{
+    nodesByMaster[masterId] = (data||[]).map(x=>x.slave_mac);
+    const d = nodesByMaster[masterId];
+    ref.slavesDiv.innerHTML = "";
+    if (d && d.length){
+      ref.slavesDiv.textContent="Slaves : ";
+      d.forEach(mac=>{ const chip=document.createElement("span"); chip.className="chip"; chip.textContent=mac; ref.slavesDiv.appendChild(chip); });
+    } else {
+      ref.slavesDiv.textContent="Aucun slave.";
+    }
+  });
+}
+
+/* --- charge les 20 dernières commandes d’un master et les rend --- */
+async function refreshCommands(masterId){
+  const ref = cards.get(masterId); if(!ref) return;
+  const { data, error } = await sb
+    .from('commands')
+    .select('id, action, target_mac, status, created_at')
+    .eq('master_id', masterId)
+    .order('created_at',{ascending:false})
+    .limit(20);
+  if(error){ log("Err cmds: "+error.message); return; }
+  ref.cmdsEl.innerHTML = "";
+  (data||[]).forEach(c => ref.cmdsEl.appendChild(renderCmdLi(c)));
+}
+
+/* --- ajoute/MAJ une ligne de commande --- */
+function renderCmdLi(c){
+  const li = document.createElement('li');
+  li.id = `cmd-${c.id}`;
+  li.innerHTML = `<code>${c.status}</code> · ${c.action}${c.target_mac ? ' → '+c.target_mac : ' (local)'} <span class="muted">· ${fmtTS(c.created_at)}</span>`;
+  return li;
+}
+function upsertCmdRow(masterId, c){
+  const ref = cards.get(masterId); if(!ref) return;
+  const id = `cmd-${c.id}`;
+  let li = ref.cmdsEl.querySelector(`#${CSS.escape(id)}`);
+  if (!li){
+    li = renderCmdLi(c);
+    ref.cmdsEl.prepend(li);
+    // bornage à 20
+    while (ref.cmdsEl.children.length > 20) ref.cmdsEl.removeChild(ref.cmdsEl.lastChild);
+  } else {
+    li.innerHTML = `<code>${c.status}</code> · ${c.action}${c.target_mac ? ' → '+c.target_mac : ' (local)'} <span class="muted">· ${fmtTS(c.created_at)}</span>`;
+  }
+}
+
+/* ---------- Realtime (3 canaux) ---------- */
 function attachRealtime(){
-  if(chanRealtime) sb.removeChannel(chanRealtime);
-  chanRealtime = sb.channel("ui")
-    .on('postgres_changes',{event:"*",schema:"public",table:"devices"}, loadAll)
-    .on('postgres_changes',{event:"*",schema:"public",table:"nodes"},   loadAll)
-    .subscribe(s=>{ if(s==="SUBSCRIBED") log("Realtime ON"); });
+  // cleanup anciens channels
+  if (chDevices) sb.removeChannel(chDevices);
+  if (chNodes)   sb.removeChannel(chNodes);
+  if (chCmds)    sb.removeChannel(chCmds);
+
+  // 1) Devices (INSERT/UPDATE/DELETE)
+  chDevices = sb.channel("rt:devices")
+    .on('postgres_changes',{ event:'INSERT', schema:'public', table:'devices' }, (p)=>{
+      log(`+ device ${p.new.id}`);
+      devices.unshift(p.new);
+      renderAll();
+      refreshCommands(p.new.id);
+    })
+    .on('postgres_changes',{ event:'UPDATE', schema:'public', table:'devices' }, (p)=>{
+      const d = p.new;
+      const idx = devices.findIndex(x=>x.id===d.id);
+      if (idx>=0) devices[idx] = { ...devices[idx], ...d };
+      patchDeviceRow(d);
+    })
+    .on('postgres_changes',{ event:'DELETE', schema:'public', table:'devices' }, (p)=>{
+      const id = p.old.id;
+      log(`- device ${id}`);
+      devices = devices.filter(x=>x.id!==id);
+      renderAll();
+    })
+    .subscribe((s)=>{ if(s==='SUBSCRIBED') log('Realtime devices ON'); });
+
+  // 2) Nodes (INSERT/DELETE) -> mettre à jour uniquement la carte concernée
+  chNodes = sb.channel("rt:nodes")
+    .on('postgres_changes',{ event:'INSERT', schema:'public', table:'nodes' }, (p)=>{
+      const m = p.new.master_id;
+      log(`+ node ${p.new.slave_mac} → ${m}`);
+      refreshSlavesFor(m);
+    })
+    .on('postgres_changes',{ event:'DELETE', schema:'public', table:'nodes' }, (p)=>{
+      const m = p.old.master_id;
+      log(`- node ${p.old.slave_mac} ← ${m}`);
+      refreshSlavesFor(m);
+    })
+    .subscribe((s)=>{ if(s==='SUBSCRIBED') log('Realtime nodes ON'); });
+
+  // 3) Commands (INSERT/UPDATE) -> toucher seulement la carte du master concerné
+  chCmds = sb.channel("rt:commands")
+    .on('postgres_changes',{ event:'INSERT', schema:'public', table:'commands' }, (p)=>{
+      const m = p.new.master_id;
+      upsertCmdRow(m, p.new);
+      log(`cmd + ${p.new.action} (${p.new.status}) → ${m}`);
+    })
+    .on('postgres_changes',{ event:'UPDATE', schema:'public', table:'commands' }, (p)=>{
+      const m = p.new.master_id;
+      upsertCmdRow(m, p.new);
+      log(`cmd ~ ${p.new.action} (${p.new.status}) → ${m}`);
+    })
+    .subscribe((s)=>{ if(s==='SUBSCRIBED') log('Realtime commands ON'); });
 }
 
 /* ---------- Pair-code ---------- */
@@ -240,8 +373,7 @@ async function onAdd(){
     const {code,expires_at}=await r.json();
     $("pairCode").textContent=String(code).padStart(6,"0");
     const end=new Date(expires_at).getTime();
-    const tick=()=>{
-      const l=Math.max(0,Math.floor((end-Date.now())/1000));
+    const tick=()=>{ const l=Math.max(0,Math.floor((end-Date.now())/1000));
       $("pairExpires").textContent=`${Math.floor(l/60)}:${String(l%60).padStart(2,'0')}`;
       if(l<=0) clearInterval(intv);
     };
@@ -253,13 +385,20 @@ async function onAdd(){
 
 /* ---------- Boot ---------- */
 sb.auth.onAuthStateChange((ev,session)=>{
-  if(ev==="INITIAL_SESSION"){
+  if(ev==="INITIAL_SESSION" || ev==="SIGNED_IN" || ev==="SIGNED_OUT"){
     updateAuth(session?.user||null);
     if(session?.user){ attachRealtime(); loadAll(); }
+    else {
+      // nettoyage visuel
+      $("devices").innerHTML=""; cards.clear();
+      if (chDevices) sb.removeChannel(chDevices);
+      if (chNodes)   sb.removeChannel(chNodes);
+      if (chCmds)    sb.removeChannel(chCmds);
+      log("Déconnecté");
+    }
   }
 });
 log("UI prête");
 </script>
 </body>
 </html>
-
