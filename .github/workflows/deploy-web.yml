@@ -19,10 +19,16 @@ jobs:
         working-directory: web/app
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: npm install            # <-- au lieu de npm ci
+          cache: "npm"
+          cache-dependency-path: "web/app/package-lock.json" # ok même s'il n'existe pas
+
+      - name: Install deps (no lockfile yet)
+        run: npm install
+
       - name: Build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
@@ -31,6 +37,16 @@ jobs:
           echo "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" > .env
           echo "VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY" >> .env
           npm run build
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web/app/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
