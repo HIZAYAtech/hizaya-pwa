@@ -22,7 +22,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: npm ci
+      - run: npm install            # <-- au lieu de npm ci
       - name: Build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
@@ -34,12 +34,3 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web/app/dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
