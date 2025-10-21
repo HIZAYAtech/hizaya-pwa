@@ -28,7 +28,9 @@
  .off{background:#3b1a1a;color:#fecaca;border-color:#7f1d1d}
  .meta,.slaves{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:2px}
  .actions{display:flex;flex-wrap:wrap;gap:6px}
- .chip{display:inline-block;background:#334155;border-radius:999px;padding:2px 8px;margin:1px}
+ .chip{display:inline-flex;align-items:center;gap:6px;background:#334155;border-radius:999px;padding:2px 8px;margin:1px}
+ .chip .mac{font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px}
+ .chip .mini{display:flex;gap:6px}
  .log{white-space:pre-wrap;background:#0b1220;border:1px solid #243045;border-radius:10px;
       padding:10px;height:160px;overflow:auto}
  dialog{border:1px solid #243045;border-radius:12px;background:var(--card);
@@ -38,6 +40,7 @@
  .cmds{margin:6px 0 0;padding-left:18px;font-size:12px}
  .sep{height:1px;background:#243045;margin:8px 0}
  .right{margin-left:auto}
+ .tiny{font-size:11px;padding:3px 6px}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
@@ -80,6 +83,10 @@
 const SUPABASE_URL = "https://zeknluovgbsmtgupwkvo.supabase.co";
 const SUPA_ANON    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpla25sdW92Z2JzbXRndXB3a3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MjY2NjIsImV4cCI6MjA3NDMwMjY2Mn0.AjCTWEAGBBhi5liJv8LBCK_baqivRlDIYMbFcDeA_q4";
 
+/* ---------- PARAMS UI ---------- */
+const DEFAULT_IO_PIN = 26;        // pin par défaut pour SLV_IO
+const LIVE_TTL_MS    = 25_000;    // fenêtre "en ligne"
+
 /* ---------- INIT ---------- */
 const sb   = window.supabase.createClient(SUPABASE_URL, SUPA_ANON);
 const $    = id => document.getElementById(id);
@@ -92,7 +99,7 @@ const cards = new Map();                // master_id -> DOM elements bundle
 let chDevices, chNodes, chCmds;
 
 /* ---------- Helpers ---------- */
-const isLive = d => d.last_seen && Date.now()-new Date(d.last_seen) < 25_000;
+const isLive = d => d.last_seen && (Date.now()-new Date(d.last_seen) < LIVE_TTL_MS);
 const fmtTS  = s => s ? new Date(s).toLocaleString() : "—";
 
 /* ---------- Auth ---------- */
@@ -131,11 +138,8 @@ async function loadAll(){
     (nodesByMaster[n.master_id] ??= []).push(n.slave_mac);
   });
 
-  /* rendu cartes + initial commands par master */
   renderAll();
-  for (const d of devices) {
-    await refreshCommands(d.id); // charge top 20 par carte
-  }
+  for (const d of devices) await refreshCommands(d.id);
 }
 
 /* ---------- Commandes ---------- */
@@ -150,7 +154,14 @@ async function sendCmd(masterId, targetMac, action, payload={}){
   else log(`[cmd] ${action} → ${masterId}${targetMac?" ▶ "+targetMac:""}`);
 }
 
-/* ---------- Supprimer device via Edge (existant) ---------- */
+/* ---- Master: renommer & supprimer ---- */
+async function renameMaster(id){
+  const name = prompt("Nouveau nom pour le master ?", "");
+  if(!name) return;
+  const { error } = await sb.from('devices').update({ name }).eq('id', id);
+  if(error) alert(error.message);
+  else log(`Renommé ${id} → ${name}`);
+}
 async function deleteDevice(id){
   if(!confirm(`Supprimer ${id} ?`)) return;
   const {data:{session}} = await sb.auth.getSession();
@@ -193,30 +204,43 @@ function renderAll(){
       <ul class="cmds"></ul>
     `;
 
-    // Slaves chips
+    // Slaves chips + boutons
     const slavesDiv = card.querySelector(".slaves");
     const slaves = nodesByMaster[d.id] || [];
     if (slaves.length){
       slavesDiv.textContent = "Slaves : ";
       slaves.forEach(mac=>{
-        const chip=document.createElement("span");
-        chip.className="chip"; chip.textContent=mac;
+        const chip=document.createElement("span"); chip.className="chip";
+        const label=document.createElement("span"); label.className="mac"; label.textContent=mac;
+        const mini = document.createElement("span"); mini.className="mini";
+        const mk=(txt,cb)=>{const b=document.createElement("button"); b.textContent=txt; b.className="tiny"; b.onclick=cb; return b;};
+        // IO ON / OFF (pin par défaut)
+        mini.appendChild(mk("IO ON",  ()=>sendCmd(d.id, mac, "SLV_IO",        { pin: DEFAULT_IO_PIN, mode:"OUT", value:1 })));
+        mini.appendChild(mk("IO OFF", ()=>sendCmd(d.id, mac, "SLV_IO",        { pin: DEFAULT_IO_PIN, mode:"OUT", value:0 })));
+        // Reset / Force off / Hard reset
+        mini.appendChild(mk("Reset",      ()=>sendCmd(d.id, mac, "SLV_RESET",     {})));
+        mini.appendChild(mk("Force OFF",  ()=>sendCmd(d.id, mac, "SLV_FORCE_OFF", {})));
+        mini.appendChild(mk("Hard 3s",    ()=>sendCmd(d.id, mac, "SLV_HARD_RESET",{ ms:3000 })));
+
+        chip.append(label, mini);
         slavesDiv.appendChild(chip);
       });
     } else {
       slavesDiv.textContent = "Aucun slave.";
     }
 
-    // Actions
+    // Actions master
     const act=card.querySelector(".actions");
     const addBtn=(txt,cls,cb)=>{const b=document.createElement("button"); b.textContent=txt; if(cls) b.className=cls; b.onclick=cb; act.appendChild(b);};
-    addBtn("Pulse 500 ms","", ()=>sendCmd(d.id,null,"PULSE",{ms:500}));
+    addBtn("Renommer","",      ()=>renameMaster(d.id));
+    addBtn("Pulse 500 ms","",  ()=>sendCmd(d.id,null,"PULSE",{ms:500}));
     addBtn("Power ON","",      ()=>sendCmd(d.id,null,"POWER_ON"));
     addBtn("Power OFF","",     ()=>sendCmd(d.id,null,"POWER_OFF"));
     addBtn("Reset","",         ()=>sendCmd(d.id,null,"RESET"));
     const del=document.createElement("button"); del.textContent="Supprimer"; del.className="danger right"; del.onclick=()=>deleteDevice(d.id); act.appendChild(del);
 
-    root.appendChild(card);
+    // Ajoute la carte
+    $("devices").appendChild(card);
 
     // Enregistre les hooks DOM pour MAJ ciblées
     cards.set(d.id, {
@@ -254,7 +278,19 @@ function refreshSlavesFor(masterId){
     ref.slavesDiv.innerHTML = "";
     if (d && d.length){
       ref.slavesDiv.textContent="Slaves : ";
-      d.forEach(mac=>{ const chip=document.createElement("span"); chip.className="chip"; chip.textContent=mac; ref.slavesDiv.appendChild(chip); });
+      d.forEach(mac=>{
+        const chip=document.createElement("span"); chip.className="chip";
+        const label=document.createElement("span"); label.className="mac"; label.textContent=mac;
+        const mini = document.createElement("span"); mini.className="mini";
+        const mk=(txt,cb)=>{const b=document.createElement("button"); b.textContent=txt; b.className="tiny"; b.onclick=cb; return b;};
+        mini.appendChild(mk("IO ON",  ()=>sendCmd(masterId, mac, "SLV_IO",        { pin: DEFAULT_IO_PIN, mode:"OUT", value:1 })));
+        mini.appendChild(mk("IO OFF", ()=>sendCmd(masterId, mac, "SLV_IO",        { pin: DEFAULT_IO_PIN, mode:"OUT", value:0 })));
+        mini.appendChild(mk("Reset",      ()=>sendCmd(masterId, mac, "SLV_RESET",     {})));
+        mini.appendChild(mk("Force OFF",  ()=>sendCmd(masterId, mac, "SLV_FORCE_OFF", {})));
+        mini.appendChild(mk("Hard 3s",    ()=>sendCmd(masterId, mac, "SLV_HARD_RESET",{ ms:3000 })));
+        chip.append(label, mini);
+        ref.slavesDiv.appendChild(chip);
+      });
     } else {
       ref.slavesDiv.textContent="Aucun slave.";
     }
@@ -289,7 +325,6 @@ function upsertCmdRow(masterId, c){
   if (!li){
     li = renderCmdLi(c);
     ref.cmdsEl.prepend(li);
-    // bornage à 20
     while (ref.cmdsEl.children.length > 20) ref.cmdsEl.removeChild(ref.cmdsEl.lastChild);
   } else {
     li.innerHTML = `<code>${c.status}</code> · ${c.action}${c.target_mac ? ' → '+c.target_mac : ' (local)'} <span class="muted">· ${fmtTS(c.created_at)}</span>`;
@@ -298,12 +333,10 @@ function upsertCmdRow(masterId, c){
 
 /* ---------- Realtime (3 canaux) ---------- */
 function attachRealtime(){
-  // cleanup anciens channels
   if (chDevices) sb.removeChannel(chDevices);
   if (chNodes)   sb.removeChannel(chNodes);
   if (chCmds)    sb.removeChannel(chCmds);
 
-  // 1) Devices (INSERT/UPDATE/DELETE)
   chDevices = sb.channel("rt:devices")
     .on('postgres_changes',{ event:'INSERT', schema:'public', table:'devices' }, (p)=>{
       log(`+ device ${p.new.id}`);
@@ -325,7 +358,6 @@ function attachRealtime(){
     })
     .subscribe((s)=>{ if(s==='SUBSCRIBED') log('Realtime devices ON'); });
 
-  // 2) Nodes (INSERT/DELETE) -> mettre à jour uniquement la carte concernée
   chNodes = sb.channel("rt:nodes")
     .on('postgres_changes',{ event:'INSERT', schema:'public', table:'nodes' }, (p)=>{
       const m = p.new.master_id;
@@ -339,7 +371,6 @@ function attachRealtime(){
     })
     .subscribe((s)=>{ if(s==='SUBSCRIBED') log('Realtime nodes ON'); });
 
-  // 3) Commands (INSERT/UPDATE) -> toucher seulement la carte du master concerné
   chCmds = sb.channel("rt:commands")
     .on('postgres_changes',{ event:'INSERT', schema:'public', table:'commands' }, (p)=>{
       const m = p.new.master_id;
@@ -358,7 +389,6 @@ function attachRealtime(){
 async function onAdd(){
   const {data:{session}} = await sb.auth.getSession();
   if(!session){alert("Non connecté");return;}
-
   try{
     const r=await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`,{
       method:"POST",
@@ -389,7 +419,6 @@ sb.auth.onAuthStateChange((ev,session)=>{
     updateAuth(session?.user||null);
     if(session?.user){ attachRealtime(); loadAll(); }
     else {
-      // nettoyage visuel
       $("devices").innerHTML=""; cards.clear();
       if (chDevices) sb.removeChannel(chDevices);
       if (chNodes)   sb.removeChannel(chNodes);
