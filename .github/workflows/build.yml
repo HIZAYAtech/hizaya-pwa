@@ -1,5 +1,4 @@
-# .github/workflows/build.yml
-name: Build & Deploy
+name: Build & Deploy (Vite + GitHub Pages)
 
 on:
   push:
@@ -11,26 +10,36 @@ permissions:
   pages: write
   id-token: write
 
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/app
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node (no cache)
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          # Pas de cache pour éviter les erreurs "Some specified paths were not resolved"
 
-      - name: Install deps
-        working-directory: web/app
-        run: npm install
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
-      # Injection des variables d'env au moment du build (pas de .env nécessaire)
-      - name: Build (Vite + env injection)
-        working-directory: web/app
+      - name: Build (inject Vite env from secrets)
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
@@ -38,6 +47,7 @@ jobs:
           echo "[ENV] URL set? $([[ -n \"$VITE_SUPABASE_URL\" ]] && echo yes || echo no)"
           echo "[ENV] ANON set? $([[ -n \"$VITE_SUPABASE_ANON_KEY\" ]] && echo yes || echo no)"
           npm run build
+          # 404 fallback pour GitHub Pages (SPA)
           cp -f dist/index.html dist/404.html || true
           ls -la dist
 
