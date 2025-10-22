@@ -1,3 +1,4 @@
+# .github/workflows/build.yml
 name: Build & Deploy
 
 on:
@@ -23,17 +24,11 @@ jobs:
         with:
           node-version: 20
 
-      - name: Debug paths
-        run: |
-          pwd
-          ls -la
-          ls -la web || true
-          ls -la web/app || true
-
       - name: Install deps
         working-directory: web/app
         run: npm install
 
+      # Injection des variables d'env au moment du build (pas de .env nécessaire)
       - name: Build (Vite + env injection)
         working-directory: web/app
         env:
@@ -43,7 +38,7 @@ jobs:
           echo "[ENV] URL set? $([[ -n \"$VITE_SUPABASE_URL\" ]] && echo yes || echo no)"
           echo "[ENV] ANON set? $([[ -n \"$VITE_SUPABASE_ANON_KEY\" ]] && echo yes || echo no)"
           npm run build
-          echo "[DIST]"
+          cp -f dist/index.html dist/404.html || true
           ls -la dist
 
       - name: Upload artifact
