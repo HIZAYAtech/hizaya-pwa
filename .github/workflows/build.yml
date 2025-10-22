@@ -10,9 +10,10 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: "pages"
-  cancel-in-progress: true
+# ❌ Pas de concurrency ici, donc pas d'annulation auto
+# concurrency:
+#   group: "pages"
+#   cancel-in-progress: true
 
 jobs:
   build:
@@ -22,25 +23,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Debug : vérifie les chemins réels du repo
-      - name: List files
+      - name: Setup Node (no cache)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Debug paths
         run: |
           pwd
           ls -la
           ls -la web || true
           ls -la web/app || true
 
-      - name: Setup Node (no cache)
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      # Installe les deps du front
       - name: Install deps
         working-directory: web/app
         run: npm install
 
-      # Build Vite avec secrets injectés directement dans l'env de l'étape
       - name: Build (Vite + env injection)
         working-directory: web/app
         env:
