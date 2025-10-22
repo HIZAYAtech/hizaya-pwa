@@ -4,8 +4,8 @@ import { createClient } from "@supabase/supabase-js";
 /* =========================
    CONFIG (avec garde-fous)
 ========================= */
-const SUPABASE_URL  = (import.meta?.env?.VITE_SUPABASE_URL || "").trim();
-const SUPA_ANON     = (import.meta?.env?.VITE_SUPABASE_ANON_KEY || "").trim();
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+const SUPA_ANON    = import.meta.env.VITE_SUPABASE_ANON_KEY
 const HAS_ENV       = Boolean(SUPABASE_URL && SUPA_ANON);
 
 // On n’instancie le client que si les env sont bien présentes.
