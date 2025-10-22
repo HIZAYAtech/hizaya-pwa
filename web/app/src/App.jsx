@@ -7,6 +7,17 @@ import { createClient } from "@supabase/supabase-js";
    ========================= */
 const SUPABASE_URL  = (import.meta?.env?.VITE_SUPABASE_URL || "").trim();
 const SUPABASE_ANON = (import.meta?.env?.VITE_SUPABASE_ANON_KEY || "").trim();
+
+if (typeof window !== "undefined") {
+  // Log non sensible pour debug prod (n’affiche pas les valeurs)
+  console.info(
+    "[ENV CHECK] VITE_SUPABASE_URL set:",
+    !!SUPABASE_URL,
+    "/ VITE_SUPABASE_ANON_KEY set:",
+    !!SUPABASE_ANON
+  );
+}
+
 const sb = SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPABASE_ANON) : null;
 
 /* =========================
@@ -59,10 +70,10 @@ const THEME = {
    Helpers
    ========================= */
 const isLive = (d) => !!d?.last_seen && (Date.now() - new Date(d.last_seen).getTime()) < 25_000;
-const fmtTS  = (s) => s ? new Date(s).toLocaleString() : "—";
+const fmtTS  = (s) => (s ? new Date(s).toLocaleString() : "—");
 
 /* =========================
-   UI PRIMITIVES
+   UI primitives
    ========================= */
 const Badge = ({ ok, t, children }) => (
   <span
@@ -129,7 +140,6 @@ const PowerButton = ({ onPulse, disabled, t }) => {
    API (Supabase)
    ========================= */
 async function sendCmd(masterId, targetMac, action, payload) {
-  // Actions attendues par ta contrainte SQL: PULSE, POWER_ON, POWER_OFF, RESET, LED, POWER_PULSE, FORCE_OFF, HARD_RESET…
   const { error } = await sb.from("commands").insert({
     master_id: masterId,
     target_mac: targetMac || null,
@@ -300,6 +310,8 @@ const MasterCard = ({ t, device, slaves, onRename, onDelete, cmds, onRefreshCmds
    ENV ERROR (évite page blanche)
    ========================= */
 function EnvError(){
+  const missUrl  = !SUPABASE_URL;
+  const missAnon = !SUPABASE_ANON;
   return (
     <div style={{
       minHeight:"100vh", display:"grid", placeItems:"center",
@@ -308,13 +320,19 @@ function EnvError(){
     }}>
       <div style={{maxWidth:720, padding:24, border:"1px solid #2b2b33", borderRadius:16, background:"#121217"}}>
         <h2 style={{marginTop:0}}>Configuration manquante</h2>
-        <p>Définis les variables d’environnement Vite :</p>
+        <p>Définis les variables d’environnement Vite (au moment du build) :</p>
         <ul>
-          {!SUPABASE_URL && <li><code>VITE_SUPABASE_URL</code></li>}
-          {!SUPABASE_ANON && <li><code>VITE_SUPABASE_ANON_KEY</code></li>}
+          {missUrl  && <li><code>VITE_SUPABASE_URL</code></li>}
+          {missAnon && <li><code>VITE_SUPABASE_ANON_KEY</code></li>}
         </ul>
         <pre style={{whiteSpace:"pre-wrap"}}>{`VITE_SUPABASE_URL=https://....supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOi...`}</pre>
+        <p style={{opacity:.8, marginTop:12}}>
+          Si tu utilises GitHub Actions, injecte-les dans l’étape <em>Build</em> :
+        </p>
+        <pre style={{whiteSpace:"pre-wrap"}}>{`env:
+  VITE_SUPABASE_URL: \${{ secrets.VITE_SUPABASE_URL }}
+  VITE_SUPABASE_ANON_KEY: \${{ secrets.VITE_SUPABASE_ANON_KEY }}`}</pre>
       </div>
     </div>
   );
@@ -508,6 +526,9 @@ function AppInner(){
   // Pair-code count-down
   const pairCountdown = pairInfo && Math.max(0, Math.floor((pairInfo.expiresAt - Date.now()) / 1000));
 
+  const t = isDark ? THEME.dark : THEME.light;
+  const frame = useMemo(() => ({ background:t.bg, color:t.fg, borderColor:t.stroke }), [t]);
+
   return (
     <div
       className="min-h-screen"
@@ -524,7 +545,7 @@ function AppInner(){
           <h1 className="m-0 text-[18px] tracking-wide">REMOTE POWER</h1>
           <div className="flex items-center gap-2 text-xs" style={{ color:t.muted }}>
             <span>{email ?? "non connecté"}</span>
-            <Button tone="ghost" t={t} onClick={() => setIsDark((d) => !d)}>
+            <Button tone="ghost" t={t} onClick={() => window.matchMedia && setIsDark((d)=>!d)}>
               {isDark ? "Mode clair" : "Mode sombre"}
             </Button>
             {email ? (
