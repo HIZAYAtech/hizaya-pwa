@@ -5,57 +5,12 @@ import { createClient } from "@supabase/supabase-js";
 /* =========================
    ENV + client Supabase (garde-fou)
    ========================= */
-const SUPABASE_URL = (import.meta?.env?.VITE_SUPABASE_URL || "").trim();
+const SUPABASE_URL  = (import.meta?.env?.VITE_SUPABASE_URL || "").trim();
 const SUPABASE_ANON = (import.meta?.env?.VITE_SUPABASE_ANON_KEY || "").trim();
 const sb = SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPABASE_ANON) : null;
 
-/* UI lisible si env manquante */
-function EnvError() {
-  return (
-    <div style={{
-      minHeight:"100vh",display:"grid",placeItems:"center",
-      background:"#0b0b0f",color:"#f5f5f7",fontFamily:"system-ui, -apple-system, Segoe UI, Roboto, Arial"
-    }}>
-      <div style={{maxWidth:720,padding:24,border:"1px solid #2b2b33",borderRadius:16,background:"#121217"}}>
-        <h2 style={{marginTop:0}}>Configuration manquante</h2>
-        <p>Définis les variables d’environnement Vite :</p>
-        <ul>
-          {!SUPABASE_URL && <li><code>VITE_SUPABASE_URL</code></li>}
-          {!SUPABASE_ANON && <li><code>VITE_SUPABASE_ANON_KEY</code></li>}
-        </ul>
-        <pre style={{whiteSpace:"pre-wrap"}}>{`VITE_SUPABASE_URL=https://....supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOi...`}</pre>
-      </div>
-    </div>
-  );
-}
-
-/* Error Boundary : évite l’écran blanc si une erreur inattendue survient */
-class AppErrorBoundary extends React.Component {
-  constructor(p){ super(p); this.state={error:null}; }
-  static getDerivedStateFromError(error){ return {error}; }
-  componentDidCatch(error, info){ console.error("App crash:", error, info); }
-  render(){
-    if(this.state.error){
-      return (
-        <div style={{
-          minHeight:"100vh",display:"grid",placeItems:"center",
-          background:"#0b0b0f",color:"#f5f5f7",fontFamily:"system-ui, -apple-system, Segoe UI, Roboto, Arial"
-        }}>
-          <div style={{maxWidth:720,padding:24,border:"1px solid #2b2b33",borderRadius:16,background:"#121217"}}>
-            <h2 style={{marginTop:0}}>Oups, une erreur est survenue</h2>
-            <pre style={{whiteSpace:"pre-wrap",overflow:"auto"}}>{String(this.state.error?.message || this.state.error)}</pre>
-            <p style={{opacity:.7}}>Regarde la console (F12) pour la stack complète.</p>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
 /* =========================
-   THEME (light & dark)
+   THEME (light & dark) – palette limitée
    ========================= */
 const THEME = {
   light: {
@@ -74,12 +29,9 @@ const THEME = {
     koBorder: "#e5e5ea",
     btn: "#f2f2f7",
     btnHover: "#ececf1",
-    blue: "#007aff",
+    blue: "#0a84ff",
+    blueMuted: "#5b8dff",
     red: "#ff3b30",
-    txtBlueStrong: "#0a84ff",
-    txtBlue: "#0a84ff",
-    txtBlueMuted: "#5b8dff",
-    txtRed: "#ff3b30",
   },
   dark: {
     bg: "#0b0b0f",
@@ -97,18 +49,17 @@ const THEME = {
     koBorder: "#2b2b33",
     btn: "#1a1a21",
     btnHover: "#22222a",
-    blue: "#4ba3ff",
+    blue: "#8ab4ff",
+    blueMuted: "#6fa0ff",
     red: "#ff6b5e",
-    txtBlueStrong: "#8ab4ff",
-    txtBlue: "#8ab4ff",
-    txtBlueMuted: "#6fa0ff",
-    txtRed: "#ff6b5e",
   },
 };
 
-/* Helpers */
-const isLive = (d) =>
-  !!d?.last_seen && Date.now() - new Date(d.last_seen).getTime() < 25_000;
+/* =========================
+   Helpers
+   ========================= */
+const isLive = (d) => !!d?.last_seen && (Date.now() - new Date(d.last_seen).getTime()) < 25_000;
+const fmtTS  = (s) => s ? new Date(s).toLocaleString() : "—";
 
 /* =========================
    UI PRIMITIVES
@@ -126,29 +77,18 @@ const Badge = ({ ok, t, children }) => (
   </span>
 );
 
-const Button = ({
-  tone = "default", // default | primary | danger | ghost | tiny
-  className = "",
-  style: styleProp = {},
-  t,
-  children,
-  ...props
-}) => {
-  const base =
-    "rounded-2xl border text-sm px-3 py-2 transition-colors select-none w-full sm:w-auto";
+const Button = ({ tone="default", className="", style:styleProp={}, t, children, ...props }) => {
+  const base = "rounded-2xl border text-sm px-3 py-2 transition-colors select-none w-full sm:w-auto";
   const tiny = tone === "tiny";
-  const toneStyle =
-    tone === "primary"
-      ? { background: "transparent", borderColor: t.stroke, color: t.txtBlue }
-      : tone === "danger"
-      ? { background: "transparent", borderColor: t.stroke, color: t.txtRed }
-      : tone === "ghost"
-      ? { background: "transparent", borderColor: t.stroke, color: t.fg }
-      : { background: t.btn, borderColor: t.stroke, color: t.fg };
+  const styleTone =
+    tone === "primary" ? { background:"transparent", borderColor:t.stroke, color:t.blue } :
+    tone === "danger"  ? { background:"transparent", borderColor:t.stroke, color:t.red }  :
+    tone === "ghost"   ? { background:"transparent", borderColor:t.stroke, color:t.fg }   :
+                         { background:t.btn, borderColor:t.stroke, color:t.fg };
   return (
     <button
       className={[base, tiny ? "px-2 py-1 text-[12px]" : "", className].join(" ")}
-      style={{ minHeight: tiny ? 36 : 44, ...toneStyle, ...styleProp }}
+      style={{ minHeight: tiny ? 36 : 44, ...styleTone, ...styleProp }}
       {...props}
     >
       {children}
@@ -176,32 +116,28 @@ const PowerButton = ({ onPulse, disabled, t }) => {
         disabled ? "opacity-50 cursor-not-allowed" : "active:scale-[0.98]"
       }`}
       style={{
-        width: size,
-        height: size,
-        background: t.btn,
-        border: `1px solid ${t.stroke}`,
+        width:size, height:size,
+        background:t.btn, border:`1px solid ${t.stroke}`,
       }}
     >
-      <span className="text-[20px] leading-none" style={{ color: t.txtBlue }}>
-        ⏻
-      </span>
+      <span className="text-[20px]" style={{ color:t.blue }}>⏻</span>
     </button>
   );
 };
 
 /* =========================
-   API HELPERS (Supabase)
+   API (Supabase)
    ========================= */
 async function sendCmd(masterId, targetMac, action, payload) {
+  // Actions attendues par ta contrainte SQL: PULSE, POWER_ON, POWER_OFF, RESET, LED, POWER_PULSE, FORCE_OFF, HARD_RESET…
   const { error } = await sb.from("commands").insert({
     master_id: masterId,
     target_mac: targetMac || null,
     action,
-    payload,
+    payload
   });
   if (error) throw error;
 }
-
 async function deleteDevice(masterId, accessToken) {
   const r = await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`, {
     method: "POST",
@@ -214,69 +150,68 @@ async function deleteDevice(masterId, accessToken) {
   });
   if (!r.ok) throw new Error(await r.text());
 }
-
 async function createPairCode(accessToken) {
   const r = await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type":"application/json",
       apikey: SUPABASE_ANON,
-      Authorization: `Bearer ${accessToken}`,
+      Authorization:`Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ ttl_minutes: 10 }),
+    body: JSON.stringify({ ttl_minutes:10 }),
   });
   if (!r.ok) throw new Error(await r.text());
-  return r.json(); // { code:number, expires_at:string }
+  return r.json(); // { code, expires_at }
 }
 
 /* =========================
    SLAVE CARD
    ========================= */
-const SlaveCard = ({ t, masterId, mac, onPulse, onReset, onHardStop, onHardReset }) => (
-  <article
-    className="flex flex-col gap-3 rounded-3xl border p-4"
-    style={{ background: t.card, borderColor: t.stroke }}
-  >
-    <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
-      <span className="font-semibold" style={{ color: t.txtBlue }}>
-        SLAVE
-      </span>
-      <Chip t={t}>
-        <span
-          className="inline-flex h-5 w-5 items-center justify-center rounded-full"
-          style={{ background: "transparent", color: t.txtBlue }}
-        >
-          ⚙️
-        </span>
-        <code
-          style={{
-            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-            fontSize: 12,
-            maxWidth: "12ch",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-          title={mac}
-        >
-          {mac}
-        </code>
-      </Chip>
+const SlaveCard = ({ t, masterId, mac }) => (
+  <article className="flex flex-col gap-3 rounded-3xl border p-4" style={{ background:t.card, borderColor:t.stroke }}>
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
+        <span className="font-semibold" style={{ color:t.blue }}>SLAVE</span>
+        <Chip t={t}>
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full" style={{ color:t.blue }}>
+            ⚙️
+          </span>
+          <code
+            style={{
+              fontFamily:"ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontSize:12, maxWidth:"12ch", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"
+            }}
+            title={mac}
+          >
+            {mac}
+          </code>
+        </Chip>
+      </div>
     </div>
 
-    {/* power pulse */}
+    <div className="relative mx-auto mt-1 flex h-24 w-24 items-center justify-center rounded-full border text-[11px]"
+         style={{ borderColor:t.stroke, background:"linear-gradient(180deg, #fafafa, #f2f2f7)" }}>
+      PHOTO
+      <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border"
+            style={{ background:t.okFg, borderColor:t.stroke }}/>
+    </div>
+
     <div className="flex justify-center">
-      <PowerButton t={t} onPulse={onPulse} />
+      <PowerButton
+        t={t}
+        onPulse={() => sendCmd(masterId, mac, "POWER_PULSE", { ms:500 }).catch(console.error)}
+      />
     </div>
 
-    {/* actions */}
     <div className="grid grid-cols-2 gap-2">
-      <Button tone="tiny" t={t} onClick={onReset}>Reset</Button>
-      <Button tone="tiny" t={t} onClick={onHardStop}>Off (force)</Button>
-      <Button tone="tiny" t={t} onClick={onHardStop} style={{ background: "transparent", borderColor: t.stroke, color: t.txtBlue }}>
+      <Button tone="tiny" t={t} onClick={() => sendCmd(masterId, mac, "RESET", {}).catch(console.error)}>Reset</Button>
+      <Button tone="tiny" t={t} onClick={() => sendCmd(masterId, mac, "FORCE_OFF", {}).catch(console.error)}>Off</Button>
+      <Button tone="tiny" t={t} onClick={() => sendCmd(masterId, mac, "FORCE_OFF", {}).catch(console.error)}
+              style={{ background:"transparent", borderColor:t.stroke, color:t.blue }}>
         Hard Stop
       </Button>
-      <Button tone="tiny" t={t} onClick={onHardReset} style={{ background: "transparent", borderColor: t.stroke, color: t.txtBlueMuted }}>
+      <Button tone="tiny" t={t} onClick={() => sendCmd(masterId, mac, "HARD_RESET", {}).catch(console.error)}
+              style={{ background:"transparent", borderColor:t.stroke, color:t.blueMuted }}>
         Hard Reset
       </Button>
     </div>
@@ -286,13 +221,10 @@ const SlaveCard = ({ t, masterId, mac, onPulse, onReset, onHardStop, onHardReset
 /* =========================
    MASTER CARD
    ========================= */
-const MasterCard = ({ t, device, slaves, onRename, onDelete, onRefreshCmds, cmds }) => {
+const MasterCard = ({ t, device, slaves, onRename, onDelete, cmds, onRefreshCmds }) => {
   const live = isLive(device);
   return (
-    <section
-      className="flex flex-col gap-4 rounded-3xl border p-4 md:p-6"
-      style={{ background: t.card, borderColor: t.stroke }}
-    >
+    <section className="flex flex-col gap-4 rounded-3xl border p-4 md:p-6" style={{ background:t.card, borderColor:t.stroke }}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <strong className="text-[17px] tracking-wide">{device.name || device.id}</strong>
@@ -300,78 +232,63 @@ const MasterCard = ({ t, device, slaves, onRename, onDelete, onRefreshCmds, cmds
         </div>
         <div className="flex items-center gap-2">
           <Button tone="tiny" t={t} onClick={onRename}>Renommer</Button>
-          <Button tone="tiny" t={t} onClick={onDelete} style={{ background: "transparent", borderColor: t.stroke, color: t.txtRed }}>
+          <Button tone="tiny" t={t} onClick={onDelete} style={{ background:"transparent", borderColor:t.stroke, color:t.red }}>
             Supprimer
           </Button>
         </div>
       </div>
 
-      <div className="text-[12px]" style={{ color: t.muted }}>
-        ID : <code className="font-mono">{device.id}</code> · MAC :{" "}
-        <span style={{ color: t.txtBlue }}>{device.master_mac ?? "—"}</span> · Dernier contact :{" "}
-        {device.last_seen ? new Date(device.last_seen).toLocaleString() : "jamais"}
+      <div className="text-[12px]" style={{ color:t.muted }}>
+        ID : <code className="font-mono">{device.id}</code> · MAC : <span style={{ color:t.blue }}>{device.master_mac ?? "—"}</span> · Dernier contact : {fmtTS(device.last_seen)}
       </div>
 
-      {/* slaves */}
+      {/* SLAVES */}
       <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3 md:gap-4">
         {slaves.length ? (
           slaves.map((mac) => (
-            <SlaveCard
-              key={mac}
-              t={t}
-              masterId={device.id}
-              mac={mac}
-              onPulse={() => sendCmd(device.id, mac, "POWER_PULSE", { ms: 500 }).catch(console.error)}
-              onReset={() => sendCmd(device.id, mac, "RESET", {}).catch(console.error)}
-              onHardStop={() => sendCmd(device.id, mac, "FORCE_OFF", {}).catch(console.error)}
-              onHardReset={() => sendCmd(device.id, mac, "HARD_RESET", {}).catch(console.error)}
-            />
+            <SlaveCard key={mac} t={t} masterId={device.id} mac={mac} />
           ))
         ) : (
-          <div className="rounded-3xl border p-6 text-sm" style={{ borderColor: t.stroke, color: t.muted }}>
+          <div className="rounded-3xl border p-6 text-sm" style={{ borderColor:t.stroke, color:t.muted }}>
             Aucun slave enregistré pour ce MASTER.
           </div>
         )}
       </div>
 
-      <div className="h-px" style={{ background: t.stroke }} />
+      <div className="h-px" style={{ background:t.stroke }} />
 
-      {/* actions master */}
+      {/* COMMANDES MASTER */}
       <div className="flex flex-wrap items-center gap-2">
         <Button tone="tiny" t={t}
-          onClick={() => sendCmd(device.id, null, "PULSE", { ms: 500 }).catch(console.error)}
-          style={{ background: "transparent", borderColor: t.stroke, color: t.txtBlue }}>
+          onClick={() => sendCmd(device.id, null, "PULSE", { ms:500 }).catch(console.error)}
+          style={{ background:"transparent", borderColor:t.stroke, color:t.blue }}>
           ⚡ Pulse 500 ms
         </Button>
         <Button tone="tiny" t={t}
           onClick={() => sendCmd(device.id, null, "POWER_ON", {}).catch(console.error)}
-          style={{ background: "transparent", borderColor: t.stroke, color: t.txtBlueStrong }}>
+          style={{ background:"transparent", borderColor:t.stroke, color:t.blue }}>
           🔌 Power ON
         </Button>
         <Button tone="tiny" t={t}
           onClick={() => sendCmd(device.id, null, "POWER_OFF", {}).catch(console.error)}
-          style={{ background: "transparent", borderColor: t.stroke, color: t.txtBlueMuted }}>
+          style={{ background:"transparent", borderColor:t.stroke, color:t.blueMuted }}>
           ⏹️ Power OFF
         </Button>
         <Button tone="tiny" t={t}
           onClick={() => sendCmd(device.id, null, "RESET", {}).catch(console.error)}
-          style={{ background: "transparent", borderColor: t.stroke, color: t.txtBlue }}>
+          style={{ background:"transparent", borderColor:t.stroke, color:t.blue }}>
           ↻ Reset
         </Button>
 
-        <span className="ml-auto text-xs" style={{ color: t.muted }}>
-          (20 dernières commandes)
-        </span>
+        <span className="ml-auto text-xs" style={{ color:t.muted }}>(20 dernières commandes)</span>
         <Button tone="tiny" t={t} onClick={onRefreshCmds}>Rafraîchir</Button>
       </div>
 
-      {/* commandes */}
-      <ul className="text-[12px]" style={{ color: t.muted }}>
+      <ul className="text-[12px]" style={{ color:t.muted }}>
         {(cmds || []).map((c) => (
           <li key={c.id} className="py-0.5">
             <code>{c.status}</code> · {c.action}
-            {c.target_mac ? ` → ${c.target_mac}` : " (local)"} ·{" "}
-            {new Date(c.created_at).toLocaleString()}
+            {c.target_mac ? ` → ${c.target_mac}` : " (local)"} · {fmtTS(c.created_at)}
           </li>
         ))}
       </ul>
@@ -380,53 +297,97 @@ const MasterCard = ({ t, device, slaves, onRename, onDelete, onRefreshCmds, cmds
 };
 
 /* =========================
-   APP (données réelles)
+   ENV ERROR (évite page blanche)
+   ========================= */
+function EnvError(){
+  return (
+    <div style={{
+      minHeight:"100vh", display:"grid", placeItems:"center",
+      background:"#0b0b0f", color:"#f5f5f7",
+      fontFamily:"system-ui, -apple-system, Segoe UI, Roboto, Arial"
+    }}>
+      <div style={{maxWidth:720, padding:24, border:"1px solid #2b2b33", borderRadius:16, background:"#121217"}}>
+        <h2 style={{marginTop:0}}>Configuration manquante</h2>
+        <p>Définis les variables d’environnement Vite :</p>
+        <ul>
+          {!SUPABASE_URL && <li><code>VITE_SUPABASE_URL</code></li>}
+          {!SUPABASE_ANON && <li><code>VITE_SUPABASE_ANON_KEY</code></li>}
+        </ul>
+        <pre style={{whiteSpace:"pre-wrap"}}>{`VITE_SUPABASE_URL=https://....supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOi...`}</pre>
+      </div>
+    </div>
+  );
+}
+
+/* =========================
+   ERROR BOUNDARY
+   ========================= */
+class AppErrorBoundary extends React.Component {
+  constructor(p){ super(p); this.state = { error:null }; }
+  static getDerivedStateFromError(error){ return { error }; }
+  componentDidCatch(error, info){ console.error("App crash:", error, info); }
+  render(){
+    if (this.state.error) {
+      return (
+        <div style={{
+          minHeight:"100vh", display:"grid", placeItems:"center",
+          background:"#0b0b0f", color:"#f5f5f7",
+          fontFamily:"system-ui, -apple-system, Segoe UI, Roboto, Arial"
+        }}>
+          <div style={{maxWidth:720, padding:24, border:"1px solid #2b2b33", borderRadius:16, background:"#121217"}}>
+            <h2 style={{marginTop:0}}>Oups, une erreur est survenue</h2>
+            <pre style={{whiteSpace:"pre-wrap"}}>{String(this.state.error?.message || this.state.error)}</pre>
+            <p style={{opacity:.7}}>Voir la console (F12) pour la stack complète.</p>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+/* =========================
+   APP (réel, connecté Supabase)
    ========================= */
 function AppInner(){
-  // Thème + suivi OS
-  const prefersDark =
-    typeof window !== "undefined" &&
-    window.matchMedia &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches;
+  // Thème (suit l’OS + toggle)
+  const prefersDark = typeof window !== "undefined"
+    && window.matchMedia
+    && window.matchMedia("(prefers-color-scheme: dark)").matches;
   const [isDark, setIsDark] = useState(prefersDark);
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = (e) => setIsDark(e.matches);
-    mq.addEventListener ? mq.addEventListener("change", handler) : mq.addListener(handler);
-    return () =>
-      mq.removeEventListener
-        ? mq.removeEventListener("change", handler)
-        : mq.removeListener(handler);
+    const h = (e) => setIsDark(e.matches);
+    mq.addEventListener ? mq.addEventListener("change", h) : mq.addListener(h);
+    return () => mq.removeEventListener ? mq.removeEventListener("change", h) : mq.removeListener(h);
   }, []);
   const t = isDark ? THEME.dark : THEME.light;
-  const frame = useMemo(() => ({ background: t.bg, color: t.fg, borderColor: t.stroke }), [t]);
+  const frame = useMemo(() => ({ background:t.bg, color:t.fg, borderColor:t.stroke }), [t]);
 
   // Auth
   const [email, setEmail] = useState(null);
   useEffect(() => {
-    const sub = sb.auth.onAuthStateChange((_e, session) => {
-      setEmail(session?.user?.email ?? null);
-    });
+    const sub = sb.auth.onAuthStateChange((_e, session) => setEmail(session?.user?.email ?? null));
     sb.auth.getSession().then(({ data }) => setEmail(data.session?.user?.email ?? null));
     return () => sub.data.subscription.unsubscribe();
   }, []);
 
-  // State data
+  // Data
   const [devices, setDevices] = useState([]);
   const [nodesByMaster, setNodesByMaster] = useState({});
   const [cmdsByMaster, setCmdsByMaster] = useState({});
   const [pairInfo, setPairInfo] = useState(null);
 
-  // Initial load + Realtime
+  // Initial load + realtime
   useEffect(() => {
     if (!email) return;
-
     const loadAll = async () => {
       const { data: devs, error: ed } = await sb
         .from("devices")
         .select("id,name,master_mac,last_seen,online")
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending:false });
       if (!ed && devs) setDevices(devs);
 
       const { data: nodes, error: en } = await sb
@@ -445,7 +406,7 @@ function AppInner(){
             .from("commands")
             .select("id,master_id,action,target_mac,status,created_at")
             .eq("master_id", d.id)
-            .order("created_at", { ascending: false })
+            .order("created_at", { ascending:false })
             .limit(20);
           if (!error && data) map[d.id] = data;
         }
@@ -454,31 +415,29 @@ function AppInner(){
     };
     loadAll();
 
-    const chDevices = sb
-      .channel("rt:devices")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "devices" }, (p) => {
+    const chDevices = sb.channel("rt:devices")
+      .on("postgres_changes", { event:"INSERT", schema:"public", table:"devices" }, (p) => {
         setDevices((cur) => [p.new, ...cur]);
       })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "devices" }, (p) => {
-        setDevices((cur) => cur.map((d) => (d.id === p.new.id ? { ...d, ...p.new } : d)));
+      .on("postgres_changes", { event:"UPDATE", schema:"public", table:"devices" }, (p) => {
+        setDevices((cur) => cur.map((d) => d.id === p.new.id ? { ...d, ...p.new } : d));
       })
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "devices" }, (p) => {
+      .on("postgres_changes", { event:"DELETE", schema:"public", table:"devices" }, (p) => {
         setDevices((cur) => cur.filter((d) => d.id !== p.old.id));
         setNodesByMaster((m) => { const n = { ...m }; delete n[p.old.id]; return n; });
         setCmdsByMaster((m) => { const n = { ...m }; delete n[p.old.id]; return n; });
       })
       .subscribe();
 
-    const chNodes = sb
-      .channel("rt:nodes")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "nodes" }, (p) => {
+    const chNodes = sb.channel("rt:nodes")
+      .on("postgres_changes", { event:"INSERT", schema:"public", table:"nodes" }, (p) => {
         setNodesByMaster((cur) => {
           const n = { ...cur };
           (n[p.new.master_id] ??= []).push(p.new.slave_mac);
           return n;
         });
       })
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "nodes" }, (p) => {
+      .on("postgres_changes", { event:"DELETE", schema:"public", table:"nodes" }, (p) => {
         setNodesByMaster((cur) => {
           const n = { ...cur };
           n[p.old.master_id] = (n[p.old.master_id] ?? []).filter((m) => m !== p.old.slave_mac);
@@ -487,16 +446,15 @@ function AppInner(){
       })
       .subscribe();
 
-    const chCmds = sb
-      .channel("rt:commands")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "commands" }, (p) => {
+    const chCmds = sb.channel("rt:commands")
+      .on("postgres_changes", { event:"INSERT", schema:"public", table:"commands" }, (p) => {
         const c = p.new;
         setCmdsByMaster((cur) => {
           const list = [c, ...(cur[c.master_id] ?? [])].slice(0, 20);
           return { ...cur, [c.master_id]: list };
         });
       })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "commands" }, (p) => {
+      .on("postgres_changes", { event:"UPDATE", schema:"public", table:"commands" }, (p) => {
         const c = p.new;
         setCmdsByMaster((cur) => {
           const list = (cur[c.master_id] ?? []).map((x) => (x.id === c.id ? c : x));
@@ -512,7 +470,7 @@ function AppInner(){
     };
   }, [email]);
 
-  // Top actions
+  // Actions top-bar
   const onLogin = async () => {
     const { data, error } = await sb.auth.signInWithOAuth({
       provider: "google",
@@ -530,7 +488,6 @@ function AppInner(){
       setPairInfo({ code: String(code).padStart(6, "0"), expiresAt: new Date(expires_at).getTime() });
     } catch (e) { alert(e.message ?? String(e)); }
   };
-
   const handleDelete = async (deviceId) => {
     const { data: s } = await sb.auth.getSession();
     if (!s?.session) { alert("Non connecté"); return; }
@@ -538,18 +495,17 @@ function AppInner(){
     try { await deleteDevice(deviceId, s.session.access_token); }
     catch (e) { alert(e.message ?? String(e)); }
   };
-
   const refreshCmds = async (masterId) => {
     const { data, error } = await sb
       .from("commands")
       .select("id,master_id,action,target_mac,status,created_at")
       .eq("master_id", masterId)
-      .order("created_at", { ascending: false })
+      .order("created_at", { ascending:false })
       .limit(20);
     if (!error && data) setCmdsByMaster((cur) => ({ ...cur, [masterId]: data }));
   };
 
-  // Pair-code countdown
+  // Pair-code count-down
   const pairCountdown = pairInfo && Math.max(0, Math.floor((pairInfo.expiresAt - Date.now()) / 1000));
 
   return (
@@ -562,13 +518,11 @@ function AppInner(){
           "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', Segoe UI, Roboto, Arial, Helvetica, sans-serif",
       }}
     >
-      <header
-        className="sticky top-0 z-10 backdrop-blur-md border-b px-4 md:px-6 py-4"
-        style={{ background: t.panel, borderColor: t.stroke }}
-      >
+      <header className="sticky top-0 z-10 backdrop-blur-md border-b px-4 md:px-6 py-4"
+              style={{ background:t.panel, borderColor:t.stroke }}>
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 flex-wrap">
           <h1 className="m-0 text-[18px] tracking-wide">REMOTE POWER</h1>
-          <div className="flex items-center gap-2 text-xs" style={{ color: t.muted }}>
+          <div className="flex items-center gap-2 text-xs" style={{ color:t.muted }}>
             <span>{email ?? "non connecté"}</span>
             <Button tone="ghost" t={t} onClick={() => setIsDark((d) => !d)}>
               {isDark ? "Mode clair" : "Mode sombre"}
@@ -584,7 +538,7 @@ function AppInner(){
 
       <main className="mx-auto flex max-w-6xl flex-col gap-5 p-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
         <div className="flex items-center justify-between">
-          <span className="text-xs" style={{ color: t.muted }}>
+          <span className="text-xs" style={{ color:t.muted }}>
             {email ? "Connecté" : "Veuillez vous connecter pour gérer vos MASTERs."}
           </span>
           <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -596,23 +550,23 @@ function AppInner(){
         </div>
 
         {pairInfo && (
-          <section className="rounded-3xl border p-4" style={{ background: t.card, borderColor: t.stroke }}>
+          <section className="rounded-3xl border p-4" style={{ background:t.card, borderColor:t.stroke }}>
             <div className="flex items-center justify-between">
               <div>
-                <div>Code d’appairage : <strong style={{ color: t.txtBlue }}>{pairInfo.code}</strong></div>
-                <div className="text-xs" style={{ color: t.muted }}>
+                <div>Code d’appairage : <strong style={{ color:t.blue }}>{pairInfo.code}</strong></div>
+                <div className="text-xs" style={{ color:t.muted }}>
                   Expire dans {Math.floor(pairCountdown / 60)}:{String(pairCountdown % 60).padStart(2, "0")}
                 </div>
               </div>
               <Button t={t} onClick={() => setPairInfo(null)}>Fermer</Button>
             </div>
-            <div className="text-xs mt-2" style={{ color: t.muted }}>
+            <div className="text-xs mt-2" style={{ color:t.muted }}>
               Entrez ce code dans le portail Wi-Fi de l’ESP32.
             </div>
           </section>
         )}
 
-        {/* Masters */}
+        {/* LISTE MASTERS */}
         <div className="grid gap-4">
           {devices.map((d) => (
             <MasterCard
@@ -620,14 +574,14 @@ function AppInner(){
               t={t}
               device={d}
               slaves={nodesByMaster[d.id] ?? []}
-              onRename={() => alert("Renommer (UI à brancher)")}
+              onRename={() => alert("Renommer (à brancher)")}
               onDelete={() => handleDelete(d.id)}
               onRefreshCmds={() => refreshCmds(d.id)}
               cmds={cmdsByMaster[d.id] ?? []}
             />
           ))}
           {!devices.length && (
-            <div className="rounded-3xl border p-6 text-sm" style={{ background: t.card, borderColor: t.stroke, color: t.muted }}>
+            <div className="rounded-3xl border p-6 text-sm" style={{ background:t.card, borderColor:t.stroke, color:t.muted }}>
               Aucun MASTER.
             </div>
           )}
