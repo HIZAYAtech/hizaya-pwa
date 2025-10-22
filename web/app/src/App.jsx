@@ -1,16 +1,24 @@
-import { useEffect, useRef, useState } from "react"
-import { createClient } from "@supabase/supabase-js"
+import { useEffect, useRef, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 
-/* --------- CONFIG --------- */
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-const SUPA_ANON    = import.meta.env.VITE_SUPABASE_ANON_KEY
-const sb = createClient(SUPABASE_URL, SUPA_ANON)
+/* =========================
+   CONFIG (avec garde-fous)
+========================= */
+const SUPABASE_URL  = (import.meta?.env?.VITE_SUPABASE_URL || "").trim();
+const SUPA_ANON     = (import.meta?.env?.VITE_SUPABASE_ANON_KEY || "").trim();
+const HAS_ENV       = Boolean(SUPABASE_URL && SUPA_ANON);
+
+// On n’instancie le client que si les env sont bien présentes.
+// (Évite l’erreur “supabaseUrl is required” au runtime.)
+const sb = HAS_ENV ? createClient(SUPABASE_URL, SUPA_ANON) : null;
 
 /* pin par défaut pour IO sur le SLAVE (à adapter si besoin) */
-const DEFAULT_IO_PIN = 26
-const LIVE_TTL_MS = 25_000
+const DEFAULT_IO_PIN = 26;
+const LIVE_TTL_MS = 25_000;
 
-/* --------- STYLES --------- */
+/* =========================
+   STYLES (inchangés)
+========================= */
 const styles = `
 :root{
   --bg:#0b101b; --panel:#141b29; --card:#1a2233; --chip:#263247; --muted:#9fb0c6;
@@ -54,128 +62,175 @@ main{max-width:1200px;margin:24px auto;padding:0 16px;display:flex;gap:16px;flex
 .row{display:flex;gap:10px;align-items:center}
 .right{margin-left:auto}
 .tiny{font-size:12px;padding:5px 8px;border-radius:8px}
+
+/* mini-badge env probe */
+.envprobe{position:fixed;right:8px;bottom:8px;z-index:9999;font:11px ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding:6px 8px;border:1px solid var(--stroke);border-radius:8px;background:#0b1220aa;color:#fff}
 `;
 
-/* --------- HELPERS --------- */
-const fmtTS  = s => (s ? new Date(s).toLocaleString() : "—")
-const isLive = d => d.last_seen && Date.now() - new Date(d.last_seen) < LIVE_TTL_MS
+/* =========================
+   HELPERS
+========================= */
+const fmtTS  = s => (s ? new Date(s).toLocaleString() : "—");
+const isLive = d => d.last_seen && Date.now() - new Date(d.last_seen) < LIVE_TTL_MS;
+
+/* petit timbre pour vérifier l’injection des env */
+const BUILD_STAMP = new Date().toISOString();
+function EnvProbe(){
+  return (
+    <div className="envprobe">
+      URL={SUPABASE_URL ? "yes" : "no"} · ANON={SUPA_ANON ? "yes" : "no"} · {BUILD_STAMP}
+    </div>
+  );
+}
 
 export default function App(){
-  /* state */
-  const [user,setUser]=useState(null)
-  const [devices,setDevices]=useState([])
-  const [nodesByMaster,setNodesByMaster]=useState({})
-  const [pair,setPair]=useState({open:false,code:null,expires_at:null})
+  /* Si config manquante → page explicite et on s’arrête là */
+  if(!HAS_ENV){
+    return (
+      <>
+        <style>{styles}</style>
+        <header>
+          <h1>REMOTE POWER</h1>
+          <div className="row"><span className="small">non connecté</span></div>
+        </header>
+        <main>
+          <section className="master">
+            <h2 style={{margin:"0 0 6px 0"}}>Configuration manquante</h2>
+            <div className="small">
+              Définis les variables d’environnement Vite au moment du build :
+              <div style={{marginTop:8}}>
+                <code>VITE_SUPABASE_URL=https://…supabase.co</code><br/>
+                <code>VITE_SUPABASE_ANON_KEY=eyJhbGciOi…</code>
+              </div>
+              <p style={{marginTop:10}}>
+                Dans GitHub Actions → <em>Settings &gt; Secrets and variables &gt; Actions</em> (repository secrets) puis relance le workflow.
+              </p>
+            </div>
+          </section>
+        </main>
+        <EnvProbe />
+      </>
+    );
+  }
+
+  /* =========================
+     État & logique d’origine
+  ========================= */
+  const [user,setUser]=useState(null);
+  const [devices,setDevices]=useState([]);
+  const [nodesByMaster,setNodesByMaster]=useState({});
+  const [pair,setPair]=useState({open:false,code:null,expires_at:null});
 
   /* log */
-  const [lines,setLines]=useState([])
-  const logRef=useRef(null)
-  const log = t => setLines(ls=>[...ls,`${new Date().toLocaleTimeString()}  ${t}`])
-  useEffect(()=>{ if(logRef.current) logRef.current.scrollTop=logRef.current.scrollHeight },[lines])
+  const [lines,setLines]=useState([]);
+  const logRef=useRef(null);
+  const log = t => setLines(ls=>[...ls,`${new Date().toLocaleTimeString()}  ${t}`]);
+  useEffect(()=>{ if(logRef.current) logRef.current.scrollTop=logRef.current.scrollHeight },[lines]);
 
   /* keep refs for cmd lists (per master) */
-  const cmdLists=useRef(new Map())
+  const cmdLists=useRef(new Map());
   function upsertCmdRow(masterId, c){
-    const ul = cmdLists.current.get(masterId); if(!ul) return
-    const id=`cmd-${c.id}`
-    const html = `<code>${c.status}</code> · ${c.action}${c.target_mac?' → '+c.target_mac:' (local)'} <span class="small">· ${fmtTS(c.created_at)}</span>`
-    let li = ul.querySelector(`#${CSS.escape(id)}`)
-    if(!li){ li=document.createElement('li'); li.id=id; li.innerHTML=html; ul.prepend(li); while(ul.children.length>20) ul.removeChild(ul.lastChild) }
-    else { li.innerHTML=html }
+    const ul = cmdLists.current.get(masterId); if(!ul) return;
+    const id=`cmd-${c.id}`;
+    const html = `<code>${c.status}</code> · ${c.action}${c.target_mac?' → '+c.target_mac:' (local)'} <span class="small">· ${fmtTS(c.created_at)}</span>`;
+    let li = ul.querySelector(`#${CSS.escape(id)}`);
+    if(!li){ li=document.createElement('li'); li.id=id; li.innerHTML=html; ul.prepend(li); while(ul.children.length>20) ul.removeChild(ul.lastChild); }
+    else { li.innerHTML=html; }
   }
 
   /* auth bootstrap */
   useEffect(()=>{
     const sub = sb.auth.onAuthStateChange((ev,session)=>{
-      setUser(session?.user||null)
-      if(session?.user){ attachRealtime(); loadAll() } else { cleanupRealtime(); setDevices([]); setNodesByMaster({}) }
-    })
-    ;(async()=>{ const {data:{session}} = await sb.auth.getSession(); setUser(session?.user||null); if(session?.user){ attachRealtime(); loadAll() } })()
-    return ()=>sub.data.subscription.unsubscribe()
+      setUser(session?.user||null);
+      if(session?.user){ attachRealtime(); loadAll(); } else { cleanupRealtime(); setDevices([]); setNodesByMaster({}); }
+    });
+    (async()=>{ const {data:{session}} = await sb.auth.getSession(); setUser(session?.user||null); if(session?.user){ attachRealtime(); loadAll(); } })();
+    return ()=>sub.data.subscription.unsubscribe();
     // eslint-disable-next-line
-  },[])
+  },[]);
 
   /* realtime channels */
-  const chDevices=useRef(null), chNodes=useRef(null), chCmds=useRef(null)
+  const chDevices=useRef(null), chNodes=useRef(null), chCmds=useRef(null);
   function cleanupRealtime(){
-    if(chDevices.current) sb.removeChannel(chDevices.current)
-    if(chNodes.current)   sb.removeChannel(chNodes.current)
-    if(chCmds.current)    sb.removeChannel(chCmds.current)
-    chDevices.current=chNodes.current=chCmds.current=null
+    if(chDevices.current) sb.removeChannel(chDevices.current);
+    if(chNodes.current)   sb.removeChannel(chNodes.current);
+    if(chCmds.current)    sb.removeChannel(chCmds.current);
+    chDevices.current=chNodes.current=chCmds.current=null;
   }
   function attachRealtime(){
-    cleanupRealtime()
+    cleanupRealtime();
     chDevices.current = sb.channel("rt:devices")
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'devices'}, p => { log(`+ device ${p.new.id}`); setDevices(ds=>[p.new,...ds]); refreshCommands(p.new.id) })
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'devices'}, p => { const d=p.new; setDevices(ds=>ds.map(x=>x.id===d.id?{...x,...d}:x)) })
-      .on('postgres_changes',{event:'DELETE',schema:'public',table:'devices'}, p => { log(`- device ${p.old.id}`); setDevices(ds=>ds.filter(x=>x.id!==p.old.id)) })
-      .subscribe()
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'devices'}, p => { log(`+ device ${p.new.id}`); setDevices(ds=>[p.new,...ds]); refreshCommands(p.new.id); })
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'devices'}, p => { const d=p.new; setDevices(ds=>ds.map(x=>x.id===d.id?{...x,...d}:x)); })
+      .on('postgres_changes',{event:'DELETE',schema:'public',table:'devices'}, p => { log(`- device ${p.old.id}`); setDevices(ds=>ds.filter(x=>x.id!==p.old.id)); })
+      .subscribe();
     chNodes.current = sb.channel("rt:nodes")
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'nodes'}, p => { log(`+ node ${p.new.slave_mac} → ${p.new.master_id}`); refreshSlavesFor(p.new.master_id) })
-      .on('postgres_changes',{event:'DELETE',schema:'public',table:'nodes'}, p => { log(`- node ${p.old.slave_mac} ← ${p.old.master_id}`); refreshSlavesFor(p.old.master_id) })
-      .subscribe()
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'nodes'}, p => { log(`+ node ${p.new.slave_mac} → ${p.new.master_id}`); refreshSlavesFor(p.new.master_id); })
+      .on('postgres_changes',{event:'DELETE',schema:'public',table:'nodes'}, p => { log(`- node ${p.old.slave_mac} ← ${p.old.master_id}`); refreshSlavesFor(p.old.master_id); })
+      .subscribe();
     chCmds.current = sb.channel("rt:commands")
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'commands'}, p => { upsertCmdRow(p.new.master_id,p.new); log(`cmd + ${p.new.action} (${p.new.status}) → ${p.new.master_id}`) })
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'commands'}, p => { upsertCmdRow(p.new.master_id,p.new); log(`cmd ~ ${p.new.action} (${p.new.status}) → ${p.new.master_id}`) })
-      .subscribe()
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'commands'}, p => { upsertCmdRow(p.new.master_id,p.new); log(`cmd + ${p.new.action} (${p.new.status}) → ${p.new.master_id}`); })
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'commands'}, p => { upsertCmdRow(p.new.master_id,p.new); log(`cmd ~ ${p.new.action} (${p.new.status}) → ${p.new.master_id}`); })
+      .subscribe();
   }
 
   /* queries */
   async function loadAll(){
-    const {data:devs,error:ed}=await sb.from('devices').select('id,name,master_mac,last_seen,online').order('created_at',{ascending:false})
-    if(ed){ log("Err devices: "+ed.message); return }
-    setDevices(devs||[])
-    const {data:nodes,error:en}=await sb.from('nodes').select('master_id,slave_mac')
-    if(en){ log("Err nodes: "+en.message); return }
-    const map={}; (nodes||[]).forEach(n => { (map[n.master_id]??=[]).push(n.slave_mac) })
-    setNodesByMaster(map)
-    for(const d of devs||[]) await refreshCommands(d.id)
+    const {data:devs,error:ed}=await sb.from('devices').select('id,name,master_mac,last_seen,online').order('created_at',{ascending:false});
+    if(ed){ log("Err devices: "+ed.message); return; }
+    setDevices(devs||[]);
+    const {data:nodes,error:en}=await sb.from('nodes').select('master_id,slave_mac');
+    if(en){ log("Err nodes: "+en.message); return; }
+    const map={}; (nodes||[]).forEach(n => { (map[n.master_id]??=[]).push(n.slave_mac); });
+    setNodesByMaster(map);
+    for(const d of devs||[]) await refreshCommands(d.id);
   }
   async function refreshCommands(mid){
     const {data,error}=await sb.from('commands')
       .select('id,action,target_mac,status,created_at')
-      .eq('master_id',mid).order('created_at',{ascending:false}).limit(20)
-    if(error){ log("Err cmds: "+error.message); return }
-    const ul=cmdLists.current.get(mid); if(!ul) return
-    ul.innerHTML=""; (data||[]).forEach(c => upsertCmdRow(mid,c))
+      .eq('master_id',mid).order('created_at',{ascending:false}).limit(20);
+    if(error){ log("Err cmds: "+error.message); return; }
+    const ul=cmdLists.current.get(mid); if(!ul) return;
+    ul.innerHTML=""; (data||[]).forEach(c => upsertCmdRow(mid,c));
   }
   async function refreshSlavesFor(mid){
-    const {data}=await sb.from('nodes').select('slave_mac').eq('master_id',mid)
-    setNodesByMaster(m => ({...m,[mid]:(data||[]).map(x=>x.slave_mac)}))
+    const {data}=await sb.from('nodes').select('slave_mac').eq('master_id',mid);
+    setNodesByMaster(m => ({...m,[mid]:(data||[]).map(x=>x.slave_mac)}));
   }
 
   /* commands */
   async function sendCmd(mid,mac,action,payload={}){
-    const {error}=await sb.from('commands').insert({master_id:mid,target_mac:mac||null,action,payload})
-    if(error) log("cmd err: "+error.message)
-    else log(`[cmd] ${action} → ${mid}${mac?" ▶ "+mac:""}`)
+    const {error}=await sb.from('commands').insert({master_id:mid,target_mac:mac||null,action,payload});
+    if(error) log("cmd err: "+error.message);
+    else log(`[cmd] ${action} → ${mid}${mac?" ▶ "+mac:""}`);
   }
   async function renameMaster(id){
-    const name=prompt("Nouveau nom du master ?",""); if(!name) return
-    const {error}=await sb.from('devices').update({name}).eq('id',id)
-    if(error) alert(error.message); else log(`Renommé ${id} → ${name}`)
+    const name=prompt("Nouveau nom du master ?",""); if(!name) return;
+    const {error}=await sb.from('devices').update({name}).eq('id',id);
+    if(error) alert(error.message); else log(`Renommé ${id} → ${name}`);
   }
   async function deleteDevice(id){
-    if(!confirm(`Supprimer ${id} ?`)) return
-    const {data:{session}}=await sb.auth.getSession(); if(!session){alert("Non connecté"); return}
+    if(!confirm(`Supprimer ${id} ?`)) return;
+    const {data:{session}}=await sb.auth.getSession(); if(!session){alert("Non connecté"); return;}
     const r=await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`,{
       method:"POST",
       headers:{ "Content-Type":"application/json", apikey:SUPA_ANON, Authorization:`Bearer ${session.access_token}` },
       body:JSON.stringify({ master_id:id })
-    })
-    log(r.ok?`MASTER supprimé : ${id}`:`❌ Suppression : ${await r.text()}`)
+    });
+    log(r.ok?`MASTER supprimé : ${id}`:`❌ Suppression : ${await r.text()}`);
   }
   async function openPairDialog(){
-    const {data:{session}}=await sb.auth.getSession(); if(!session){alert("Non connecté"); return}
+    const {data:{session}}=await sb.auth.getSession(); if(!session){alert("Non connecté"); return;}
     const r=await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`,{
       method:"POST",
       headers:{ "Content-Type":"application/json", apikey:SUPA_ANON, Authorization:`Bearer ${session.access_token}` },
       body:JSON.stringify({ ttl_minutes:10 })
-    })
-    if(!r.ok){ alert(await r.text()); return }
-    const {code,expires_at}=await r.json()
-    setPair({open:true,code,expires_at})
-    log(`Pair-code ${code}`)
+    });
+    if(!r.ok){ alert(await r.text()); return; }
+    const {code,expires_at}=await r.json();
+    setPair({open:true,code,expires_at});
+    log(`Pair-code ${code}`);
   }
 
   /* UI bits */
@@ -184,12 +239,12 @@ export default function App(){
       <span className="small">{user?.email || "non connecté"}</span>
       {!user
         ? <button className="btn primary" onClick={async ()=>{
-            const {data,error}=await sb.auth.signInWithOAuth({provider:"google",options:{redirectTo:location.href,queryParams:{prompt:"select_account"}}})
-            if(error) alert(error.message); else if(data?.url) location.href=data.url
+            const {data,error}=await sb.auth.signInWithOAuth({provider:"google",options:{redirectTo:location.href,queryParams:{prompt:"select_account"}}});
+            if(error) alert(error.message); else if(data?.url) location.href=data.url;
           }}>CONNEXION GOOGLE</button>
         : <button className="btn" onClick={()=>sb.auth.signOut()}>DECONNEXION</button>}
     </div>
-  )
+  );
 
   return (
     <>
@@ -210,8 +265,8 @@ export default function App(){
         </div>
 
         {devices.map(d=>{
-          const live=isLive(d)
-          const slaves=nodesByMaster[d.id]||[]
+          const live=isLive(d);
+          const slaves=nodesByMaster[d.id]||[];
           return (
             <section className="master" key={d.id}>
               <div className="masterHead">
@@ -241,7 +296,7 @@ export default function App(){
 
                     <div className="slaveKnob">
                       <span style={{fontSize:11,opacity:.8}}>PHOTO</span>
-                      {/* led d’état (on ne connaît pas l’état réel, on s’en sert comme témoin de clic IO) */}
+                      {/* led d’état (témoin click IO) */}
                       <span className="slaveLed" id={`led-${mac}`}></span>
                     </div>
 
@@ -249,8 +304,8 @@ export default function App(){
                       <button
                         className="btn"
                         onClick={()=>{
-                          sendCmd(d.id,mac,"SLV_IO",{pin:DEFAULT_IO_PIN,mode:"OUT",value:1})
-                          const led=document.getElementById(`led-${mac}`); if(led){ led.style.background='#16a34a'; setTimeout(()=>led.style.background='#1f2937',600) }
+                          sendCmd(d.id,mac,"SLV_IO",{pin:DEFAULT_IO_PIN,mode:"OUT",value:1});
+                          const led=document.getElementById(`led-${mac}`); if(led){ led.style.background='#16a34a'; setTimeout(()=>led.style.background='#1f2937',600); }
                         }}
                         title="IO ON"
                       >⏻</button>
@@ -284,9 +339,9 @@ export default function App(){
 
               <div className="hr" />
               <div className="cmdTitle">Commandes (20 dernières)</div>
-              <ul className="cmdList" ref={el=>{ if(el) cmdLists.current.set(d.id,el) }}/>
+              <ul className="cmdList" ref={el=>{ if(el) cmdLists.current.set(d.id,el); }}/>
             </section>
-          )
+          );
         })}
 
         {/* Journal global */}
@@ -304,9 +359,9 @@ export default function App(){
             <div>Code : <code>{String(pair.code).padStart(6,"0")}</code>
               {" "} (expire <span className="small">
                 {(()=>{
-                  const end = pair.expires_at ? new Date(pair.expires_at).getTime() : 0
-                  const l = Math.max(0, Math.floor((end - Date.now())/1000))
-                  return `${Math.floor(l/60)}:${String(l%60).padStart(2,'0')}`
+                  const end = pair.expires_at ? new Date(pair.expires_at).getTime() : 0;
+                  const l = Math.max(0, Math.floor((end - Date.now())/1000));
+                  return `${Math.floor(l/60)}:${String(l%60).padStart(2,'0')}`;
                 })()}
               </span>)
             </div>
@@ -317,6 +372,9 @@ export default function App(){
           </div>
         </dialog>
       )}
+
+      {/* Probe env (retire-le quand c’est bon) */}
+      <EnvProbe />
     </>
-  )
+  );
 }
