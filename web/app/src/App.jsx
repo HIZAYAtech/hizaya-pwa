@@ -1,16 +1,58 @@
-// App.jsx (Vite / React) — version JS sans TypeScript
+// web/app/src/App.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 /* =========================
-   CONFIG SUPABASE (env)
+   ENV + client Supabase (garde-fou)
    ========================= */
-const SUPABASE_URL =
-  (import.meta?.env?.VITE_SUPABASE_URL) || "";
-const SUPABASE_ANON =
-  (import.meta?.env?.VITE_SUPABASE_ANON_KEY) || "";
+const SUPABASE_URL = (import.meta?.env?.VITE_SUPABASE_URL || "").trim();
+const SUPABASE_ANON = (import.meta?.env?.VITE_SUPABASE_ANON_KEY || "").trim();
+const sb = SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPABASE_ANON) : null;
 
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+/* UI lisible si env manquante */
+function EnvError() {
+  return (
+    <div style={{
+      minHeight:"100vh",display:"grid",placeItems:"center",
+      background:"#0b0b0f",color:"#f5f5f7",fontFamily:"system-ui, -apple-system, Segoe UI, Roboto, Arial"
+    }}>
+      <div style={{maxWidth:720,padding:24,border:"1px solid #2b2b33",borderRadius:16,background:"#121217"}}>
+        <h2 style={{marginTop:0}}>Configuration manquante</h2>
+        <p>Définis les variables d’environnement Vite :</p>
+        <ul>
+          {!SUPABASE_URL && <li><code>VITE_SUPABASE_URL</code></li>}
+          {!SUPABASE_ANON && <li><code>VITE_SUPABASE_ANON_KEY</code></li>}
+        </ul>
+        <pre style={{whiteSpace:"pre-wrap"}}>{`VITE_SUPABASE_URL=https://....supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOi...`}</pre>
+      </div>
+    </div>
+  );
+}
+
+/* Error Boundary : évite l’écran blanc si une erreur inattendue survient */
+class AppErrorBoundary extends React.Component {
+  constructor(p){ super(p); this.state={error:null}; }
+  static getDerivedStateFromError(error){ return {error}; }
+  componentDidCatch(error, info){ console.error("App crash:", error, info); }
+  render(){
+    if(this.state.error){
+      return (
+        <div style={{
+          minHeight:"100vh",display:"grid",placeItems:"center",
+          background:"#0b0b0f",color:"#f5f5f7",fontFamily:"system-ui, -apple-system, Segoe UI, Roboto, Arial"
+        }}>
+          <div style={{maxWidth:720,padding:24,border:"1px solid #2b2b33",borderRadius:16,background:"#121217"}}>
+            <h2 style={{marginTop:0}}>Oups, une erreur est survenue</h2>
+            <pre style={{whiteSpace:"pre-wrap",overflow:"auto"}}>{String(this.state.error?.message || this.state.error)}</pre>
+            <p style={{opacity:.7}}>Regarde la console (F12) pour la stack complète.</p>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 /* =========================
    THEME (light & dark)
@@ -69,7 +111,7 @@ const isLive = (d) =>
   !!d?.last_seen && Date.now() - new Date(d.last_seen).getTime() < 25_000;
 
 /* =========================
-   UI primitives
+   UI PRIMITIVES
    ========================= */
 const Badge = ({ ok, t, children }) => (
   <span
@@ -148,12 +190,12 @@ const PowerButton = ({ onPulse, disabled, t }) => {
 };
 
 /* =========================
-   API Helpers
+   API HELPERS (Supabase)
    ========================= */
 async function sendCmd(masterId, targetMac, action, payload) {
   const { error } = await sb.from("commands").insert({
     master_id: masterId,
-    target_mac: targetMac,
+    target_mac: targetMac || null,
     action,
     payload,
   });
@@ -188,7 +230,7 @@ async function createPairCode(accessToken) {
 }
 
 /* =========================
-   SLAVE CARD (stateless UI)
+   SLAVE CARD
    ========================= */
 const SlaveCard = ({ t, masterId, mac, onPulse, onReset, onHardStop, onHardReset }) => (
   <article
@@ -222,15 +264,21 @@ const SlaveCard = ({ t, masterId, mac, onPulse, onReset, onHardStop, onHardReset
       </Chip>
     </div>
 
+    {/* power pulse */}
     <div className="flex justify-center">
       <PowerButton t={t} onPulse={onPulse} />
     </div>
 
+    {/* actions */}
     <div className="grid grid-cols-2 gap-2">
       <Button tone="tiny" t={t} onClick={onReset}>Reset</Button>
       <Button tone="tiny" t={t} onClick={onHardStop}>Off (force)</Button>
-      <Button tone="tiny" t={t} onClick={onHardStop} style={{ background: "transparent", borderColor: t.stroke, color: t.txtBlue }}>Hard Stop</Button>
-      <Button tone="tiny" t={t} onClick={onHardReset} style={{ background: "transparent", borderColor: t.stroke, color: t.txtBlueMuted }}>Hard Reset</Button>
+      <Button tone="tiny" t={t} onClick={onHardStop} style={{ background: "transparent", borderColor: t.stroke, color: t.txtBlue }}>
+        Hard Stop
+      </Button>
+      <Button tone="tiny" t={t} onClick={onHardReset} style={{ background: "transparent", borderColor: t.stroke, color: t.txtBlueMuted }}>
+        Hard Reset
+      </Button>
     </div>
   </article>
 );
@@ -264,6 +312,7 @@ const MasterCard = ({ t, device, slaves, onRename, onDelete, onRefreshCmds, cmds
         {device.last_seen ? new Date(device.last_seen).toLocaleString() : "jamais"}
       </div>
 
+      {/* slaves */}
       <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3 md:gap-4">
         {slaves.length ? (
           slaves.map((mac) => (
@@ -287,6 +336,7 @@ const MasterCard = ({ t, device, slaves, onRename, onDelete, onRefreshCmds, cmds
 
       <div className="h-px" style={{ background: t.stroke }} />
 
+      {/* actions master */}
       <div className="flex flex-wrap items-center gap-2">
         <Button tone="tiny" t={t}
           onClick={() => sendCmd(device.id, null, "PULSE", { ms: 500 }).catch(console.error)}
@@ -315,6 +365,7 @@ const MasterCard = ({ t, device, slaves, onRename, onDelete, onRefreshCmds, cmds
         <Button tone="tiny" t={t} onClick={onRefreshCmds}>Rafraîchir</Button>
       </div>
 
+      {/* commandes */}
       <ul className="text-[12px]" style={{ color: t.muted }}>
         {(cmds || []).map((c) => (
           <li key={c.id} className="py-0.5">
@@ -329,10 +380,10 @@ const MasterCard = ({ t, device, slaves, onRename, onDelete, onRefreshCmds, cmds
 };
 
 /* =========================
-   PAGE PRINCIPALE
+   APP (données réelles)
    ========================= */
-export default function App() {
-  // Thème
+function AppInner(){
+  // Thème + suivi OS
   const prefersDark =
     typeof window !== "undefined" &&
     window.matchMedia &&
@@ -361,13 +412,13 @@ export default function App() {
     return () => sub.data.subscription.unsubscribe();
   }, []);
 
-  // Data
+  // State data
   const [devices, setDevices] = useState([]);
   const [nodesByMaster, setNodesByMaster] = useState({});
   const [cmdsByMaster, setCmdsByMaster] = useState({});
   const [pairInfo, setPairInfo] = useState(null);
 
-  // Realtime & initial load
+  // Initial load + Realtime
   useEffect(() => {
     if (!email) return;
 
@@ -383,9 +434,7 @@ export default function App() {
         .select("master_id,slave_mac");
       if (!en && nodes) {
         const m = {};
-        nodes.forEach((n) => {
-          (m[n.master_id] ??= []).push(n.slave_mac);
-        });
+        nodes.forEach((n) => { (m[n.master_id] ??= []).push(n.slave_mac); });
         setNodesByMaster(m);
       }
 
@@ -415,12 +464,8 @@ export default function App() {
       })
       .on("postgres_changes", { event: "DELETE", schema: "public", table: "devices" }, (p) => {
         setDevices((cur) => cur.filter((d) => d.id !== p.old.id));
-        setNodesByMaster((m) => {
-          const n = { ...m }; delete n[p.old.id]; return n;
-        });
-        setCmdsByMaster((m) => {
-          const n = { ...m }; delete n[p.old.id]; return n;
-        });
+        setNodesByMaster((m) => { const n = { ...m }; delete n[p.old.id]; return n; });
+        setCmdsByMaster((m) => { const n = { ...m }; delete n[p.old.id]; return n; });
       })
       .subscribe();
 
@@ -467,7 +512,7 @@ export default function App() {
     };
   }, [email]);
 
-  // Actions top bar
+  // Top actions
   const onLogin = async () => {
     const { data, error } = await sb.auth.signInWithOAuth({
       provider: "google",
@@ -554,9 +599,7 @@ export default function App() {
           <section className="rounded-3xl border p-4" style={{ background: t.card, borderColor: t.stroke }}>
             <div className="flex items-center justify-between">
               <div>
-                <div>
-                  Code d’appairage : <strong style={{ color: t.txtBlue }}>{pairInfo.code}</strong>
-                </div>
+                <div>Code d’appairage : <strong style={{ color: t.txtBlue }}>{pairInfo.code}</strong></div>
                 <div className="text-xs" style={{ color: t.muted }}>
                   Expire dans {Math.floor(pairCountdown / 60)}:{String(pairCountdown % 60).padStart(2, "0")}
                 </div>
@@ -569,6 +612,7 @@ export default function App() {
           </section>
         )}
 
+        {/* Masters */}
         <div className="grid gap-4">
           {devices.map((d) => (
             <MasterCard
@@ -590,5 +634,17 @@ export default function App() {
         </div>
       </main>
     </div>
+  );
+}
+
+/* =========================
+   EXPORT
+   ========================= */
+export default function App(){
+  if (!sb) return <EnvError />;
+  return (
+    <AppErrorBoundary>
+      <AppInner />
+    </AppErrorBoundary>
   );
 }
