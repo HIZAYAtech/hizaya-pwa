@@ -3,13 +3,12 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 /* =========================
-   ENV + client Supabase (garde-fou)
+   ENV + client Supabase
    ========================= */
 const SUPABASE_URL  = (import.meta?.env?.VITE_SUPABASE_URL || "").trim();
 const SUPABASE_ANON = (import.meta?.env?.VITE_SUPABASE_ANON_KEY || "").trim();
 
 if (typeof window !== "undefined") {
-  // Log non sensible pour debug prod (n’affiche pas les valeurs)
   console.info(
     "[ENV CHECK] VITE_SUPABASE_URL set:",
     !!SUPABASE_URL,
@@ -21,7 +20,7 @@ if (typeof window !== "undefined") {
 const sb = SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPABASE_ANON) : null;
 
 /* =========================
-   THEME (light & dark) – palette limitée
+   THEME (light & dark)
    ========================= */
 const THEME = {
   light: {
@@ -307,7 +306,7 @@ const MasterCard = ({ t, device, slaves, onRename, onDelete, cmds, onRefreshCmds
 };
 
 /* =========================
-   ENV ERROR (évite page blanche)
+   ENV ERROR
    ========================= */
 function EnvError(){
   const missUrl  = !SUPABASE_URL;
@@ -327,12 +326,6 @@ function EnvError(){
         </ul>
         <pre style={{whiteSpace:"pre-wrap"}}>{`VITE_SUPABASE_URL=https://....supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOi...`}</pre>
-        <p style={{opacity:.8, marginTop:12}}>
-          Si tu utilises GitHub Actions, injecte-les dans l’étape <em>Build</em> :
-        </p>
-        <pre style={{whiteSpace:"pre-wrap"}}>{`env:
-  VITE_SUPABASE_URL: \${{ secrets.VITE_SUPABASE_URL }}
-  VITE_SUPABASE_ANON_KEY: \${{ secrets.VITE_SUPABASE_ANON_KEY }}`}</pre>
       </div>
     </div>
   );
@@ -356,7 +349,6 @@ class AppErrorBoundary extends React.Component {
           <div style={{maxWidth:720, padding:24, border:"1px solid #2b2b33", borderRadius:16, background:"#121217"}}>
             <h2 style={{marginTop:0}}>Oups, une erreur est survenue</h2>
             <pre style={{whiteSpace:"pre-wrap"}}>{String(this.state.error?.message || this.state.error)}</pre>
-            <p style={{opacity:.7}}>Voir la console (F12) pour la stack complète.</p>
           </div>
         </div>
       );
@@ -366,10 +358,10 @@ class AppErrorBoundary extends React.Component {
 }
 
 /* =========================
-   APP (réel, connecté Supabase)
+   APP (connected)
    ========================= */
 function AppInner(){
-  // Thème (suit l’OS + toggle)
+  // Theme (single declaration)
   const prefersDark = typeof window !== "undefined"
     && window.matchMedia
     && window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -526,9 +518,6 @@ function AppInner(){
   // Pair-code count-down
   const pairCountdown = pairInfo && Math.max(0, Math.floor((pairInfo.expiresAt - Date.now()) / 1000));
 
-  const t = isDark ? THEME.dark : THEME.light;
-  const frame = useMemo(() => ({ background:t.bg, color:t.fg, borderColor:t.stroke }), [t]);
-
   return (
     <div
       className="min-h-screen"
@@ -594,7 +583,7 @@ function AppInner(){
               key={d.id}
               t={t}
               device={d}
-              slaves={nodesByMaster[d.id] ?? []}
+              slaves={(nodesByMaster[d.id] ?? [])}
               onRename={() => alert("Renommer (à brancher)")}
               onDelete={() => handleDelete(d.id)}
               onRefreshCmds={() => refreshCmds(d.id)}
