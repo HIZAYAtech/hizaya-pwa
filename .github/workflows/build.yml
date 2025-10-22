@@ -29,7 +29,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          # Pas de cache pour éviter les erreurs "Some specified paths were not resolved"
 
       - name: Install dependencies
         run: |
@@ -47,7 +46,6 @@ jobs:
           echo "[ENV] URL set? $([[ -n \"$VITE_SUPABASE_URL\" ]] && echo yes || echo no)"
           echo "[ENV] ANON set? $([[ -n \"$VITE_SUPABASE_ANON_KEY\" ]] && echo yes || echo no)"
           npm run build
-          # 404 fallback pour GitHub Pages (SPA)
           cp -f dist/index.html dist/404.html || true
           ls -la dist
 
