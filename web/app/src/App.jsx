@@ -1,156 +1,197 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-/* =========================
-   CONFIG (avec garde-fous)
-========================= */
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-const SUPA_ANON    = import.meta.env.VITE_SUPABASE_ANON_KEY
-const HAS_ENV       = Boolean(SUPABASE_URL && SUPA_ANON);
-
-// On n’instancie le client que si les env sont bien présentes.
-// (Évite l’erreur “supabaseUrl is required” au runtime.)
-const sb = HAS_ENV ? createClient(SUPABASE_URL, SUPA_ANON) : null;
-
-/* pin par défaut pour IO sur le SLAVE (à adapter si besoin) */
-const DEFAULT_IO_PIN = 26;
-const LIVE_TTL_MS = 25_000;
-
-/* =========================
-   STYLES (inchangés)
-========================= */
-const styles = `
-:root{
-  --bg:#0b101b; --panel:#141b29; --card:#1a2233; --chip:#263247; --muted:#9fb0c6;
-  --fg:#e7eefb; --ok:#16a34a; --ko:#ef4444; --warn:#f59e0b; --accent:#2dd4bf;
-  --stroke:#263247; --btn:#222b3d; --btn-h:#2a3550;
+/* ========= CONFIG ========= */
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPA_ANON    = import.meta.env.VITE_SUPABASE_ANON_KEY;
+if (!SUPABASE_URL || !SUPA_ANON) {
+  throw new Error("Configuration manquante: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY");
 }
-*{box-sizing:border-box}
-html,body,#root{height:100%}
-body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,Segoe UI,Roboto,Arial}
-header{display:flex;justify-content:space-between;align-items:center;padding:18px 22px;background:var(--panel);border-bottom:1px solid var(--stroke)}
-h1{margin:0;font-size:18px;letter-spacing:.5px}
-.small{font-size:12px;color:var(--muted)}
-.btn{background:var(--btn);border:1px solid var(--stroke);color:var(--fg);padding:8px 12px;border-radius:10px;cursor:pointer}
-.btn:hover{background:var(--btn-h)}
-.btn.primary{background:#2563eb;border-color:#1d4ed8}
-.btn.danger{background:#7f1d1d;border-color:#991b1b}
-.btn.ghost{background:transparent;border-color:var(--stroke)}
-.badge{font-size:12px;border:1px solid var(--stroke);padding:3px 8px;border-radius:999px}
-.badge.ok{background:#0b3b2e;color:#86efac;border-color:#14532d}
-.badge.ko{background:#3b1a1a;color:#fecaca;border-color:#7f1d1d}
+const sb = createClient(SUPABASE_URL, SUPA_ANON);
 
-main{max-width:1200px;margin:24px auto;padding:0 16px;display:flex;gap:16px;flex-direction:column}
-.master{background:var(--card);border:1px solid var(--stroke);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px}
-.masterHead{display:flex;justify-content:space-between;align-items:center;gap:10px}
-.masterTitle{display:flex;align-items:center;gap:10px}
-.slaveGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
-.slaveCard{background:#202a3e;border:1px solid var(--stroke);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px}
-.slaveHead{display:flex;justify-content:space-between;align-items:center}
-.slaveKnob{width:80px;height:80px;border-radius:50%;border:4px solid #3a4a68;display:flex;align-items:center;justify-content:center;margin:6px auto 0;position:relative}
-.slaveLed{position:absolute;right:-2px;bottom:-2px;width:12px;height:12px;border-radius:50%;background:#1f2937;border:2px solid #0f172a}
-.slaveActions{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
-.pill{background:var(--chip);border:1px solid var(--stroke);border-radius:999px;padding:2px 8px;color:var(--fg);font-size:12px;display:inline-flex;align-items:center;gap:6px}
-.pill .mac{font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px}
-.icon{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1e293b}
-.tileAdd{background:#1f2739;border:1px dashed #334155;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#9fb0c6}
-.tileAdd:hover{background:#232f45}
-.hr{height:1px;background:var(--stroke);margin:6px 0}
-.cmdTitle{color:var(--muted);font-size:12px}
-.cmdList{margin:0;padding-left:18px;max-height:140px;overflow:auto}
-.log{white-space:pre-wrap;background:#0b1220;border:1px solid var(--stroke);border-radius:12px;padding:10px;height:150px;overflow:auto}
-.row{display:flex;gap:10px;align-items:center}
-.right{margin-left:auto}
-.tiny{font-size:12px;padding:5px 8px;border-radius:8px}
+const LIVE_TTL_MS   = 25_000;
+const DEFAULT_IO_PIN = 26;
 
-/* mini-badge env probe */
-.envprobe{position:fixed;right:8px;bottom:8px;z-index:9999;font:11px ui-monospace, SFMono-Regular, Menlo, monospace;
-  padding:6px 8px;border:1px solid var(--stroke);border-radius:8px;background:#0b1220aa;color:#fff}
-`;
+/* ========= THEME (Canvas) ========= */
+const THEME = {
+  light: {
+    bg: "#f5f5f7",
+    panel: "rgba(255,255,255,0.7)",
+    card: "#ffffff",
+    stroke: "#e5e5ea",
+    fg: "#1d1d1f",
+    muted: "#6e6e73",
+    chip: "#f2f2f7",
+    okBg: "#e8f0ff",
+    okFg: "#0a84ff",
+    okBorder: "#c8d8ff",
+    koBg: "#f2f2f7",
+    koFg: "#6e6e73",
+    koBorder: "#e5e5ea",
+    btn: "#f2f2f7",
+    btnHover: "#ececf1",
+    blue: "#007aff",
+    red: "#ff3b30",
+    txtBlueStrong: "#0a84ff",
+    txtBlue: "#0a84ff",
+    txtBlueMuted: "#5b8dff",
+    txtRed: "#ff3b30",
+  },
+  dark: {
+    bg: "#0b0b0f",
+    panel: "rgba(16,16,20,0.7)",
+    card: "#121217",
+    stroke: "#2b2b33",
+    fg: "#f5f5f7",
+    muted: "#a1a1aa",
+    chip: "#1a1a21",
+    okBg: "#0b1f3b",
+    okFg: "#8ab4ff",
+    okBorder: "#1c355b",
+    koBg: "#121217",
+    koFg: "#a1a1aa",
+    koBorder: "#2b2b33",
+    btn: "#1a1a21",
+    btnHover: "#22222a",
+    blue: "#4ba3ff",
+    red: "#ff6b5e",
+    txtBlueStrong: "#8ab4ff",
+    txtBlue: "#8ab4ff",
+    txtBlueMuted: "#6fa0ff",
+    txtRed: "#ff6b5e",
+  }
+};
 
-/* =========================
-   HELPERS
-========================= */
-const fmtTS  = s => (s ? new Date(s).toLocaleString() : "—");
-const isLive = d => d.last_seen && Date.now() - new Date(d.last_seen) < LIVE_TTL_MS;
+/* ========= HELPERS ========= */
+const fmtTS  = (s) => (s ? new Date(s).toLocaleString() : "—");
+const isLive = (d) => d.last_seen && Date.now() - new Date(d.last_seen) < LIVE_TTL_MS;
 
-/* petit timbre pour vérifier l’injection des env */
-const BUILD_STAMP = new Date().toISOString();
-function EnvProbe(){
+/* ========= PRIMITIVES (Canvas) ========= */
+const Badge = ({ ok, children, t }) => (
+  <span
+    className="text-xs rounded-full border px-2 py-0.5"
+    style={{
+      background: ok ? t.okBg : t.koBg,
+      color: ok ? t.okFg : t.koFg,
+      borderColor: ok ? t.okBorder : t.koBorder,
+    }}
+  >
+    {children}
+  </span>
+);
+
+const Button = ({
+  tone = "default", // default | primary | danger | ghost | tiny
+  className = "",
+  style: styleProp = {},
+  children,
+  t,
+  ...props
+}) => {
+  const base =
+    "rounded-2xl border text-sm px-3 py-2 transition-colors select-none w-full sm:w-auto";
+  const tiny = tone === "tiny";
+  const toneStyle = (() => {
+    switch (tone) {
+      case "primary":
+        return { background: "transparent", borderColor: t.stroke, color: t.txtBlue };
+      case "danger":
+        return { background: "transparent", borderColor: t.stroke, color: t.txtRed };
+      case "ghost":
+        return { background: "transparent", borderColor: t.stroke, color: t.fg };
+      default:
+        return { background: t.btn, borderColor: t.stroke, color: t.fg };
+    }
+  })();
+  const cls = [base, tiny ? "px-2 py-1 text-[12px]" : "", className].join(" ");
+  const style = { minHeight: tiny ? 36 : 44, ...toneStyle, ...styleProp };
   return (
-    <div className="envprobe">
-      URL={SUPABASE_URL ? "yes" : "no"} · ANON={SUPA_ANON ? "yes" : "no"} · {BUILD_STAMP}
-    </div>
+    <button className={cls} style={style} {...props}>
+      {children}
+    </button>
+  );
+};
+
+const Chip = ({ children, t }) => (
+  <span
+    className="inline-flex items-center gap-2 rounded-full border px-2 py-0.5 text-xs shrink"
+    style={{ background: t.chip, borderColor: t.stroke, maxWidth: "100%", overflow: "hidden" }}
+  >
+    {children}
+  </span>
+);
+
+function PowerButton({ onPulse, disabled, t }){
+  const size = typeof window !== "undefined" && window.innerWidth <= 480 ? 64 : 56;
+  return (
+    <button
+      onClick={() => { if (!disabled) onPulse?.(); }}
+      disabled={disabled}
+      aria-label="Power pulse"
+      className={`group relative inline-flex items-center justify-center rounded-full ${
+        disabled ? "opacity-50 cursor-not-allowed" : "active:scale-[0.98]"
+      }`}
+      style={{ width: size, height: size, background: t.btn, border: `1px solid ${t.stroke}` }}
+    >
+      <span className="text-[20px] leading-none" style={{ color: t.txtBlue }}>⏻</span>
+    </button>
   );
 }
 
+/* ========= MAIN APP ========= */
 export default function App(){
-  /* Si config manquante → page explicite et on s’arrête là */
-  if(!HAS_ENV){
-    return (
-      <>
-        <style>{styles}</style>
-        <header>
-          <h1>REMOTE POWER</h1>
-          <div className="row"><span className="small">non connecté</span></div>
-        </header>
-        <main>
-          <section className="master">
-            <h2 style={{margin:"0 0 6px 0"}}>Configuration manquante</h2>
-            <div className="small">
-              Définis les variables d’environnement Vite au moment du build :
-              <div style={{marginTop:8}}>
-                <code>VITE_SUPABASE_URL=https://…supabase.co</code><br/>
-                <code>VITE_SUPABASE_ANON_KEY=eyJhbGciOi…</code>
-              </div>
-              <p style={{marginTop:10}}>
-                Dans GitHub Actions → <em>Settings &gt; Secrets and variables &gt; Actions</em> (repository secrets) puis relance le workflow.
-              </p>
-            </div>
-          </section>
-        </main>
-        <EnvProbe />
-      </>
-    );
-  }
+  /* Theme */
+  const prefersDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const [isDark, setIsDark] = useState(prefersDark);
+  useEffect(()=>{
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e)=> setIsDark(e.matches);
+    mq.addEventListener ? mq.addEventListener('change', handler) : mq.addListener(handler);
+    return ()=> mq.removeEventListener ? mq.removeEventListener('change', handler) : mq.removeListener(handler);
+  },[]);
+  const t = isDark ? THEME.dark : THEME.light;
+  const frame = useMemo(() => ({ background: t.bg, color: t.fg, borderColor: t.stroke }), [t]);
 
-  /* =========================
-     État & logique d’origine
-  ========================= */
+  /* State */
   const [user,setUser]=useState(null);
   const [devices,setDevices]=useState([]);
   const [nodesByMaster,setNodesByMaster]=useState({});
   const [pair,setPair]=useState({open:false,code:null,expires_at:null});
 
-  /* log */
   const [lines,setLines]=useState([]);
   const logRef=useRef(null);
-  const log = t => setLines(ls=>[...ls,`${new Date().toLocaleTimeString()}  ${t}`]);
-  useEffect(()=>{ if(logRef.current) logRef.current.scrollTop=logRef.current.scrollHeight },[lines]);
+  const log = (txt)=> setLines(ls=>[...ls,`${new Date().toLocaleTimeString()}  ${txt}`]);
+  useEffect(()=>{ if(logRef.current) logRef.current.scrollTop=logRef.current.scrollHeight; },[lines]);
 
-  /* keep refs for cmd lists (per master) */
+  /* keep UL refs for per-master commands */
   const cmdLists=useRef(new Map());
   function upsertCmdRow(masterId, c){
     const ul = cmdLists.current.get(masterId); if(!ul) return;
     const id=`cmd-${c.id}`;
-    const html = `<code>${c.status}</code> · ${c.action}${c.target_mac?' → '+c.target_mac:' (local)'} <span class="small">· ${fmtTS(c.created_at)}</span>`;
+    const html = `<code>${c.status}</code> · ${c.action}${c.target_mac?' → '+c.target_mac:' (local)'} <span style="opacity:.7;font-size:12px">· ${fmtTS(c.created_at)}</span>`;
     let li = ul.querySelector(`#${CSS.escape(id)}`);
     if(!li){ li=document.createElement('li'); li.id=id; li.innerHTML=html; ul.prepend(li); while(ul.children.length>20) ul.removeChild(ul.lastChild); }
     else { li.innerHTML=html; }
   }
 
-  /* auth bootstrap */
+  /* Auth bootstrap */
   useEffect(()=>{
     const sub = sb.auth.onAuthStateChange((ev,session)=>{
       setUser(session?.user||null);
-      if(session?.user){ attachRealtime(); loadAll(); } else { cleanupRealtime(); setDevices([]); setNodesByMaster({}); }
+      if(session?.user){ attachRealtime(); loadAll(); }
+      else { cleanupRealtime(); setDevices([]); setNodesByMaster({}); }
     });
-    (async()=>{ const {data:{session}} = await sb.auth.getSession(); setUser(session?.user||null); if(session?.user){ attachRealtime(); loadAll(); } })();
-    return ()=>sub.data.subscription.unsubscribe();
+    (async()=>{
+      const {data:{session}} = await sb.auth.getSession();
+      setUser(session?.user||null);
+      if(session?.user){ attachRealtime(); loadAll(); }
+    })();
+    return ()=> sub.data.subscription.unsubscribe();
     // eslint-disable-next-line
   },[]);
 
-  /* realtime channels */
+  /* Realtime */
   const chDevices=useRef(null), chNodes=useRef(null), chCmds=useRef(null);
   function cleanupRealtime(){
     if(chDevices.current) sb.removeChannel(chDevices.current);
@@ -175,9 +216,12 @@ export default function App(){
       .subscribe();
   }
 
-  /* queries */
+  /* Queries */
   async function loadAll(){
-    const {data:devs,error:ed}=await sb.from('devices').select('id,name,master_mac,last_seen,online').order('created_at',{ascending:false});
+    const {data:devs,error:ed}=await sb
+      .from('devices')
+      .select('id,name,master_mac,last_seen,online')
+      .order('created_at',{ascending:false});
     if(ed){ log("Err devices: "+ed.message); return; }
     setDevices(devs||[]);
     const {data:nodes,error:en}=await sb.from('nodes').select('master_id,slave_mac');
@@ -199,7 +243,7 @@ export default function App(){
     setNodesByMaster(m => ({...m,[mid]:(data||[]).map(x=>x.slave_mac)}));
   }
 
-  /* commands */
+  /* Commands */
   async function sendCmd(mid,mac,action,payload={}){
     const {error}=await sb.from('commands').insert({master_id:mid,target_mac:mac||null,action,payload});
     if(error) log("cmd err: "+error.message);
@@ -233,131 +277,225 @@ export default function App(){
     log(`Pair-code ${code}`);
   }
 
-  /* UI bits */
+  /* Auth controls */
   const UserControls = (
-    <div className="row">
-      <span className="small">{user?.email || "non connecté"}</span>
-      {!user
-        ? <button className="btn primary" onClick={async ()=>{
-            const {data,error}=await sb.auth.signInWithOAuth({provider:"google",options:{redirectTo:location.href,queryParams:{prompt:"select_account"}}});
-            if(error) alert(error.message); else if(data?.url) location.href=data.url;
-          }}>CONNEXION GOOGLE</button>
-        : <button className="btn" onClick={()=>sb.auth.signOut()}>DECONNEXION</button>}
+    <div className="flex items-center gap-2">
+      <span className="text-xs" style={{ color: t.muted }}>{user?.email || "non connecté"}</span>
+      {!user ? (
+        <Button tone="primary" t={t} onClick={async ()=>{
+          const {data,error}=await sb.auth.signInWithOAuth({
+            provider:"google",
+            options:{redirectTo:location.href, queryParams:{prompt:"select_account"}}
+          });
+          if(error) alert(error.message); else if(data?.url) location.href=data.url;
+        }}>Connexion Google</Button>
+      ) : (
+        <>
+          <Button tone="ghost" t={t} onClick={()=>setIsDark(d=>!d)}>{isDark?"Mode clair":"Mode sombre"}</Button>
+          <Button tone="ghost" t={t} onClick={()=>sb.auth.signOut()}>Déconnexion</Button>
+        </>
+      )}
     </div>
   );
 
   return (
-    <>
-      <style>{styles}</style>
-
-      <header>
-        <h1>REMOTE POWER</h1>
-        {UserControls}
+    <div
+      className="min-h-screen"
+      style={{
+        background: frame.background,
+        color: frame.color,
+        fontFamily:
+          "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', Segoe UI, Roboto, Arial, Helvetica, sans-serif",
+      }}
+    >
+      {/* Header */}
+      <header
+        className="sticky top-0 z-10 backdrop-blur-md border-b px-4 md:px-6 py-4"
+        style={{ background: t.panel, borderColor: t.stroke }}
+      >
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 flex-wrap">
+          <h1 className="m-0 text-[18px] tracking-wide">REMOTE POWER</h1>
+          {UserControls}
+        </div>
       </header>
 
-      <main>
-        <div className="row" style={{justifyContent:"space-between"}}>
-          <span className="small">Compte : {user?.email || "—"}</span>
-          <div className="row">
-            <button className="btn primary" onClick={openPairDialog}>Ajouter un MASTER</button>
-            <button className="btn" onClick={loadAll}>Rafraîchir</button>
+      {/* Controls row */}
+      <main className="mx-auto flex max-w-6xl flex-col gap-5 p-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <span className="text-xs" style={{ color: t.muted }}>
+            Compte : {user?.email || "—"}
+          </span>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Button tone="primary" className="sm:w-auto" t={t} onClick={openPairDialog}>
+              Ajouter un MASTER
+            </Button>
+            <Button t={t} onClick={loadAll}>Rafraîchir</Button>
           </div>
         </div>
 
-        {devices.map(d=>{
-          const live=isLive(d);
-          const slaves=nodesByMaster[d.id]||[];
-          return (
-            <section className="master" key={d.id}>
-              <div className="masterHead">
-                <div className="masterTitle">
-                  <strong style={{fontSize:16}}>MASTER</strong>
-                  <span className={`badge ${live?'ok':'ko'}`}>{live?'EN LIGNE':'HORS LIGNE'}</span>
-                </div>
-                <div className="row">
-                  <button className="btn tiny" onClick={()=>renameMaster(d.id)}>RENOMER</button>
-                  <button className="btn tiny danger" onClick={()=>deleteDevice(d.id)}>SUPPRIMER</button>
-                </div>
+        {/* Masters */}
+        {devices.map((d)=>(
+          <section
+            key={d.id}
+            className="flex flex-col gap-4 rounded-3xl border p-4 md:p-6"
+            style={{ background: t.card, borderColor: t.stroke }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <strong className="text-[17px] tracking-wide">MASTER</strong>
+                <Badge ok={isLive(d)} t={t}>{isLive(d) ? "EN LIGNE" : "HORS LIGNE"}</Badge>
               </div>
-
-              <div className="small" style={{opacity:.85}}>
-                ID : <code>{d.id}</code> &nbsp;•&nbsp; MAC : <code>{d.master_mac||'—'}</code> &nbsp;•&nbsp; Dernier contact : {fmtTS(d.last_seen)||'jamais'}
+              <div className="flex items-center gap-2">
+                <Button tone="tiny" t={t} onClick={()=>renameMaster(d.id)}>Renommer</Button>
+                <Button tone="tiny" t={t} onClick={()=>deleteDevice(d.id)} style={{ background:"transparent", borderColor:t.stroke, color:t.txtRed }}>
+                  Supprimer
+                </Button>
               </div>
+            </div>
 
-              <div className="slaveGrid">
-                {slaves.map(mac=>(
-                  <article className="slaveCard" key={mac}>
-                    <div className="slaveHead">
-                      <div className="row" style={{gap:6}}>
-                        <span style={{fontWeight:700}}>SLAVE</span>
-                        <span className="pill"><span className="icon">⚙️</span><span className="mac">{mac}</span></span>
-                      </div>
+            <div className="text-[12px]" style={{ color: t.muted }}>
+              ID : <code className="font-mono">{d.id}</code> · MAC : <span style={{ color: t.txtBlue }}>{d.master_mac||'—'}</span> · Dernier contact : {fmtTS(d.last_seen)||'jamais'}
+            </div>
+
+            {/* SLAVES */}
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3 md:gap-4">
+              {(nodesByMaster[d.id]||[]).map((mac)=>(
+                <article
+                  key={mac}
+                  className="flex flex-col gap-3 rounded-3xl border p-4"
+                  style={{ background: t.card, borderColor: t.stroke }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
+                      <span className="font-semibold" style={{ color: t.txtBlue }}>SLAVE</span>
+                      <Chip t={t}>
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full" style={{ color: t.txtBlue }}>⚙️</span>
+                        <code
+                          style={{
+                            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                            fontSize: 12,
+                            maxWidth: "12ch",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={mac}
+                        >
+                          {mac}
+                        </code>
+                      </Chip>
                     </div>
+                  </div>
 
-                    <div className="slaveKnob">
-                      <span style={{fontSize:11,opacity:.8}}>PHOTO</span>
-                      {/* led d’état (témoin click IO) */}
-                      <span className="slaveLed" id={`led-${mac}`}></span>
-                    </div>
+                  {/* circular photo placeholder + small ON indicator (from click feedback) */}
+                  <div
+                    className="relative mx-auto mt-1 flex h-24 w-24 items-center justify-center rounded-full border text-[11px]"
+                    style={{ borderColor: t.stroke, background: "linear-gradient(180deg, #fafafa, #f2f2f7)" }}
+                  >
+                    PHOTO
+                    <span
+                      id={`led-${mac}`}
+                      className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border"
+                      style={{ background: "#6b7280", borderColor: t.stroke }}
+                    />
+                  </div>
 
-                    <div className="row" style={{justifyContent:"center"}}>
-                      <button
-                        className="btn"
-                        onClick={()=>{
-                          sendCmd(d.id,mac,"SLV_IO",{pin:DEFAULT_IO_PIN,mode:"OUT",value:1});
-                          const led=document.getElementById(`led-${mac}`); if(led){ led.style.background='#16a34a'; setTimeout(()=>led.style.background='#1f2937',600); }
-                        }}
-                        title="IO ON"
-                      >⏻</button>
-                    </div>
+                  {/* power pulse (send IO=1 briefly) */}
+                  <div className="flex justify-center">
+                    <PowerButton
+                      t={t}
+                      onPulse={()=>{
+                        sendCmd(d.id,mac,"SLV_IO",{pin:DEFAULT_IO_PIN,mode:"OUT",value:1});
+                        const led=document.getElementById(`led-${mac}`);
+                        if(led){ led.style.background=t.okFg; setTimeout(()=>{ led.style.background="#6b7280"; },600); }
+                        setTimeout(()=> sendCmd(d.id,mac,"SLV_IO",{pin:DEFAULT_IO_PIN,mode:"OUT",value:0}), 200);
+                      }}
+                    />
+                  </div>
 
-                    <div className="slaveActions">
-                      <button className="btn tiny" onClick={()=>sendCmd(d.id,mac,"SLV_RESET",{})}>RESET</button>
-                      <button className="btn tiny" onClick={()=>sendCmd(d.id,mac,"SLV_IO",{pin:DEFAULT_IO_PIN,mode:"OUT",value:0})}>OFF</button>
-                      <button className="btn tiny" style={{background:"#7c2d12"}} onClick={()=>sendCmd(d.id,mac,"SLV_FORCE_OFF",{})}>HARD STOP</button>
-                      <button className="btn tiny" style={{background:"#7f1d1d"}} onClick={()=>sendCmd(d.id,mac,"SLV_HARD_RESET",{ms:3000})}>HARD RESET</button>
-                    </div>
-                  </article>
-                ))}
+                  {/* actions */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button tone="tiny" t={t} onClick={()=>sendCmd(d.id,mac,"SLV_RESET",{})}>Reset</Button>
+                    <Button tone="tiny" t={t} onClick={()=>sendCmd(d.id,mac,"SLV_IO",{pin:DEFAULT_IO_PIN,mode:"OUT",value:0})}>Off</Button>
+                    <Button tone="tiny" t={t} onClick={()=>sendCmd(d.id,mac,"SLV_FORCE_OFF",{})} style={{ background:"transparent", borderColor:t.stroke, color:t.txtBlue }}>
+                      Hard Stop
+                    </Button>
+                    <Button tone="tiny" t={t} onClick={()=>sendCmd(d.id,mac,"SLV_HARD_RESET",{ms:3000})} style={{ background:"transparent", borderColor:t.stroke, color:t.txtBlueMuted }}>
+                      Hard Reset
+                    </Button>
+                  </div>
+                </article>
+              ))}
 
-                {/* Tuile "ajouter un slave" (visuelle) */}
-                <div className="tileAdd" title="Ajouter un slave (pairing via bouton sur MASTER)">
-                  <div style={{fontSize:36,lineHeight:1}}>＋</div>
-                  <div className="small">Ajouter un SLAVE</div>
-                </div>
+              {/* Add slave (visual only, pairing via hardware on master) */}
+              <div
+                className="flex flex-col items-center justify-center gap-2 rounded-3xl border border-dashed p-8 text-[13px]"
+                style={{ borderColor: t.stroke, background: t.btn, color: t.muted }}
+                title="Ajouter un SLAVE (pairing via bouton sur le MASTER)"
+              >
+                <span className="text-5xl leading-none" style={{ color: t.txtBlue }}>＋</span>
+                Ajouter un SLAVE
               </div>
+            </div>
 
-              <div className="hr" />
+            <div className="h-px" style={{ background: t.stroke }} />
 
-              <div className="row" style={{gap:8,flexWrap:"wrap"}}>
-                <button className="btn tiny" onClick={()=>sendCmd(d.id,null,"PULSE",{ms:500})}>Pulse 500 ms</button>
-                <button className="btn tiny" onClick={()=>sendCmd(d.id,null,"POWER_ON",{})}>Power ON</button>
-                <button className="btn tiny" onClick={()=>sendCmd(d.id,null,"POWER_OFF",{})}>Power OFF</button>
-                <button className="btn tiny" onClick={()=>sendCmd(d.id,null,"RESET",{})}>Reset</button>
-                <span className="right small">Nom : <strong>{d.name||d.id}</strong></span>
-              </div>
+            {/* Master actions */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button tone="tiny" t={t} onClick={()=>sendCmd(d.id,null,"PULSE",{ms:500})} style={{ background:"transparent", borderColor:t.stroke, color:t.txtBlue }}>
+                ⚡ Pulse 500 ms
+              </Button>
+              <Button tone="tiny" t={t} onClick={()=>sendCmd(d.id,null,"POWER_ON",{})} style={{ background:"transparent", borderColor:t.stroke, color:t.txtBlueStrong }}>
+                🔌 Power ON
+              </Button>
+              <Button tone="tiny" t={t} onClick={()=>sendCmd(d.id,null,"POWER_OFF",{})} style={{ background:"transparent", borderColor:t.stroke, color:t.txtBlueMuted }}>
+                ⏹️ Power OFF
+              </Button>
+              <Button tone="tiny" t={t} onClick={()=>sendCmd(d.id,null,"RESET",{})} style={{ background:"transparent", borderColor:t.stroke, color:t.txtBlue }}>
+                ↻ Reset
+              </Button>
+              <span className="ml-auto text-xs" style={{ color: t.muted }}>
+                Nom : <strong>{d.name||d.id}</strong>
+              </span>
+            </div>
 
-              <div className="hr" />
-              <div className="cmdTitle">Commandes (20 dernières)</div>
-              <ul className="cmdList" ref={el=>{ if(el) cmdLists.current.set(d.id,el); }}/>
-            </section>
-          );
-        })}
+            {/* Commands list */}
+            <div className="h-px" style={{ background: t.stroke }} />
+            <div className="text-xs" style={{ color: t.muted }}>Commandes (20 dernières)</div>
+            <ul
+              className="list-disc pl-5 max-h-[160px] overflow-auto m-0"
+              ref={el=>{ if(el) cmdLists.current.set(d.id,el); }}
+            />
+          </section>
+        ))}
 
         {/* Journal global */}
-        <div>
-          <h3 style={{margin:"8px 0"}}>Journal</h3>
-          <div className="log" ref={logRef}>{lines.join("\n")}</div>
+        <div className="max-w-6xl">
+          <h3 className="m-0 mb-2">Journal</h3>
+          <div
+            ref={logRef}
+            style={{
+              whiteSpace:"pre-wrap",
+              background: isDark ? "#0b1220" : "#f2f2f7",
+              border:`1px solid ${t.stroke}`,
+              borderRadius: 12,
+              padding: 10,
+              height: 160,
+              overflow: "auto"
+            }}
+          >
+            {lines.join("\n")}
+          </div>
         </div>
       </main>
 
-      {/* Pair-code dialog */}
+      {/* Pair dialog */}
       {pair.open && (
         <dialog open onClose={()=>setPair({open:false,code:null,expires_at:null})}>
           <div style={{padding:16,display:"flex",flexDirection:"column",gap:10}}>
             <h3>Appairer un MASTER</h3>
             <div>Code : <code>{String(pair.code).padStart(6,"0")}</code>
-              {" "} (expire <span className="small">
+              {" "} (expire <span style={{opacity:.7}}>
                 {(()=>{
                   const end = pair.expires_at ? new Date(pair.expires_at).getTime() : 0;
                   const l = Math.max(0, Math.floor((end - Date.now())/1000));
@@ -365,16 +503,13 @@ export default function App(){
                 })()}
               </span>)
             </div>
-            <div className="small">Saisis ce code dans le portail Wi-Fi de l’ESP32.</div>
-            <div className="row" style={{justifyContent:"flex-end"}}>
-              <button className="btn" onClick={()=>setPair({open:false,code:null,expires_at:null})}>Fermer</button>
+            <div style={{opacity:.8,fontSize:13}}>Saisis ce code dans le portail Wi-Fi de l’ESP32.</div>
+            <div className="flex justify-end">
+              <Button t={t} onClick={()=>setPair({open:false,code:null,expires_at:null})}>Fermer</Button>
             </div>
           </div>
         </dialog>
       )}
-
-      {/* Probe env (retire-le quand c’est bon) */}
-      <EnvProbe />
-    </>
+    </div>
   );
 }
