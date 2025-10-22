@@ -1,322 +1,735 @@
-import { useEffect, useRef, useState } from "react"
-import { createClient } from "@supabase/supabase-js"
+// App.tsx (ou app/page.tsx pour Next.js)
+import React, { useEffect, useMemo, useState } from "react";
+import { createClient, RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 
-/* --------- CONFIG --------- */
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-const SUPA_ANON    = import.meta.env.VITE_SUPABASE_ANON_KEY
-const sb = createClient(SUPABASE_URL, SUPA_ANON)
+/* =========================
+   CONFIG SUPABASE (env)
+   ========================= */
+const SUPABASE_URL =
+  import.meta?.env?.VITE_SUPABASE_URL ??
+  process.env.NEXT_PUBLIC_SUPABASE_URL ??
+  "";
+const SUPABASE_ANON =
+  import.meta?.env?.VITE_SUPABASE_ANON_KEY ??
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+  "";
 
-/* pin par défaut pour IO sur le SLAVE (à adapter si besoin) */
-const DEFAULT_IO_PIN = 26
-const LIVE_TTL_MS = 25_000
+const sb: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON);
 
-/* --------- STYLES --------- */
-const styles = `
-:root{
-  --bg:#0b101b; --panel:#141b29; --card:#1a2233; --chip:#263247; --muted:#9fb0c6;
-  --fg:#e7eefb; --ok:#16a34a; --ko:#ef4444; --warn:#f59e0b; --accent:#2dd4bf;
-  --stroke:#263247; --btn:#222b3d; --btn-h:#2a3550;
+/* =========================
+   THEME (light & dark)
+   ========================= */
+const THEME = {
+  light: {
+    bg: "#f5f5f7",
+    panel: "rgba(255,255,255,0.7)",
+    card: "#ffffff",
+    stroke: "#e5e5ea",
+    fg: "#1d1d1f",
+    muted: "#6e6e73",
+    chip: "#f2f2f7",
+    okBg: "#e8f0ff",
+    okFg: "#0a84ff",
+    okBorder: "#c8d8ff",
+    koBg: "#f2f2f7",
+    koFg: "#6e6e73",
+    koBorder: "#e5e5ea",
+    btn: "#f2f2f7",
+    btnHover: "#ececf1",
+    blue: "#007aff",
+    red: "#ff3b30",
+    txtBlueStrong: "#0a84ff",
+    txtBlue: "#0a84ff",
+    txtBlueMuted: "#5b8dff",
+    txtRed: "#ff3b30",
+  },
+  dark: {
+    bg: "#0b0b0f",
+    panel: "rgba(16,16,20,0.7)",
+    card: "#121217",
+    stroke: "#2b2b33",
+    fg: "#f5f5f7",
+    muted: "#a1a1aa",
+    chip: "#1a1a21",
+    okBg: "#0b1f3b",
+    okFg: "#8ab4ff",
+    okBorder: "#1c355b",
+    koBg: "#121217",
+    koFg: "#a1a1aa",
+    koBorder: "#2b2b33",
+    btn: "#1a1a21",
+    btnHover: "#22222a",
+    blue: "#4ba3ff",
+    red: "#ff6b5e",
+    txtBlueStrong: "#8ab4ff",
+    txtBlue: "#8ab4ff",
+    txtBlueMuted: "#6fa0ff",
+    txtRed: "#ff6b5e",
+  },
+};
+
+/* =========================
+   Types simples
+   ========================= */
+type Device = {
+  id: string;
+  name: string | null;
+  master_mac: string | null;
+  last_seen: string | null;
+  online?: boolean | null;
+};
+type NodeRow = { master_id: string; slave_mac: string };
+type CommandRow = {
+  id: string;
+  master_id: string;
+  action: string;
+  target_mac: string | null;
+  status: string;
+  created_at: string;
+};
+
+const isLive = (d: Device) =>
+  !!d.last_seen && Date.now() - new Date(d.last_seen).getTime() < 25_000;
+
+/* =========================
+   UI primitives
+   ========================= */
+const Badge: React.FC<{ ok: boolean; t: any }> = ({ ok, t, children }) => (
+  <span
+    className="text-xs rounded-full border px-2 py-0.5"
+    style={{
+      background: ok ? t.okBg : t.koBg,
+      color: ok ? t.okFg : t.koFg,
+      borderColor: ok ? t.okBorder : t.koBorder,
+    }}
+  >
+    {children}
+  </span>
+);
+
+const Button: React.FC<{
+  tone?: "default" | "primary" | "danger" | "ghost" | "tiny";
+  className?: string;
+  style?: React.CSSProperties;
+  t: any;
+  onClick?: () => void;
+}> = ({ tone = "default", className = "", style = {}, t, children, ...props }) => {
+  const base =
+    "rounded-2xl border text-sm px-3 py-2 transition-colors select-none w-full sm:w-auto";
+  const tiny = tone === "tiny";
+  const toneStyle =
+    tone === "primary"
+      ? { background: "transparent", borderColor: t.stroke, color: t.txtBlue }
+      : tone === "danger"
+      ? { background: "transparent", borderColor: t.stroke, color: t.txtRed }
+      : tone === "ghost"
+      ? { background: "transparent", borderColor: t.stroke, color: t.fg }
+      : { background: t.btn, borderColor: t.stroke, color: t.fg };
+  return (
+    <button
+      className={[base, tiny ? "px-2 py-1 text-[12px]" : "", className].join(" ")}
+      style={{ minHeight: tiny ? 36 : 44, ...toneStyle, ...style }}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+};
+
+const Chip: React.FC<{ t: any }> = ({ t, children }) => (
+  <span
+    className="inline-flex items-center gap-2 rounded-full border px-2 py-0.5 text-xs shrink"
+    style={{ background: t.chip, borderColor: t.stroke, maxWidth: "100%", overflow: "hidden" }}
+  >
+    {children}
+  </span>
+);
+
+const PowerButton: React.FC<{ onPulse: () => void; disabled?: boolean; t: any }> = ({
+  onPulse,
+  disabled,
+  t,
+}) => {
+  const size =
+    typeof window !== "undefined" && window.innerWidth <= 480 ? 64 : 56;
+  return (
+    <button
+      onClick={() => !disabled && onPulse()}
+      disabled={disabled}
+      aria-label="Power pulse"
+      className={`group inline-flex items-center justify-center rounded-full ${
+        disabled ? "opacity-50 cursor-not-allowed" : "active:scale-[0.98]"
+      }`}
+      style={{
+        width: size,
+        height: size,
+        background: t.btn,
+        border: `1px solid ${t.stroke}`,
+      }}
+    >
+      <span className="text-[20px] leading-none" style={{ color: t.txtBlue }}>
+        ⏻
+      </span>
+    </button>
+  );
+};
+
+/* =========================
+   API Helpers
+   ========================= */
+async function sendCmd(masterId: string, targetMac: string | null, action: string, payload: any) {
+  const { error } = await sb.from("commands").insert({
+    master_id: masterId,
+    target_mac: targetMac,
+    action,
+    payload,
+  });
+  if (error) throw error;
 }
-*{box-sizing:border-box}
-html,body,#root{height:100%}
-body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,Segoe UI,Roboto,Arial}
-header{display:flex;justify-content:space-between;align-items:center;padding:18px 22px;background:var(--panel);border-bottom:1px solid var(--stroke)}
-h1{margin:0;font-size:18px;letter-spacing:.5px}
-.small{font-size:12px;color:var(--muted)}
-.btn{background:var(--btn);border:1px solid var(--stroke);color:var(--fg);padding:8px 12px;border-radius:10px;cursor:pointer}
-.btn:hover{background:var(--btn-h)}
-.btn.primary{background:#2563eb;border-color:#1d4ed8}
-.btn.danger{background:#7f1d1d;border-color:#991b1b}
-.btn.ghost{background:transparent;border-color:var(--stroke)}
-.badge{font-size:12px;border:1px solid var(--stroke);padding:3px 8px;border-radius:999px}
-.badge.ok{background:#0b3b2e;color:#86efac;border-color:#14532d}
-.badge.ko{background:#3b1a1a;color:#fecaca;border-color:#7f1d1d}
 
-main{max-width:1200px;margin:24px auto;padding:0 16px;display:flex;gap:16px;flex-direction:column}
-.master{background:var(--card);border:1px solid var(--stroke);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px}
-.masterHead{display:flex;justify-content:space-between;align-items:center;gap:10px}
-.masterTitle{display:flex;align-items:center;gap:10px}
-.slaveGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
-.slaveCard{background:#202a3e;border:1px solid var(--stroke);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px}
-.slaveHead{display:flex;justify-content:space-between;align-items:center}
-.slaveKnob{width:80px;height:80px;border-radius:50%;border:4px solid #3a4a68;display:flex;align-items:center;justify-content:center;margin:6px auto 0;position:relative}
-.slaveLed{position:absolute;right:-2px;bottom:-2px;width:12px;height:12px;border-radius:50%;background:#1f2937;border:2px solid #0f172a}
-.slaveActions{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
-.pill{background:var(--chip);border:1px solid var(--stroke);border-radius:999px;padding:2px 8px;color:var(--fg);font-size:12px;display:inline-flex;align-items:center;gap:6px}
-.pill .mac{font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px}
-.icon{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1e293b}
-.tileAdd{background:#1f2739;border:1px dashed #334155;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#9fb0c6}
-.tileAdd:hover{background:#232f45}
-.hr{height:1px;background:var(--stroke);margin:6px 0}
-.cmdTitle{color:var(--muted);font-size:12px}
-.cmdList{margin:0;padding-left:18px;max-height:140px;overflow:auto}
-.log{white-space:pre-wrap;background:#0b1220;border:1px solid var(--stroke);border-radius:12px;padding:10px;height:150px;overflow:auto}
-.row{display:flex;gap:10px;align-items:center}
-.right{margin-left:auto}
-.tiny{font-size:12px;padding:5px 8px;border-radius:8px}
-`;
+async function deleteDevice(masterId: string, accessToken: string) {
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_ANON,
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ master_id: masterId }),
+  });
+  if (!r.ok) throw new Error(await r.text());
+}
 
-/* --------- HELPERS --------- */
-const fmtTS  = s => (s ? new Date(s).toLocaleString() : "—")
-const isLive = d => d.last_seen && Date.now() - new Date(d.last_seen) < LIVE_TTL_MS
+async function createPairCode(accessToken: string) {
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_ANON,
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ ttl_minutes: 10 }),
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json() as Promise<{ code: number; expires_at: string }>;
+}
 
-export default function App(){
-  /* state */
-  const [user,setUser]=useState(null)
-  const [devices,setDevices]=useState([])
-  const [nodesByMaster,setNodesByMaster]=useState({})
-  const [pair,setPair]=useState({open:false,code:null,expires_at:null})
-
-  /* log */
-  const [lines,setLines]=useState([])
-  const logRef=useRef(null)
-  const log = t => setLines(ls=>[...ls,`${new Date().toLocaleTimeString()}  ${t}`])
-  useEffect(()=>{ if(logRef.current) logRef.current.scrollTop=logRef.current.scrollHeight },[lines])
-
-  /* keep refs for cmd lists (per master) */
-  const cmdLists=useRef(new Map())
-  function upsertCmdRow(masterId, c){
-    const ul = cmdLists.current.get(masterId); if(!ul) return
-    const id=`cmd-${c.id}`
-    const html = `<code>${c.status}</code> · ${c.action}${c.target_mac?' → '+c.target_mac:' (local)'} <span class="small">· ${fmtTS(c.created_at)}</span>`
-    let li = ul.querySelector(`#${CSS.escape(id)}`)
-    if(!li){ li=document.createElement('li'); li.id=id; li.innerHTML=html; ul.prepend(li); while(ul.children.length>20) ul.removeChild(ul.lastChild) }
-    else { li.innerHTML=html }
-  }
-
-  /* auth bootstrap */
-  useEffect(()=>{
-    const sub = sb.auth.onAuthStateChange((ev,session)=>{
-      setUser(session?.user||null)
-      if(session?.user){ attachRealtime(); loadAll() } else { cleanupRealtime(); setDevices([]); setNodesByMaster({}) }
-    })
-    ;(async()=>{ const {data:{session}} = await sb.auth.getSession(); setUser(session?.user||null); if(session?.user){ attachRealtime(); loadAll() } })()
-    return ()=>sub.data.subscription.unsubscribe()
-    // eslint-disable-next-line
-  },[])
-
-  /* realtime channels */
-  const chDevices=useRef(null), chNodes=useRef(null), chCmds=useRef(null)
-  function cleanupRealtime(){
-    if(chDevices.current) sb.removeChannel(chDevices.current)
-    if(chNodes.current)   sb.removeChannel(chNodes.current)
-    if(chCmds.current)    sb.removeChannel(chCmds.current)
-    chDevices.current=chNodes.current=chCmds.current=null
-  }
-  function attachRealtime(){
-    cleanupRealtime()
-    chDevices.current = sb.channel("rt:devices")
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'devices'}, p => { log(`+ device ${p.new.id}`); setDevices(ds=>[p.new,...ds]); refreshCommands(p.new.id) })
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'devices'}, p => { const d=p.new; setDevices(ds=>ds.map(x=>x.id===d.id?{...x,...d}:x)) })
-      .on('postgres_changes',{event:'DELETE',schema:'public',table:'devices'}, p => { log(`- device ${p.old.id}`); setDevices(ds=>ds.filter(x=>x.id!==p.old.id)) })
-      .subscribe()
-    chNodes.current = sb.channel("rt:nodes")
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'nodes'}, p => { log(`+ node ${p.new.slave_mac} → ${p.new.master_id}`); refreshSlavesFor(p.new.master_id) })
-      .on('postgres_changes',{event:'DELETE',schema:'public',table:'nodes'}, p => { log(`- node ${p.old.slave_mac} ← ${p.old.master_id}`); refreshSlavesFor(p.old.master_id) })
-      .subscribe()
-    chCmds.current = sb.channel("rt:commands")
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'commands'}, p => { upsertCmdRow(p.new.master_id,p.new); log(`cmd + ${p.new.action} (${p.new.status}) → ${p.new.master_id}`) })
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'commands'}, p => { upsertCmdRow(p.new.master_id,p.new); log(`cmd ~ ${p.new.action} (${p.new.status}) → ${p.new.master_id}`) })
-      .subscribe()
-  }
-
-  /* queries */
-  async function loadAll(){
-    const {data:devs,error:ed}=await sb.from('devices').select('id,name,master_mac,last_seen,online').order('created_at',{ascending:false})
-    if(ed){ log("Err devices: "+ed.message); return }
-    setDevices(devs||[])
-    const {data:nodes,error:en}=await sb.from('nodes').select('master_id,slave_mac')
-    if(en){ log("Err nodes: "+en.message); return }
-    const map={}; (nodes||[]).forEach(n => { (map[n.master_id]??=[]).push(n.slave_mac) })
-    setNodesByMaster(map)
-    for(const d of devs||[]) await refreshCommands(d.id)
-  }
-  async function refreshCommands(mid){
-    const {data,error}=await sb.from('commands')
-      .select('id,action,target_mac,status,created_at')
-      .eq('master_id',mid).order('created_at',{ascending:false}).limit(20)
-    if(error){ log("Err cmds: "+error.message); return }
-    const ul=cmdLists.current.get(mid); if(!ul) return
-    ul.innerHTML=""; (data||[]).forEach(c => upsertCmdRow(mid,c))
-  }
-  async function refreshSlavesFor(mid){
-    const {data}=await sb.from('nodes').select('slave_mac').eq('master_id',mid)
-    setNodesByMaster(m => ({...m,[mid]:(data||[]).map(x=>x.slave_mac)}))
-  }
-
-  /* commands */
-  async function sendCmd(mid,mac,action,payload={}){
-    const {error}=await sb.from('commands').insert({master_id:mid,target_mac:mac||null,action,payload})
-    if(error) log("cmd err: "+error.message)
-    else log(`[cmd] ${action} → ${mid}${mac?" ▶ "+mac:""}`)
-  }
-  async function renameMaster(id){
-    const name=prompt("Nouveau nom du master ?",""); if(!name) return
-    const {error}=await sb.from('devices').update({name}).eq('id',id)
-    if(error) alert(error.message); else log(`Renommé ${id} → ${name}`)
-  }
-  async function deleteDevice(id){
-    if(!confirm(`Supprimer ${id} ?`)) return
-    const {data:{session}}=await sb.auth.getSession(); if(!session){alert("Non connecté"); return}
-    const r=await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`,{
-      method:"POST",
-      headers:{ "Content-Type":"application/json", apikey:SUPA_ANON, Authorization:`Bearer ${session.access_token}` },
-      body:JSON.stringify({ master_id:id })
-    })
-    log(r.ok?`MASTER supprimé : ${id}`:`❌ Suppression : ${await r.text()}`)
-  }
-  async function openPairDialog(){
-    const {data:{session}}=await sb.auth.getSession(); if(!session){alert("Non connecté"); return}
-    const r=await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`,{
-      method:"POST",
-      headers:{ "Content-Type":"application/json", apikey:SUPA_ANON, Authorization:`Bearer ${session.access_token}` },
-      body:JSON.stringify({ ttl_minutes:10 })
-    })
-    if(!r.ok){ alert(await r.text()); return }
-    const {code,expires_at}=await r.json()
-    setPair({open:true,code,expires_at})
-    log(`Pair-code ${code}`)
-  }
-
-  /* UI bits */
-  const UserControls = (
-    <div className="row">
-      <span className="small">{user?.email || "non connecté"}</span>
-      {!user
-        ? <button className="btn primary" onClick={async ()=>{
-            const {data,error}=await sb.auth.signInWithOAuth({provider:"google",options:{redirectTo:location.href,queryParams:{prompt:"select_account"}}})
-            if(error) alert(error.message); else if(data?.url) location.href=data.url
-          }}>CONNEXION GOOGLE</button>
-        : <button className="btn" onClick={()=>sb.auth.signOut()}>DECONNEXION</button>}
+/* =========================
+   SLAVE CARD (stateless UI)
+   ========================= */
+const SlaveCard: React.FC<{
+  t: any;
+  masterId: string;
+  mac: string;
+  onPulse: () => void;
+  onReset: () => void;
+  onHardStop: () => void;
+  onHardReset: () => void;
+}> = ({ t, mac, onPulse, onReset, onHardStop, onHardReset }) => (
+  <article
+    className="flex flex-col gap-3 rounded-3xl border p-4"
+    style={{ background: t.card, borderColor: t.stroke }}
+  >
+    <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
+      <span className="font-semibold" style={{ color: t.txtBlue }}>
+        SLAVE
+      </span>
+      <Chip t={t}>
+        <span
+          className="inline-flex h-5 w-5 items-center justify-center rounded-full"
+          style={{ background: "transparent", color: t.txtBlue }}
+        >
+          ⚙️
+        </span>
+        <code
+          style={{
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            fontSize: 12,
+            maxWidth: "12ch",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+          title={mac}
+        >
+          {mac}
+        </code>
+      </Chip>
     </div>
-  )
+
+    {/* power pulse */}
+    <div className="flex justify-center">
+      <PowerButton t={t} onPulse={onPulse} />
+    </div>
+
+    {/* actions */}
+    <div className="grid grid-cols-2 gap-2">
+      <Button tone="tiny" t={t} onClick={onReset}>
+        Reset
+      </Button>
+      <Button tone="tiny" t={t} onClick={onHardStop}>
+        Off (force)
+      </Button>
+      <Button
+        tone="tiny"
+        t={t}
+        onClick={onHardStop}
+        style={{ background: "transparent", borderColor: t.stroke, color: t.txtBlue }}
+      >
+        Hard Stop
+      </Button>
+      <Button
+        tone="tiny"
+        t={t}
+        onClick={onHardReset}
+        style={{ background: "transparent", borderColor: t.stroke, color: t.txtBlueMuted }}
+      >
+        Hard Reset
+      </Button>
+    </div>
+  </article>
+);
+
+/* =========================
+   MASTER CARD (données réelles)
+   ========================= */
+const MasterCard: React.FC<{
+  t: any;
+  device: Device;
+  slaves: string[];
+  onRename: () => void;
+  onDelete: () => void;
+  onRefreshCmds: () => void;
+  cmds: CommandRow[];
+}> = ({ t, device, slaves, onRename, onDelete, onRefreshCmds, cmds }) => {
+  const live = isLive(device);
 
   return (
-    <>
-      <style>{styles}</style>
+    <section
+      className="flex flex-col gap-4 rounded-3xl border p-4 md:p-6"
+      style={{ background: t.card, borderColor: t.stroke }}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <strong className="text-[17px] tracking-wide">
+            {device.name || device.id}
+          </strong>
+          <Badge ok={live} t={t}>
+            {live ? "EN LIGNE" : "HORS LIGNE"}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button tone="tiny" t={t} onClick={onRename}>
+            Renommer
+          </Button>
+          <Button
+            tone="tiny"
+            t={t}
+            onClick={onDelete}
+            style={{ background: "transparent", borderColor: t.stroke, color: t.txtRed }}
+          >
+            Supprimer
+          </Button>
+        </div>
+      </div>
 
-      <header>
-        <h1>REMOTE POWER</h1>
-        {UserControls}
+      <div className="text-[12px]" style={{ color: t.muted }}>
+        ID : <code className="font-mono">{device.id}</code> · MAC :{" "}
+        <span style={{ color: t.txtBlue }}>{device.master_mac ?? "—"}</span> · Dernier
+        contact : {device.last_seen ? new Date(device.last_seen).toLocaleString() : "jamais"}
+      </div>
+
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3 md:gap-4">
+        {slaves.length ? (
+          slaves.map((mac) => (
+            <SlaveCard
+              key={mac}
+              t={t}
+              masterId={device.id}
+              mac={mac}
+              onPulse={() => sendCmd(device.id, mac, "POWER_PULSE", { ms: 500 }).catch(console.error)}
+              onReset={() => sendCmd(device.id, mac, "RESET", {}).catch(console.error)}
+              onHardStop={() => sendCmd(device.id, mac, "FORCE_OFF", {}).catch(console.error)}
+              onHardReset={() => sendCmd(device.id, mac, "HARD_RESET", {}).catch(console.error)}
+            />
+          ))
+        ) : (
+          <div
+            className="rounded-3xl border p-6 text-sm"
+            style={{ borderColor: t.stroke, color: t.muted }}
+          >
+            Aucun slave enregistré pour ce MASTER.
+          </div>
+        )}
+      </div>
+
+      <div className="h-px" style={{ background: t.stroke }} />
+
+      {/* Actions locales (master) */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          tone="tiny"
+          t={t}
+          onClick={() => sendCmd(device.id, null, "PULSE", { ms: 500 }).catch(console.error)}
+          style={{ background: "transparent", borderColor: t.stroke, color: t.txtBlue }}
+        >
+          ⚡ Pulse 500 ms
+        </Button>
+        <Button
+          tone="tiny"
+          t={t}
+          onClick={() => sendCmd(device.id, null, "POWER_ON", {}).catch(console.error)}
+          style={{ background: "transparent", borderColor: t.stroke, color: t.txtBlueStrong }}
+        >
+          🔌 Power ON
+        </Button>
+        <Button
+          tone="tiny"
+          t={t}
+          onClick={() => sendCmd(device.id, null, "POWER_OFF", {}).catch(console.error)}
+          style={{ background: "transparent", borderColor: t.stroke, color: t.txtBlueMuted }}
+        >
+          ⏹️ Power OFF
+        </Button>
+        <Button
+          tone="tiny"
+          t={t}
+          onClick={() => sendCmd(device.id, null, "RESET", {}).catch(console.error)}
+          style={{ background: "transparent", borderColor: t.stroke, color: t.txtBlue }}
+        >
+          ↻ Reset
+        </Button>
+
+        <span className="ml-auto text-xs" style={{ color: t.muted }}>
+          (20 dernières commandes)
+        </span>
+        <Button tone="tiny" t={t} onClick={onRefreshCmds}>
+          Rafraîchir
+        </Button>
+      </div>
+
+      {/* Liste commandes */}
+      <ul className="text-[12px]" style={{ color: t.muted }}>
+        {cmds.map((c) => (
+          <li key={c.id} className="py-0.5">
+            <code>{c.status}</code> · {c.action}
+            {c.target_mac ? ` → ${c.target_mac}` : " (local)"} ·{" "}
+            {new Date(c.created_at).toLocaleString()}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+};
+
+/* =========================
+   PAGE PRINCIPALE
+   ========================= */
+export default function App() {
+  // Thème
+  const prefersDark =
+    typeof window !== "undefined" &&
+    window.matchMedia &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const [isDark, setIsDark] = useState(prefersDark);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = (e: MediaQueryListEvent) => setIsDark(e.matches);
+    mq.addEventListener ? mq.addEventListener("change", handler) : mq.addListener(handler);
+    return () =>
+      mq.removeEventListener
+        ? mq.removeEventListener("change", handler)
+        : mq.removeListener(handler);
+  }, []);
+  const t = isDark ? THEME.dark : THEME.light;
+  const frame = useMemo(
+    () => ({ background: t.bg, color: t.fg, borderColor: t.stroke }),
+    [t]
+  );
+
+  // Auth
+  const [email, setEmail] = useState<string | null>(null);
+  useEffect(() => {
+    const sub = sb.auth.onAuthStateChange((_e, session) => {
+      setEmail(session?.user?.email ?? null);
+    });
+    sb.auth.getSession().then(({ data }) => setEmail(data.session?.user?.email ?? null));
+    return () => sub.data.subscription.unsubscribe();
+  }, []);
+
+  // Data
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [nodesByMaster, setNodesByMaster] = useState<Record<string, string[]>>({});
+  const [cmdsByMaster, setCmdsByMaster] = useState<Record<string, CommandRow[]>>({});
+  const [pairInfo, setPairInfo] = useState<{ code: string; expiresAt: number } | null>(null);
+
+  // Realtime channels
+  useEffect(() => {
+    if (!email) return;
+
+    // Initial load
+    const loadAll = async () => {
+      const { data: devs, error: ed } = await sb
+        .from("devices")
+        .select("id,name,master_mac,last_seen,online")
+        .order("created_at", { ascending: false });
+      if (!ed && devs) setDevices(devs);
+
+      const { data: nodes, error: en } = await sb
+        .from("nodes")
+        .select("master_id,slave_mac");
+      if (!en && nodes) {
+        const m: Record<string, string[]> = {};
+        nodes.forEach((n) => {
+          (m[n.master_id] ??= []).push(n.slave_mac);
+        });
+        setNodesByMaster(m);
+      }
+
+      // Load latest commands per master (20)
+      if (devs && devs.length) {
+        const map: Record<string, CommandRow[]> = {};
+        for (const d of devs) {
+          const { data, error } = await sb
+            .from("commands")
+            .select("id,master_id,action,target_mac,status,created_at")
+            .eq("master_id", d.id)
+            .order("created_at", { ascending: false })
+            .limit(20);
+          if (!error && data) map[d.id] = data;
+        }
+        setCmdsByMaster(map);
+      }
+    };
+    loadAll();
+
+    // Devices realtime
+    const chDevices: RealtimeChannel = sb
+      .channel("rt:devices")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "devices" }, (p) => {
+        setDevices((cur) => [p.new as Device, ...cur]);
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "devices" }, (p) => {
+        setDevices((cur) => cur.map((d) => (d.id === p.new.id ? { ...d, ...(p.new as any) } : d)));
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "devices" }, (p) => {
+        setDevices((cur) => cur.filter((d) => d.id !== p.old.id));
+        setNodesByMaster((m) => {
+          const n = { ...m };
+          delete n[p.old.id];
+          return n;
+        });
+        setCmdsByMaster((m) => {
+          const n = { ...m };
+          delete n[p.old.id];
+          return n;
+        });
+      })
+      .subscribe();
+
+    // Nodes realtime
+    const chNodes: RealtimeChannel = sb
+      .channel("rt:nodes")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "nodes" }, (p) => {
+        setNodesByMaster((cur) => {
+          const n = { ...cur };
+          (n[p.new.master_id] ??= []).push(p.new.slave_mac);
+          return n;
+        });
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "nodes" }, (p) => {
+        setNodesByMaster((cur) => {
+          const n = { ...cur };
+          n[p.old.master_id] = (n[p.old.master_id] ?? []).filter((m) => m !== p.old.slave_mac);
+          return n;
+        });
+      })
+      .subscribe();
+
+    // Commands realtime
+    const chCmds: RealtimeChannel = sb
+      .channel("rt:commands")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "commands" }, (p) => {
+        const c = p.new as CommandRow;
+        setCmdsByMaster((cur) => {
+          const list = [c, ...(cur[c.master_id] ?? [])].slice(0, 20);
+          return { ...cur, [c.master_id]: list };
+        });
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "commands" }, (p) => {
+        const c = p.new as CommandRow;
+        setCmdsByMaster((cur) => {
+          const list = (cur[c.master_id] ?? []).map((x) => (x.id === c.id ? c : x));
+          return { ...cur, [c.master_id]: list };
+        });
+      })
+      .subscribe();
+
+    return () => {
+      sb.removeChannel(chDevices);
+      sb.removeChannel(chNodes);
+      sb.removeChannel(chCmds);
+    };
+  }, [email]);
+
+  // Actions top bar
+  const onLogin = async () => {
+    const { data, error } = await sb.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.href, queryParams: { prompt: "select_account" } },
+    });
+    if (error) alert(error.message);
+    else if (data?.url) window.location.href = data.url;
+  };
+  const onLogout = async () => {
+    await sb.auth.signOut();
+  };
+  const onAddMaster = async () => {
+    const { data: s } = await sb.auth.getSession();
+    if (!s?.session) {
+      alert("Non connecté");
+      return;
+    }
+    try {
+      const { code, expires_at } = await createPairCode(s.session.access_token);
+      setPairInfo({
+        code: String(code).padStart(6, "0"),
+        expiresAt: new Date(expires_at).getTime(),
+      });
+    } catch (e: any) {
+      alert(e.message ?? String(e));
+    }
+  };
+
+  // Suppression
+  const handleDelete = async (deviceId: string) => {
+    const { data: s } = await sb.auth.getSession();
+    if (!s?.session) {
+      alert("Non connecté");
+      return;
+    }
+    if (!confirm(`Supprimer ${deviceId} ?`)) return;
+    try {
+      await deleteDevice(deviceId, s.session.access_token);
+    } catch (e: any) {
+      alert(e.message ?? String(e));
+    }
+  };
+
+  // Rafraîchir dernières commandes d’un master
+  const refreshCmds = async (masterId: string) => {
+    const { data, error } = await sb
+      .from("commands")
+      .select("id,master_id,action,target_mac,status,created_at")
+      .eq("master_id", masterId)
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (!error && data) setCmdsByMaster((cur) => ({ ...cur, [masterId]: data }));
+  };
+
+  // Pair-code countdown
+  const pairCountdown =
+    pairInfo &&
+    Math.max(0, Math.floor((pairInfo.expiresAt - Date.now()) / 1000));
+
+  return (
+    <div
+      className="min-h-screen"
+      style={{
+        background: frame.background,
+        color: frame.color,
+        fontFamily:
+          "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', Segoe UI, Roboto, Arial, Helvetica, sans-serif",
+      }}
+    >
+      <header
+        className="sticky top-0 z-10 backdrop-blur-md border-b px-4 md:px-6 py-4"
+        style={{ background: t.panel, borderColor: t.stroke }}
+      >
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 flex-wrap">
+          <h1 className="m-0 text-[18px] tracking-wide">REMOTE POWER</h1>
+          <div className="flex items-center gap-2 text-xs" style={{ color: t.muted }}>
+            <span>{email ?? "non connecté"}</span>
+            <Button tone="ghost" t={t} onClick={() => setIsDark((d) => !d)}>
+              {isDark ? "Mode clair" : "Mode sombre"}
+            </Button>
+            {email ? (
+              <Button tone="ghost" t={t} onClick={onLogout}>
+                Déconnexion
+              </Button>
+            ) : (
+              <Button tone="primary" t={t} onClick={onLogin}>
+                Connexion Google
+              </Button>
+            )}
+          </div>
+        </div>
       </header>
 
-      <main>
-        <div className="row" style={{justifyContent:"space-between"}}>
-          <span className="small">Compte : {user?.email || "—"}</span>
-          <div className="row">
-            <button className="btn primary" onClick={openPairDialog}>Ajouter un MASTER</button>
-            <button className="btn" onClick={loadAll}>Rafraîchir</button>
+      <main className="mx-auto flex max-w-6xl flex-col gap-5 p-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
+        <div className="flex items-center justify-between">
+          <span className="text-xs" style={{ color: t.muted }}>
+            {email ? "Connecté" : "Veuillez vous connecter pour gérer vos MASTERs."}
+          </span>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Button tone="primary" className="sm:w-auto" t={t} onClick={onAddMaster}>
+              Ajouter un MASTER
+            </Button>
+            <Button t={t} onClick={() => window.location.reload()}>
+              Rafraîchir
+            </Button>
           </div>
         </div>
 
-        {devices.map(d=>{
-          const live=isLive(d)
-          const slaves=nodesByMaster[d.id]||[]
-          return (
-            <section className="master" key={d.id}>
-              <div className="masterHead">
-                <div className="masterTitle">
-                  <strong style={{fontSize:16}}>MASTER</strong>
-                  <span className={`badge ${live?'ok':'ko'}`}>{live?'EN LIGNE':'HORS LIGNE'}</span>
-                </div>
-                <div className="row">
-                  <button className="btn tiny" onClick={()=>renameMaster(d.id)}>RENOMER</button>
-                  <button className="btn tiny danger" onClick={()=>deleteDevice(d.id)}>SUPPRIMER</button>
-                </div>
-              </div>
-
-              <div className="small" style={{opacity:.85}}>
-                ID : <code>{d.id}</code> &nbsp;•&nbsp; MAC : <code>{d.master_mac||'—'}</code> &nbsp;•&nbsp; Dernier contact : {fmtTS(d.last_seen)||'jamais'}
-              </div>
-
-              <div className="slaveGrid">
-                {slaves.map(mac=>(
-                  <article className="slaveCard" key={mac}>
-                    <div className="slaveHead">
-                      <div className="row" style={{gap:6}}>
-                        <span style={{fontWeight:700}}>SLAVE</span>
-                        <span className="pill"><span className="icon">⚙️</span><span className="mac">{mac}</span></span>
-                      </div>
-                    </div>
-
-                    <div className="slaveKnob">
-                      <span style={{fontSize:11,opacity:.8}}>PHOTO</span>
-                      {/* led d’état (on ne connaît pas l’état réel, on s’en sert comme témoin de clic IO) */}
-                      <span className="slaveLed" id={`led-${mac}`}></span>
-                    </div>
-
-                    <div className="row" style={{justifyContent:"center"}}>
-                      <button
-                        className="btn"
-                        onClick={()=>{
-                          sendCmd(d.id,mac,"SLV_IO",{pin:DEFAULT_IO_PIN,mode:"OUT",value:1})
-                          const led=document.getElementById(`led-${mac}`); if(led){ led.style.background='#16a34a'; setTimeout(()=>led.style.background='#1f2937',600) }
-                        }}
-                        title="IO ON"
-                      >⏻</button>
-                    </div>
-
-                    <div className="slaveActions">
-                      <button className="btn tiny" onClick={()=>sendCmd(d.id,mac,"SLV_RESET",{})}>RESET</button>
-                      <button className="btn tiny" onClick={()=>sendCmd(d.id,mac,"SLV_IO",{pin:DEFAULT_IO_PIN,mode:"OUT",value:0})}>OFF</button>
-                      <button className="btn tiny" style={{background:"#7c2d12"}} onClick={()=>sendCmd(d.id,mac,"SLV_FORCE_OFF",{})}>HARD STOP</button>
-                      <button className="btn tiny" style={{background:"#7f1d1d"}} onClick={()=>sendCmd(d.id,mac,"SLV_HARD_RESET",{ms:3000})}>HARD RESET</button>
-                    </div>
-                  </article>
-                ))}
-
-                {/* Tuile "ajouter un slave" (visuelle) */}
-                <div className="tileAdd" title="Ajouter un slave (pairing via bouton sur MASTER)">
-                  <div style={{fontSize:36,lineHeight:1}}>＋</div>
-                  <div className="small">Ajouter un SLAVE</div>
+        {/* Pair dialog (simple inline card) */}
+        {pairInfo && (
+          <section
+            className="rounded-3xl border p-4"
+            style={{ background: t.card, borderColor: t.stroke }}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <div>Code d’appairage : <strong style={{ color: t.txtBlue }}>{pairInfo.code}</strong></div>
+                <div className="text-xs" style={{ color: t.muted }}>
+                  Expire dans {Math.floor(pairCountdown! / 60)}:
+                  {String(pairCountdown! % 60).padStart(2, "0")}
                 </div>
               </div>
+              <Button t={t} onClick={() => setPairInfo(null)}>
+                Fermer
+              </Button>
+            </div>
+            <div className="text-xs mt-2" style={{ color: t.muted }}>
+              Entrez ce code dans le portail Wi-Fi de l’ESP32.
+            </div>
+          </section>
+        )}
 
-              <div className="hr" />
-
-              <div className="row" style={{gap:8,flexWrap:"wrap"}}>
-                <button className="btn tiny" onClick={()=>sendCmd(d.id,null,"PULSE",{ms:500})}>Pulse 500 ms</button>
-                <button className="btn tiny" onClick={()=>sendCmd(d.id,null,"POWER_ON",{})}>Power ON</button>
-                <button className="btn tiny" onClick={()=>sendCmd(d.id,null,"POWER_OFF",{})}>Power OFF</button>
-                <button className="btn tiny" onClick={()=>sendCmd(d.id,null,"RESET",{})}>Reset</button>
-                <span className="right small">Nom : <strong>{d.name||d.id}</strong></span>
-              </div>
-
-              <div className="hr" />
-              <div className="cmdTitle">Commandes (20 dernières)</div>
-              <ul className="cmdList" ref={el=>{ if(el) cmdLists.current.set(d.id,el) }}/>
-            </section>
-          )
-        })}
-
-        {/* Journal global */}
-        <div>
-          <h3 style={{margin:"8px 0"}}>Journal</h3>
-          <div className="log" ref={logRef}>{lines.join("\n")}</div>
+        {/* Masters grid */}
+        <div className="grid gap-4">
+          {devices.map((d) => (
+            <MasterCard
+              key={d.id}
+              t={t}
+              device={d}
+              slaves={nodesByMaster[d.id] ?? []}
+              onRename={() => alert("Renommer (UI à brancher)")}
+              onDelete={() => handleDelete(d.id)}
+              onRefreshCmds={() => refreshCmds(d.id)}
+              cmds={cmdsByMaster[d.id] ?? []}
+            />
+          ))}
+          {!devices.length && (
+            <div
+              className="rounded-3xl border p-6 text-sm"
+              style={{ background: t.card, borderColor: t.stroke, color: t.muted }}
+            >
+              Aucun MASTER.
+            </div>
+          )}
         </div>
       </main>
-
-      {/* Pair-code dialog */}
-      {pair.open && (
-        <dialog open onClose={()=>setPair({open:false,code:null,expires_at:null})}>
-          <div style={{padding:16,display:"flex",flexDirection:"column",gap:10}}>
-            <h3>Appairer un MASTER</h3>
-            <div>Code : <code>{String(pair.code).padStart(6,"0")}</code>
-              {" "} (expire <span className="small">
-                {(()=>{
-                  const end = pair.expires_at ? new Date(pair.expires_at).getTime() : 0
-                  const l = Math.max(0, Math.floor((end - Date.now())/1000))
-                  return `${Math.floor(l/60)}:${String(l%60).padStart(2,'0')}`
-                })()}
-              </span>)
-            </div>
-            <div className="small">Saisis ce code dans le portail Wi-Fi de l’ESP32.</div>
-            <div className="row" style={{justifyContent:"flex-end"}}>
-              <button className="btn" onClick={()=>setPair({open:false,code:null,expires_at:null})}>Fermer</button>
-            </div>
-          </div>
-        </dialog>
-      )}
-    </>
-  )
+    </div>
+  );
 }
