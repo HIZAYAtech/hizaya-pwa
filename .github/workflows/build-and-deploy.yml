@@ -1,0 +1,79 @@
+name: Build & Deploy (Vite + GitHub Pages)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Évite les annulations surprises (tu peux mettre true si tu veux annuler l'ancien run)
+concurrency:
+  group: pages-${{ github.ref }}-${{ github.run_workflow }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web/app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Check required secrets
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          echo "[ENV] URL set? $([[ -n \"$VITE_SUPABASE_URL\" ]] && echo yes || echo no)"
+          echo "[ENV] ANON set? $([[ -n \"$VITE_SUPABASE_ANON_KEY\" ]] && echo yes || echo no)"
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "❌ Missing VITE_* secrets. Go to Settings → Secrets → Actions."; exit 1;
+          fi
+
+      - name: Build (inject Vite env from secrets)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          npm run build
+          # Fallback 404 pour SPA sur GitHub Pages
+          cp -f dist/index.html dist/404.html || true
+          ls -la dist
+
+      # ✅ Un SEUL upload d'artifact pour Pages
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/app/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
