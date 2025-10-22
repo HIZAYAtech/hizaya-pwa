@@ -1,5 +1,5 @@
 cd web/app
-npm install          # crée package-lock.json
+npm install              # génère package-lock.json
 git add package-lock.json
 git commit -m "chore(web/app): add package-lock.json"
 git push
