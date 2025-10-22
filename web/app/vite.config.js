@@ -1,8 +1,8 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+// web/app/vite.config.js
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
-// Remplace "hizaya-pwa" par le nom EXACT de ton repo
 export default defineConfig({
   plugins: [react()],
-  base: '/hizaya-pwa/',
-})
+  // (optionnel) base: '/hizaya-pwa/' si tu déploies sous un sous-chemin
+});
