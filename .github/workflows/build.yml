@@ -5,14 +5,24 @@ on:
     branches: [ main ]
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Debug: on vérifie l'arborescence réelle du repo
+      # Debug : vérifie les chemins réels du repo
       - name: List files
         run: |
           pwd
@@ -25,23 +35,24 @@ jobs:
         with:
           node-version: 20
 
-      # Écrit les variables Vite dans web/app/.env
-      - name: Write env (Vite)
-        working-directory: web/app
-        run: |
-          echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}" >> .env
-          echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" >> .env
-          echo "[.env created in web/app/]"
-
-      - name: Install deps (no lockfile required)
+      # Installe les deps du front
+      - name: Install deps
         working-directory: web/app
         run: npm install
 
-      - name: Build
+      # Build Vite avec secrets injectés directement dans l'env de l'étape
+      - name: Build (Vite + env injection)
         working-directory: web/app
-        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          echo "[ENV] URL set? $([[ -n \"$VITE_SUPABASE_URL\" ]] && echo yes || echo no)"
+          echo "[ENV] ANON set? $([[ -n \"$VITE_SUPABASE_ANON_KEY\" ]] && echo yes || echo no)"
+          npm run build
+          echo "[DIST]"
+          ls -la dist
 
-      # Si tu déploies sur GitHub Pages :
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -49,11 +60,7 @@ jobs:
 
   deploy:
     needs: build
-    if: success()
     runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
