@@ -1,12 +1,14 @@
 // web/app/src/App.jsx
 // UI Remote Power (Master / Slaves)
+//
 // - Auth Supabase (Google OAuth)
 // - Liste des masters + slaves
 // - Envoi de commandes
 // - Realtime (devices / nodes / commands)
-// - Design "glass" clair + boutons pills transparents
+// - Design "glass" clair façon HomeKit
+// - Colonne verticale centrée qui scrolle
 //
-// NOTE: nécessite VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY définis via GitHub Actions
+// Besoin: variables d'env VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY
 
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
@@ -34,12 +36,12 @@ const fmtTS = (s) => (s ? new Date(s).toLocaleString() : "—");
 const isLive = (d) =>
   d.last_seen && Date.now() - new Date(d.last_seen).getTime() < LIVE_TTL_MS;
 
-/* Petite fonction pour LED flash locale */
+/* flash visuel sur la LED du slave après action */
 function flashLed(mac) {
   const el = document.getElementById(`led-${mac}`);
   if (!el) return;
   const original = el.style.background;
-  el.style.background = "#16a34a"; // vert
+  el.style.background = "#16a34a"; // vert flash
   setTimeout(() => {
     el.style.background = original || "#1f2937";
   }, 600);
@@ -49,22 +51,27 @@ function flashLed(mac) {
    STYLES
    ========================= */
 
+// NOTE: tu peux changer l'image de fond ici ↓ dans appShell.backgroundImage
 const styles = {
   appShell: {
     minHeight: "100vh",
+    maxHeight: "100vh",
+    display: "flex",
+    flexDirection: "column",
+    boxSizing: "border-box",
+
     backgroundImage:
       'radial-gradient(circle at 20% 20%, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 60%), radial-gradient(circle at 80% 30%, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 70%), url("https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=60")',
     backgroundSize: "cover",
     backgroundPosition: "center",
     backgroundRepeat: "no-repeat",
     backgroundAttachment: "fixed",
+
     color: "#0f172a",
     fontFamily:
       'system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif',
+
     padding: 16,
-    display: "flex",
-    flexDirection: "column",
-    gap: 16,
   },
 
   headerBar: {
@@ -75,11 +82,17 @@ const styles = {
     WebkitBackdropFilter: "blur(20px)",
     border: "1px solid rgba(0,0,0,0.08)",
     boxShadow: "0 30px 60px rgba(0,0,0,0.12)",
+
     display: "flex",
     flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
+
+    // limite la largeur du header pour coller au style "panneau iPhone"
+    maxWidth: 440,
+    width: "100%",
+    margin: "0 auto",
   },
 
   headerLeft: {
@@ -117,10 +130,10 @@ const styles = {
     gap: 8,
   },
 
-  // pill button (transparent)
   headerBtn: {
     display: "inline-flex",
     alignItems: "center",
+    justifyContent: "center",
     borderRadius: 9999,
     border: "1px solid rgba(0,0,0,0.2)",
     background: "transparent",
@@ -131,18 +144,34 @@ const styles = {
     lineHeight: 1.2,
     boxShadow: "0 0 0 rgba(0,0,0,0)",
     cursor: "pointer",
+    whiteSpace: "nowrap",
   },
 
-  mainContent: {
-    maxWidth: 1200,
+  // zone scrollable sous le header
+  contentScroll: {
+    flexGrow: 1,
+    minHeight: 0,
+    overflowY: "auto",
+    WebkitOverflowScrolling: "touch",
+
     width: "100%",
-    margin: "0 auto",
+    display: "flex",
+    justifyContent: "center",
+
+    marginTop: 16,
+    paddingBottom: 16,
+  },
+
+  // colonne verticale centrée
+  mainContent: {
+    width: "100%",
+    maxWidth: 440, // largeur "carte iOS"
     display: "flex",
     flexDirection: "column",
     gap: 16,
   },
 
-  // carte MASTER
+  // carte MASTER (grosse tuile verre)
   masterCard: {
     borderRadius: 24,
     padding: 20,
@@ -152,6 +181,7 @@ const styles = {
     boxShadow: "0 30px 60px rgba(0,0,0,0.18)",
     backdropFilter: "blur(30px)",
     WebkitBackdropFilter: "blur(30px)",
+
     display: "flex",
     flexDirection: "column",
     gap: 16,
@@ -226,6 +256,7 @@ const styles = {
     fontWeight: 500,
     boxShadow: "0 0 0 rgba(0,0,0,0)",
     cursor: "pointer",
+    whiteSpace: "nowrap",
   },
 
   dangerText: {
@@ -261,16 +292,16 @@ const styles = {
     wordBreak: "break-word",
   },
 
-  // grille des slaves
+  // ICI : au lieu de grid multi-colonnes, on empile verticalement
   slaveGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
+    display: "flex",
+    flexDirection: "column",
     gap: 16,
     width: "100%",
   },
 
+  // carte SLAVE (petite tuile verre empilée)
   slaveTile: {
-    // carte slave en glass
     borderRadius: 20,
     padding: 16,
     background:
@@ -448,7 +479,11 @@ const styles = {
     cursor: "pointer",
   },
 
-  // action chips globales du master
+  divider: {
+    height: 1,
+    background: "rgba(0,0,0,0.07)",
+  },
+
   masterActionsWrap: {
     display: "flex",
     flexWrap: "wrap",
@@ -469,9 +504,9 @@ const styles = {
     alignItems: "center",
     boxShadow: "0 0 0 rgba(0,0,0,0)",
     cursor: "pointer",
+    whiteSpace: "nowrap",
   },
 
-  // Liste commandes
   cmdBlock: {
     display: "flex",
     flexDirection: "column",
@@ -494,12 +529,7 @@ const styles = {
     color: "#0f172a",
   },
 
-  divider: {
-    height: 1,
-    background: "rgba(0,0,0,0.07)",
-  },
-
-  // Journal global
+  // Journal global (dernière carte sous tous les masters)
   journalCard: {
     borderRadius: 20,
     padding: 16,
@@ -536,7 +566,7 @@ const styles = {
     color: "#0f172a",
   },
 
-  // Pair dialog style
+  // Dialog pair-code
   dialogOverlay: {
     position: "fixed",
     inset: 0,
@@ -612,7 +642,7 @@ export default function App() {
           <code>VITE_SUPABASE_URL</code> et{" "}
           <code>VITE_SUPABASE_ANON_KEY</code>.
           <br />
-          Assure-toi que GitHub Actions injecte bien ces secrets.
+          Vérifie tes secrets GitHub Actions.
         </p>
       </div>
     );
@@ -630,18 +660,18 @@ export default function App() {
   const [lines, setLines] = useState([]);
   const logRef = useRef(null);
 
-  // pair-code (ajouter master)
+  // pair dialog
   const [pairInfo, setPairInfo] = useState({
     open: false,
     code: null,
     expires_at: null,
   });
 
-  // affichage détails techniques master/slave
+  // affichage détails
   const [masterInfoOpen, setMasterInfoOpen] = useState({});
   const [slaveInfoOpen, setSlaveInfoOpen] = useState({});
 
-  // Pour historique des commandes par master: on garde une ref -> <ul>
+  // historique commandes refs
   const cmdListsRef = useRef(new Map());
 
   // realtime channels
@@ -659,7 +689,7 @@ export default function App() {
     }
   }, [lines]);
 
-  /* ====== INFO TOGGLE ====== */
+  /* ====== TOGGLE INFOS ====== */
   function toggleMasterInfo(masterId) {
     setMasterInfoOpen((m) => ({ ...m, [masterId]: !m[masterId] }));
   }
@@ -755,7 +785,7 @@ export default function App() {
     });
   }
 
-  /* ====== COMMANDES LIST / REALTIME HISTORIQUE ====== */
+  /* ====== COMMANDS HISTORY ====== */
   function upsertCmdRow(masterId, c) {
     const ul = cmdListsRef.current.get(masterId);
     if (!ul) return;
@@ -769,7 +799,6 @@ export default function App() {
       li.id = rowId;
       li.innerHTML = html;
       ul.prepend(li);
-      // limite à 20 éléments
       while (ul.children.length > 20) {
         ul.removeChild(ul.lastChild);
       }
@@ -962,9 +991,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ====== RENDU UI ====== */
-
-  // bouton connexion / déconnexion
+  /* ====== AUTH BUTTONS ====== */
   const AuthControls = useMemo(() => {
     if (!user) {
       return (
@@ -998,14 +1025,14 @@ export default function App() {
     );
   }, [user]);
 
-  // rendu d'une tuile SLAVE
+  /* ====== SLAVE TILE ====== */
   function SlaveTile({ mac, masterId }) {
-    const shortId = mac.slice(-5).toUpperCase(); // suffixe MAC pour affichage court
+    const shortId = mac.slice(-5).toUpperCase(); // just un suffixe lisible
     const isOpen = !!slaveInfoOpen[mac];
 
     return (
       <div style={styles.slaveTile}>
-        {/* top row: titre + btn info */}
+        {/* Top row: nom + bouton "i" */}
         <div style={styles.slaveTopRow}>
           <div style={styles.slaveTitleWrap}>
             <div style={styles.slaveNameRow}>
@@ -1018,7 +1045,7 @@ export default function App() {
                   MAC : <code>{mac}</code>
                 </div>
                 <div style={{ opacity: 0.7 }}>
-                  Actions pilotables: IO / RESET / FORCE OFF / HARD RESET
+                  IO / RESET / FORCE OFF / HARD RESET
                 </div>
               </div>
             )}
@@ -1033,7 +1060,7 @@ export default function App() {
           </button>
         </div>
 
-        {/* bloc bouton principal */}
+        {/* bloc central (grosse pastille + bouton action principale) */}
         <div style={styles.knobSection}>
           <div style={styles.knobCircle}>
             <span>{shortId}</span>
@@ -1047,7 +1074,7 @@ export default function App() {
           <button
             style={styles.powerBtn}
             onClick={() => {
-              // On envoie une impulsion IO ON (force ON)
+              // IO impulsion ON côté slave
               sendCmd(masterId, mac, "SLV_IO", {
                 pin: DEFAULT_IO_PIN,
                 mode: "OUT",
@@ -1060,7 +1087,7 @@ export default function App() {
           </button>
         </div>
 
-        {/* actions 2 colonnes */}
+        {/* actions secondaires */}
         <div style={styles.slaveActionsGrid}>
           <button
             style={styles.subBtn}
@@ -1102,7 +1129,7 @@ export default function App() {
     );
   }
 
-  // rendu carte MASTER
+  /* ====== MASTER CARD ====== */
   function MasterCard({ d }) {
     const live = isLive(d);
     const badgeStyle = {
@@ -1115,6 +1142,7 @@ export default function App() {
 
     return (
       <section style={styles.masterCard}>
+        {/* header master */}
         <div style={styles.masterHeaderRow}>
           <div style={styles.masterHeaderLeft}>
             <div style={styles.masterTopLine}>
@@ -1135,8 +1163,7 @@ export default function App() {
                   MAC : <code>{d.master_mac || "—"}</code>
                 </div>
                 <div>
-                  Dernier contact :{" "}
-                  {fmtTS(d.last_seen) || "jamais"}
+                  Dernier contact : {fmtTS(d.last_seen) || "jamais"}
                 </div>
               </div>
             )}
@@ -1151,10 +1178,7 @@ export default function App() {
             </button>
 
             <button
-              style={{
-                ...styles.masterSmallBtn,
-                ...styles.dangerText,
-              }}
+              style={{ ...styles.masterSmallBtn, ...styles.dangerText }}
               onClick={() => deleteDevice(d.id)}
             >
               Supprimer
@@ -1170,13 +1194,13 @@ export default function App() {
           </div>
         </div>
 
-        {/* SLAVES list */}
+        {/* slaves empilés verticalement */}
         <div style={styles.slaveGrid}>
           {slaves.map((mac) => (
             <SlaveTile mac={mac} masterId={d.id} key={mac} />
           ))}
 
-          {/* tile vide visuelle "ajouter un SLAVE" (pairing via MASTER bouton physique) */}
+          {/* tuile d'ajout visuelle */}
           <div style={styles.slaveTile}>
             <div style={styles.slaveTopRow}>
               <div style={styles.slaveTitleWrap}>
@@ -1207,18 +1231,25 @@ export default function App() {
             </div>
 
             <div style={styles.slaveActionsGrid}>
-              <button style={styles.subBtn} disabled>—</button>
-              <button style={styles.subBtn} disabled>—</button>
-              <button style={styles.subBtn} disabled>—</button>
-              <button style={styles.subBtn} disabled>—</button>
+              <button style={styles.subBtn} disabled>
+                —
+              </button>
+              <button style={styles.subBtn} disabled>
+                —
+              </button>
+              <button style={styles.subBtn} disabled>
+                —
+              </button>
+              <button style={styles.subBtn} disabled>
+                —
+              </button>
             </div>
           </div>
         </div>
 
-        {/* séparateur */}
+        {/* actions globales */}
         <div style={styles.divider} />
 
-        {/* actions globales MASTER */}
         <div style={styles.masterActionsWrap}>
           <button
             style={styles.actionChip}
@@ -1246,11 +1277,9 @@ export default function App() {
           </button>
         </div>
 
-        {/* séparateur */}
-        <div style={styles.divider} />
-
         {/* historique commandes */}
-        <div style={styles.cmdBlock}>
+        <div style={styles.divider} />
+        <div>
           <div style={styles.cmdTitle}>Commandes (20 dernières)</div>
           <ul
             style={styles.cmdList}
@@ -1263,7 +1292,7 @@ export default function App() {
     );
   }
 
-  /* pair-code dialog countdown */
+  /* pair-code countdown */
   const pairCountdown = useMemo(() => {
     if (!pairInfo.open || !pairInfo.expires_at) return null;
     const end = new Date(pairInfo.expires_at).getTime();
@@ -1278,9 +1307,10 @@ export default function App() {
     );
   }, [pairInfo.open, pairInfo.expires_at]);
 
+  /* RENDER FINAL */
   return (
     <div style={styles.appShell}>
-      {/* HEADER */}
+      {/* HEADER FIXE VISUELLEMENT (il ne scroll pas parce que appShell est flex-col et le scroll est en dessous) */}
       <header style={styles.headerBar}>
         <div style={styles.headerLeft}>
           <div style={styles.headerTitleRow}>
@@ -1292,44 +1322,38 @@ export default function App() {
         </div>
 
         <div style={styles.headerRight}>
-          <button
-            style={styles.headerBtn}
-            onClick={openPairDialog}
-          >
+          <button style={styles.headerBtn} onClick={openPairDialog}>
             Ajouter un MASTER
           </button>
-          <button
-            style={styles.headerBtn}
-            onClick={loadAll}
-          >
+          <button style={styles.headerBtn} onClick={loadAll}>
             Rafraîchir
           </button>
           {AuthControls}
         </div>
       </header>
 
-      {/* CONTENU PRINCIPAL */}
-      <main style={styles.mainContent}>
-        {devices.map((dev) => (
-          <MasterCard d={dev} key={dev.id} />
-        ))}
+      {/* CONTENU QUI SCROLLE */}
+      <div style={styles.contentScroll}>
+        <main style={styles.mainContent}>
+          {devices.map((dev) => (
+            <MasterCard d={dev} key={dev.id} />
+          ))}
 
-        {/* Journal global */}
-        <section style={styles.journalCard}>
-          <div style={styles.journalTitle}>Journal</div>
-          <div style={styles.logBox} ref={logRef}>
-            {lines.join("\n")}
-          </div>
-        </section>
-      </main>
+          {/* Journal global */}
+          <section style={styles.journalCard}>
+            <div style={styles.journalTitle}>Journal</div>
+            <div style={styles.logBox} ref={logRef}>
+              {lines.join("\n")}
+            </div>
+          </section>
+        </main>
+      </div>
 
       {/* PAIR DIALOG */}
       {pairInfo.open && (
         <div style={styles.dialogOverlay}>
           <div style={styles.dialogCard}>
-            <div style={styles.dialogTitle}>
-              Appairer un MASTER
-            </div>
+            <div style={styles.dialogTitle}>Appairer un MASTER</div>
             <div style={styles.smallText}>
               Code :
               <code
@@ -1349,14 +1373,10 @@ export default function App() {
               )
             </div>
             <div style={styles.smallText}>
-              Saisis ce code dans le portail Wi-Fi de l’ESP32
-              MASTER lors de l’appairage.
+              Saisis ce code dans le portail Wi-Fi de l’ESP32 MASTER.
             </div>
             <div style={styles.rowEnd}>
-              <button
-                style={styles.headerBtn}
-                onClick={closePairDialog}
-              >
+              <button style={styles.headerBtn} onClick={closePairDialog}>
                 Fermer
               </button>
             </div>
