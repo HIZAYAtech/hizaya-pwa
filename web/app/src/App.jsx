@@ -23,7 +23,7 @@ const DEFAULT_IO_PIN = 26;
 
 // Image de fond de la page
 const BACKGROUND_IMAGE_URL =
-  "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=60";
+  "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1600&q=60";
 
 /* =========================================================
    PALETTE / COULEURS / TOKENS
@@ -59,7 +59,6 @@ const COLORS = {
    HELPERS
    ========================================================= */
 const fmtTS = (s) => (s ? new Date(s).toLocaleString() : "jamais");
-
 const isLive = (device) => {
   if (!device.last_seen) return false;
   return Date.now() - new Date(device.last_seen) < LIVE_TTL_MS;
@@ -128,11 +127,6 @@ function CircleButton({ label, tone = "normal", sizePx = 48, onClick }) {
 
 /* =========================================================
    SLAVE CARD
-   - Nom du slave en gros
-   - Etat de l'ordi
-   - Barre noire de progression (queue/send/hacked)
-   - Boutons IO / RESET / … (+ menu OFF/HARD)
-   - Bouton "i" pour afficher détails + rename + MAC
    ========================================================= */
 function SlaveCard({
   nameShort,
@@ -141,7 +135,7 @@ function SlaveCard({
   onSubmitRename,
   mac,
   isOn,
-  phase, // "queue" | "send" | "hacked" | undefined
+  phase, // "queue"|"send"|"hacked"|null
   isInfoOpen,
   onToggleInfo,
   isMoreOpen,
@@ -154,7 +148,7 @@ function SlaveCard({
   const cardRef = useRef(null);
   const [cardW, setCardW] = useState(180);
 
-  // Observer pour adapter la taille des boutons ronds
+  // resize pour boutons responsives
   useEffect(() => {
     if (!cardRef.current) return;
     const ro = new ResizeObserver((entries) => {
@@ -169,15 +163,12 @@ function SlaveCard({
     };
   }, []);
 
-  // taille bouton dépend largeur carte
   const btnSize = useMemo(() => {
     const clamped = Math.max(38, Math.min(52, cardW * 0.26));
     return Math.round(clamped);
   }, [cardW]);
 
-  // barre de progression (noire)
-  // apparaît seulement si une commande est active
-  // queue -> 33%, send -> 66%, hacked -> 100%
+  // barre noire en bas de l'état
   let pct = 0;
   let showBar = false;
   if (phase === "queue") {
@@ -206,6 +197,7 @@ function SlaveCard({
     justifyContent: "space-between",
     position: "relative",
     overflow: "hidden",
+
     height: 256,
     width: "clamp(160px,40vw,192px)",
   };
@@ -351,7 +343,7 @@ function SlaveCard({
 
   return (
     <div style={styleTile} ref={cardRef}>
-      {/* bouton i en haut à droite */}
+      {/* petit bouton "i" en haut à droite */}
       <div style={styleTopBar}>
         <button
           style={styleInfoBtn}
@@ -362,7 +354,6 @@ function SlaveCard({
         </button>
       </div>
 
-      {/* zone infos + rename + MAC */}
       {isInfoOpen && (
         <div style={styleInfoBox}>
           <div style={styleNameEditRow}>
@@ -375,33 +366,31 @@ function SlaveCard({
               Renommer
             </button>
           </div>
-          <div>MAC : <code>{mac}</code></div>
+          <div>
+            MAC : <code>{mac}</code>
+          </div>
         </div>
       )}
 
-      {/* nom du slave */}
+      {/* Nom du slave */}
       <div style={styleNameBig}>{nameShort}</div>
 
-      {/* état ordinateur */}
+      {/* État ordinateur */}
       <div style={styleStatus}>
         {isOn ? "Ordinateur allumé" : "Ordinateur éteint"}
       </div>
 
-      {/* barre de progression si commande en cours */}
+      {/* Barre noire d'état commande */}
       {showBar && (
         <div style={styleProgressOuter}>
           <div style={styleProgressInner} />
         </div>
       )}
 
-      {/* bloc bas : IO / RESET / … puis OFF/HARD */}
+      {/* Boutons du bas */}
       <div style={styleBottomBlock}>
         <div style={styleBtnRow}>
-          <CircleButton
-            label="IO"
-            sizePx={btnSize}
-            onClick={onIO}
-          />
+          <CircleButton label="IO" sizePx={btnSize} onClick={onIO} />
           <CircleButton
             label="RESET"
             sizePx={btnSize}
@@ -437,11 +426,6 @@ function SlaveCard({
 
 /* =========================================================
    MASTER CARD
-   - Nom du MASTER + badge En ligne / Hors ligne
-   - Bouton info (montre ID, MAC, last_seen)
-   - Boutons Renommer / Supprimer
-   - Grille des slaves centrée
-   - Actions globales (Pulse, Power ON/OFF, Reset)
    ========================================================= */
 function MasterCard({
   name,
@@ -493,6 +477,9 @@ function MasterCard({
     display: "flex",
     flexDirection: "column",
     gap: 16,
+
+    // un peu plus large pour mieux voir les slaves
+    maxWidth: "100%",
   };
 
   const headerRow = {
@@ -585,7 +572,16 @@ function MasterCard({
     display: "flex",
     flexWrap: "wrap",
     gap: 16,
-    justifyContent: "center", // centrer les slaves dans la carte
+    justifyContent: "center", // 👈 centrage horizontal
+  };
+
+  const noSlaveMsg = {
+    fontSize: 12,
+    lineHeight: 1.4,
+    color: COLORS.textWeaker,
+    textAlign: "center",
+    fontStyle: "italic",
+    padding: "24px 12px",
   };
 
   const divider = {
@@ -658,7 +654,17 @@ function MasterCard({
       </div>
 
       {/* SLAVES */}
-      <div style={slavesWrap}>{slaves}</div>
+      <div style={slavesWrap}>
+        {slaves.length ? (
+          slaves
+        ) : (
+          <div style={noSlaveMsg}>
+            Aucun slave encore appairé.
+            <br />
+            (Maintiens le bouton PAIR sur le master)
+          </div>
+        )}
+      </div>
 
       <div style={divider} />
 
@@ -682,39 +688,36 @@ function MasterCard({
 }
 
 /* =========================================================
-   ECRAN PRINCIPAL
-   - Header sticky plein écran (Remote Power / compte / boutons)
-   - Liste des masters
-   - Journal
+   APP PRINCIPALE
    ========================================================= */
 export default function App() {
-  /* -------- state global -------- */
+  /* ---------- STATES GLOBAUX ---------- */
   const [user, setUser] = useState(null);
 
   // devices = [{id, name, master_mac, last_seen, online}]
   const [devices, setDevices] = useState([]);
 
-  // nodesByMaster = { master_id: [ { mac, friendly_name?, isOn? } ] }
-  // On stocke aussi la phase locale par slave (barre noire)
+  // nodesByMaster = { master_id: [ { mac, friendly_name?, is_on? } ] }
   const [nodesByMaster, setNodesByMaster] = useState({});
+  // phase visuelle barre noire
   const [slavePhase, setSlavePhase] = useState({}); // { mac: "queue"|"send"|"hacked"|null }
 
-  // UI état local pour panneaux info / more / rename par slave & master
+  // états UI locaux
   const [openMasterInfo, setOpenMasterInfo] = useState({});
   const [openSlaveInfo, setOpenSlaveInfo] = useState({});
   const [openSlaveMore, setOpenSlaveMore] = useState({});
 
-  // édition nom des slaves
+  // noms éditables slaves
   const [editNames, setEditNames] = useState({});
 
-  // pour la modale Pair-code MASTER
+  // modale Pair-code
   const [pair, setPair] = useState({
     open: false,
     code: null,
     expires_at: null,
   });
 
-  // journal texte
+  // journal
   const [lines, setLines] = useState([]);
   const logRef = useRef(null);
   const log = (t) =>
@@ -722,18 +725,19 @@ export default function App() {
       ...ls,
       `${new Date().toLocaleTimeString()}  ${t}`,
     ]);
+
   useEffect(() => {
     if (logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
   }, [lines]);
 
-  // Realtime channels
+  // realtime channels
   const chDevices = useRef(null);
   const chNodes = useRef(null);
   const chCmds = useRef(null);
 
-  /* --------- helpers UI state toggles --------- */
+  /* ---------- TOGGLES UI ---------- */
   const toggleMasterInfo = useCallback((mid) => {
     setOpenMasterInfo((m) => ({ ...m, [mid]: !m[mid] }));
   }, []);
@@ -751,13 +755,27 @@ export default function App() {
   }, []);
 
   /* =========================================================
-     SUPABASE AUTH INIT
+     AUTH INIT / STABILISÉ
      ========================================================= */
   useEffect(() => {
     if (!sb) return;
-    // à chaque changement auth
-    const sub = sb.auth.onAuthStateChange(
-      async (ev, session) => {
+    let mounted = true;
+
+    // 1. récupérer la session actuelle
+    (async () => {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!mounted) return;
+      setUser(session?.user || null);
+      if (session?.user) {
+        attachRealtime();
+        loadAll();
+      }
+    })();
+
+    // 2. écouter les changements d'auth
+    const { data: sub } = sb.auth.onAuthStateChange(
+      async (event, session) => {
+        if (!mounted) return;
         setUser(session?.user || null);
         if (session?.user) {
           attachRealtime();
@@ -772,18 +790,9 @@ export default function App() {
       }
     );
 
-    // session initiale
-    (async () => {
-      const { data: { session } } = await sb.auth.getSession();
-      setUser(session?.user || null);
-      if (session?.user) {
-        attachRealtime();
-        loadAll();
-      }
-    })();
-
     return () => {
-      sub.data.subscription.unsubscribe();
+      mounted = false;
+      sub.subscription.unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -820,7 +829,7 @@ export default function App() {
       return clone;
     });
 
-    // init editNames si pas déjà fait
+    // init editNames si nécessaire
     setEditNames((prev) => {
       const next = { ...prev };
       (data || []).forEach((n) => {
@@ -836,7 +845,7 @@ export default function App() {
     if (!sb) return;
     cleanupRealtime();
 
-    // devices realtime
+    // devices
     chDevices.current = sb
       .channel("rt:devices")
       .on(
@@ -870,7 +879,7 @@ export default function App() {
       )
       .subscribe();
 
-    // nodes realtime
+    // nodes
     chNodes.current = sb
       .channel("rt:nodes")
       .on(
@@ -891,15 +900,13 @@ export default function App() {
       )
       .subscribe();
 
-    // commands realtime (pour la barre noire / phase visuelle)
+    // commands
     chCmds.current = sb
       .channel("rt:commands")
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "commands" },
         (p) => {
-          // quand une commande arrive en base:
-          // status p.new.status par ex "PENDING" etc.
           bumpSlavePhaseFromStatus(p.new);
           log(
             `cmd + ${p.new.action} (${p.new.status}) → ${p.new.master_id}`
@@ -923,10 +930,7 @@ export default function App() {
      COMMANDES / PHASE BARRE NOIRE
      ========================================================= */
   function bumpSlavePhase(mac, phase) {
-    // phase: "queue"|"send"|"hacked"|null
     setSlavePhase((cur) => ({ ...cur, [mac]: phase }));
-
-    // si phase est finale ou null -> clear après un petit délai
     if (!phase || phase === "hacked") {
       setTimeout(() => {
         setSlavePhase((cur2) => ({ ...cur2, [mac]: null }));
@@ -935,17 +939,8 @@ export default function App() {
   }
 
   function bumpSlavePhaseFromStatus(cmdRow) {
-    // On essaie de déduire la phase visuelle à partir de la commande:
-    // On ne sait pas exactement tes statuts en base,
-    // adapte ici si besoin.
-    // Exemple:
-    //  - "PENDING"  -> queue
-    //  - "SENT"     -> send
-    //  - "FORCE"    -> hacked
-    //  - "DONE"/"ACK" -> null
     const mac = cmdRow.target_mac;
-    if (!mac) return; // commande locale master, pas un slave
-
+    if (!mac) return;
     const st = (cmdRow.status || "").toUpperCase();
 
     if (st === "PENDING" || st === "QUEUED") {
@@ -954,14 +949,17 @@ export default function App() {
       bumpSlavePhase(mac, "send");
     } else if (st === "FORCE" || st === "HARD") {
       bumpSlavePhase(mac, "hacked");
-    } else if (st === "DONE" || st === "ACK" || st === "OK") {
+    } else if (
+      st === "DONE" ||
+      st === "ACK" ||
+      st === "OK"
+    ) {
       bumpSlavePhase(mac, null);
     }
   }
 
   async function sendCmd(masterId, mac, action, payload = {}) {
     if (!sb) return;
-    // phase locale immédiate côté UI: on met queue
     if (mac) bumpSlavePhase(mac, "queue");
 
     const { error } = await sb.from("commands").insert({
@@ -973,7 +971,6 @@ export default function App() {
 
     if (error) {
       log("cmd err: " + error.message);
-      // erreur => enlever la barre au bout d'un court délai
       if (mac) {
         setTimeout(() => {
           bumpSlavePhase(mac, null);
@@ -985,12 +982,10 @@ export default function App() {
           mac ? " ▶ " + mac : ""
         }`
       );
-      // on touche pas tout de suite la phase,
-      // le realtime commands fera évoluer (send/hacked/etc.)
     }
   }
 
-  // raccourcis pour les slaves
+  // actions slave
   function handleIO(masterId, mac) {
     sendCmd(masterId, mac, "SLV_IO", {
       pin: DEFAULT_IO_PIN,
@@ -1008,7 +1003,7 @@ export default function App() {
     sendCmd(masterId, mac, "SLV_HARD_RESET", { ms: 3000 });
   }
 
-  // raccourcis master actions
+  // actions master
   function handlePulse(masterId) {
     sendCmd(masterId, null, "PULSE", { ms: 500 });
   }
@@ -1040,7 +1035,7 @@ export default function App() {
   async function renameSlave(mac) {
     if (!sb) return;
     const newName = editNames[mac] || mac;
-    // nécessite que ta table `nodes` ait une colonne friendly_name
+    // nécessite `friendly_name` dans nodes
     const { error } = await sb
       .from("nodes")
       .update({ friendly_name: newName })
@@ -1065,7 +1060,6 @@ export default function App() {
       alert("Non connecté");
       return;
     }
-    // appelle ta edge function sécurisée
     const r = await fetch(
       `${SUPABASE_URL}/functions/v1/release_and_delete`,
       {
@@ -1178,7 +1172,7 @@ export default function App() {
       });
       setNodesByMaster(map);
 
-      // init editNames pour tous les slaves
+      // init editNames
       setEditNames((prev) => {
         const next = { ...prev };
         (nodes || []).forEach((n) => {
@@ -1193,14 +1187,17 @@ export default function App() {
   }
 
   /* =========================================================
-     HEADER STYLE + PAGE LAYOUT
+     HEADER + PAGE LAYOUT
      ========================================================= */
+  // fond plein écran + pas de débordement horizontal
   const pageStyle = {
     minHeight: "100vh",
     maxHeight: "100vh",
     display: "flex",
     flexDirection: "column",
     boxSizing: "border-box",
+    overflowX: "hidden",
+
     backgroundImage:
       'radial-gradient(circle at 20% 20%, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 60%), radial-gradient(circle at 80% 30%, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 70%), url("' +
       BACKGROUND_IMAGE_URL +
@@ -1209,11 +1206,13 @@ export default function App() {
     backgroundPosition: "center",
     backgroundRepeat: "no-repeat",
     backgroundAttachment: "fixed",
+
     color: COLORS.textMain,
     fontFamily:
       'system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif',
   };
 
+  // barre du haut sticky largeur totale
   const headerBarFull = {
     position: "sticky",
     top: 0,
@@ -1221,6 +1220,10 @@ export default function App() {
     right: 0,
     zIndex: 999,
     width: "100%",
+    maxWidth: "100vw",
+    boxSizing: "border-box",
+    overflowX: "hidden",
+
     display: "flex",
     flexWrap: "wrap",
     alignItems: "center",
@@ -1241,14 +1244,12 @@ export default function App() {
     flexDirection: "column",
     minWidth: 0,
   };
-
   const headerTitleRow = {
     display: "flex",
     alignItems: "baseline",
     gap: 8,
     flexWrap: "wrap",
   };
-
   const headerTitle = {
     fontSize: 16,
     fontWeight: 600,
@@ -1256,13 +1257,11 @@ export default function App() {
     lineHeight: 1.2,
     letterSpacing: "-0.03em",
   };
-
   const headerSub = {
     fontSize: 12,
     color: COLORS.textWeak,
     lineHeight: 1.3,
   };
-
   const headerAuth = {
     fontSize: 11,
     color: COLORS.textWeaker,
@@ -1275,7 +1274,6 @@ export default function App() {
     alignItems: "center",
     gap: 8,
   };
-
   const headerBtn = {
     display: "inline-flex",
     alignItems: "center",
@@ -1293,6 +1291,7 @@ export default function App() {
     whiteSpace: "nowrap",
   };
 
+  // zone scrollable en dessous
   const contentScroll = {
     flexGrow: 1,
     minHeight: 0,
@@ -1305,12 +1304,13 @@ export default function App() {
 
     padding: 16,
     paddingBottom: 24,
+    boxSizing: "border-box",
   };
 
-  // un peu plus large pour pouvoir ranger plusieurs slaves côte à côte
+  // colonne centrale (un peu plus large qu'avant)
   const mainCol = {
     width: "100%",
-    maxWidth: 560,
+    maxWidth: 640,
     display: "flex",
     flexDirection: "column",
     gap: 16,
@@ -1329,7 +1329,6 @@ export default function App() {
     flexDirection: "column",
     gap: 8,
   };
-
   const journalTitleStyle = {
     fontSize: 14,
     fontWeight: 600,
@@ -1337,7 +1336,6 @@ export default function App() {
     lineHeight: 1.2,
     letterSpacing: "-0.03em",
   };
-
   const journalBoxStyle = {
     background: "rgba(255,255,255,0.4)",
     border: `1px solid ${COLORS.glassBorder}`,
@@ -1352,10 +1350,8 @@ export default function App() {
   };
 
   /* =========================================================
-     RENDU DU CONTENU
+     BOUTONS HEADER (LOGIN / LOGOUT...)
      ========================================================= */
-
-  // contenu header droite : boutons diff si loggé / pas loggé
   function HeaderButtons() {
     if (!user) {
       return (
@@ -1381,7 +1377,9 @@ export default function App() {
     );
   }
 
-  // génère la liste des SlaveCard pour un master donné
+  /* =========================================================
+     COMPOSITION UI
+     ========================================================= */
   function renderSlavesForMaster(m) {
     const arr = nodesByMaster[m.id] || [];
     return arr.map((sl) => {
@@ -1417,10 +1415,10 @@ export default function App() {
     });
   }
 
-  // génère MasterCard(s)
   function renderMasters() {
     return devices.map((d) => {
       const live = isLive(d);
+      const slaveCards = renderSlavesForMaster(d);
       return (
         <MasterCard
           key={d.id}
@@ -1433,7 +1431,7 @@ export default function App() {
           onToggleInfo={() => toggleMasterInfo(d.id)}
           onRename={() => renameMaster(d.id)}
           onDelete={() => deleteDevice(d.id)}
-          slaves={renderSlavesForMaster(d)}
+          slaves={slaveCards}
           onIOPulse={() => handlePulse(d.id)}
           onPowerOn={() => handlePowerOn(d.id)}
           onPowerOff={() => handlePowerOff(d.id)}
@@ -1443,7 +1441,6 @@ export default function App() {
     });
   }
 
-  // Pair-code countdown affichage (approx) dans la modale
   function renderPairCountdown() {
     if (!pair.expires_at) return "0:00";
     const end = new Date(pair.expires_at).getTime();
@@ -1459,7 +1456,7 @@ export default function App() {
   }
 
   /* =========================================================
-     FALLBACK SI CONFIG MANQUANTE
+     FALLBACK SI PAS DE CONFIG
      ========================================================= */
   if (!SUPABASE_URL || !SUPA_ANON_KEY || !sb) {
     return (
@@ -1476,8 +1473,8 @@ export default function App() {
       >
         <h2>Configuration manquante</h2>
         <p>
-          Définis les variables d’environnement Vite au
-          moment du build :
+          Définis les variables d’environnement Vite
+          pendant le build :
         </p>
         <pre
           style={{
@@ -1496,8 +1493,8 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
 `}
         </pre>
         <p>
-          Vérifie aussi que le workflow GitHub Actions
-          exporte bien ces secrets au moment du build.
+          Vérifie aussi que les secrets GitHub Actions
+          injectent bien ces valeurs au moment du build.
         </p>
       </div>
     );
@@ -1508,22 +1505,18 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
      ========================================================= */
   return (
     <div style={pageStyle}>
-      {/* HEADER STICKY PLEIN ÉCRAN */}
+      {/* HEADER STICKY */}
       <header style={headerBarFull}>
         <div style={headerLeft}>
           <div style={headerTitleRow}>
-            <div style={headerTitle}>
-              Remote Power
-            </div>
+            <div style={headerTitle}>Remote Power</div>
           </div>
 
           <div style={headerSub}>
             Compte : {user?.email || "—"}
           </div>
           <div style={headerAuth}>
-            {user
-              ? "Authentifié"
-              : "Non connecté"}
+            {user ? "Authentifié" : "Non connecté"}
           </div>
         </div>
 
@@ -1533,14 +1526,12 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
       {/* CONTENU SCROLLABLE */}
       <div style={contentScroll}>
         <main style={mainCol}>
-          {/* Liste des masters */}
+          {/* Masters */}
           {renderMasters()}
 
           {/* Journal */}
           <section style={journalCardStyle}>
-            <div style={journalTitleStyle}>
-              Journal
-            </div>
+            <div style={journalTitleStyle}>Journal</div>
             <div style={journalBoxStyle} ref={logRef}>
               {lines.join("\n")}
             </div>
@@ -1548,7 +1539,7 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
         </main>
       </div>
 
-      {/* Pair-code dialog */}
+      {/* MODALE PAIR-CODE */}
       {pair.open && (
         <dialog
           open
@@ -1564,11 +1555,9 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
             borderRadius: 16,
             background: `linear-gradient(to bottom right, ${COLORS.glassFillHi}, ${COLORS.glassFillLo})`,
             color: COLORS.textMain,
-            boxShadow:
-              "0 40px 80px rgba(0,0,0,0.3)",
+            boxShadow: "0 40px 80px rgba(0,0,0,0.3)",
             backdropFilter: "blur(30px)",
-            WebkitBackdropFilter:
-              "blur(30px)",
+            WebkitBackdropFilter: "blur(30px)",
           }}
         >
           <div
@@ -1607,10 +1596,7 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
                   fontSize: 16,
                 }}
               >
-                {String(pair.code).padStart(
-                  6,
-                  "0"
-                )}
+                {String(pair.code).padStart(6, "0")}
               </code>{" "}
               (expire{" "}
               <span
@@ -1638,8 +1624,7 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
             <div
               style={{
                 display: "flex",
-                justifyContent:
-                  "flex-end",
+                justifyContent: "flex-end",
               }}
             >
               <button
