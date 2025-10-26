@@ -18,15 +18,21 @@ const sb =
     ? createClient(SUPABASE_URL, SUPA_ANON_KEY)
     : null;
 
+/* ================= constants UI / logique ================= */
 const LIVE_TTL_MS = 25_000;
 const DEFAULT_IO_PIN = 26;
 
-// Image de fond de la page
+// Ici : la base n'a PAS encore friendly_name ni is_on.
+// On passe par des flags pour activer/désactiver ces features.
+const HAS_SLAVE_NAME = false;
+const HAS_SLAVE_STATE = false;
+
+// image de fond
 const BACKGROUND_IMAGE_URL =
   "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1600&q=60";
 
 /* =========================================================
-   PALETTE / COULEURS / TOKENS
+   PALETTE / TOKENS
    ========================================================= */
 const COLORS = {
   textMain: "#0f172a",
@@ -148,7 +154,7 @@ function SlaveCard({
   const cardRef = useRef(null);
   const [cardW, setCardW] = useState(180);
 
-  // resize pour boutons responsives
+  // resize pour ajuster la taille des boutons
   useEffect(() => {
     if (!cardRef.current) return;
     const ro = new ResizeObserver((entries) => {
@@ -168,7 +174,7 @@ function SlaveCard({
     return Math.round(clamped);
   }, [cardW]);
 
-  // barre noire en bas de l'état
+  // barre noire de progression
   let pct = 0;
   let showBar = false;
   if (phase === "queue") {
@@ -343,7 +349,7 @@ function SlaveCard({
 
   return (
     <div style={styleTile} ref={cardRef}>
-      {/* petit bouton "i" en haut à droite */}
+      {/* bouton "i" en haut à droite */}
       <div style={styleTopBar}>
         <button
           style={styleInfoBtn}
@@ -356,16 +362,31 @@ function SlaveCard({
 
       {isInfoOpen && (
         <div style={styleInfoBox}>
-          <div style={styleNameEditRow}>
-            <input
-              style={styleNameInput}
-              value={editName}
-              onChange={(e) => onEditNameChange(e.target.value)}
-            />
-            <button style={styleRenameBtn} onClick={onSubmitRename}>
-              Renommer
-            </button>
-          </div>
+          {HAS_SLAVE_NAME && (
+            <div style={styleNameEditRow}>
+              <input
+                style={styleNameInput}
+                value={editName}
+                onChange={(e) => onEditNameChange(e.target.value)}
+              />
+              <button style={styleRenameBtn} onClick={onSubmitRename}>
+                Renommer
+              </button>
+            </div>
+          )}
+
+          {!HAS_SLAVE_NAME && (
+            <div
+              style={{
+                fontSize: 12,
+                lineHeight: 1.4,
+                color: COLORS.textWeak,
+              }}
+            >
+              Nom éditable non dispo (DB sans friendly_name).
+            </div>
+          )}
+
           <div>
             MAC : <code>{mac}</code>
           </div>
@@ -377,17 +398,21 @@ function SlaveCard({
 
       {/* État ordinateur */}
       <div style={styleStatus}>
-        {isOn ? "Ordinateur allumé" : "Ordinateur éteint"}
+        {HAS_SLAVE_STATE
+          ? isOn
+            ? "Ordinateur allumé"
+            : "Ordinateur éteint"
+          : "État inconnu"}
       </div>
 
-      {/* Barre noire d'état commande */}
+      {/* Barre noire (phase commande) */}
       {showBar && (
         <div style={styleProgressOuter}>
           <div style={styleProgressInner} />
         </div>
       )}
 
-      {/* Boutons du bas */}
+      {/* Boutons bas */}
       <div style={styleBottomBlock}>
         <div style={styleBtnRow}>
           <CircleButton label="IO" sizePx={btnSize} onClick={onIO} />
@@ -477,8 +502,6 @@ function MasterCard({
     display: "flex",
     flexDirection: "column",
     gap: 16,
-
-    // un peu plus large pour mieux voir les slaves
     maxWidth: "100%",
   };
 
@@ -572,7 +595,7 @@ function MasterCard({
     display: "flex",
     flexWrap: "wrap",
     gap: 16,
-    justifyContent: "center", // 👈 centrage horizontal
+    justifyContent: "center",
   };
 
   const noSlaveMsg = {
@@ -613,7 +636,7 @@ function MasterCard({
 
   return (
     <section style={cardStyle}>
-      {/* HEADER MASTER */}
+      {/* header master */}
       <div style={headerRow}>
         <div style={leftCol}>
           <div style={masterTopLine}>
@@ -653,7 +676,7 @@ function MasterCard({
         </div>
       </div>
 
-      {/* SLAVES */}
+      {/* slaves */}
       <div style={slavesWrap}>
         {slaves.length ? (
           slaves
@@ -668,7 +691,7 @@ function MasterCard({
 
       <div style={divider} />
 
-      {/* ACTIONS GLOBALES MASTER */}
+      {/* actions globales */}
       <div style={bottomRow}>
         <button style={actionChip} onClick={onIOPulse}>
           Pulse 500ms
@@ -691,26 +714,27 @@ function MasterCard({
    APP PRINCIPALE
    ========================================================= */
 export default function App() {
-  /* ---------- STATES GLOBAUX ---------- */
+  /* ---------- STATES ---------- */
   const [user, setUser] = useState(null);
 
-  // devices = [{id, name, master_mac, last_seen, online}]
+  // devices = [{id,name,master_mac,last_seen,online}]
   const [devices, setDevices] = useState([]);
 
   // nodesByMaster = { master_id: [ { mac, friendly_name?, is_on? } ] }
   const [nodesByMaster, setNodesByMaster] = useState({});
-  // phase visuelle barre noire
+
+  // phase pour barre noire (par mac)
   const [slavePhase, setSlavePhase] = useState({}); // { mac: "queue"|"send"|"hacked"|null }
 
-  // états UI locaux
+  // états "info" ouverts
   const [openMasterInfo, setOpenMasterInfo] = useState({});
   const [openSlaveInfo, setOpenSlaveInfo] = useState({});
   const [openSlaveMore, setOpenSlaveMore] = useState({});
 
-  // noms éditables slaves
+  // noms éditables slaves (même si pas encore supporté côté DB)
   const [editNames, setEditNames] = useState({});
 
-  // modale Pair-code
+  // dialogue pair code
   const [pair, setPair] = useState({
     open: false,
     code: null,
@@ -737,7 +761,7 @@ export default function App() {
   const chNodes = useRef(null);
   const chCmds = useRef(null);
 
-  /* ---------- TOGGLES UI ---------- */
+  /* ---------- TOGGLES ---------- */
   const toggleMasterInfo = useCallback((mid) => {
     setOpenMasterInfo((m) => ({ ...m, [mid]: !m[mid] }));
   }, []);
@@ -755,13 +779,13 @@ export default function App() {
   }, []);
 
   /* =========================================================
-     AUTH INIT / STABILISÉ
+     AUTH INIT
      ========================================================= */
   useEffect(() => {
     if (!sb) return;
     let mounted = true;
 
-    // 1. récupérer la session actuelle
+    // 1. session actuelle
     (async () => {
       const { data: { session } } = await sb.auth.getSession();
       if (!mounted) return;
@@ -772,7 +796,7 @@ export default function App() {
       }
     })();
 
-    // 2. écouter les changements d'auth
+    // 2. écoute des changements d'auth
     const { data: sub } = sb.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
@@ -809,9 +833,10 @@ export default function App() {
 
   async function refreshSlavesFor(masterId) {
     if (!sb) return;
+    // IMPORTANT : on ne demande QUE ce qui existe vraiment
     const { data, error } = await sb
       .from("nodes")
-      .select("slave_mac,friendly_name,is_on")
+      .select("slave_mac")
       .eq("master_id", masterId);
 
     if (error) {
@@ -819,22 +844,25 @@ export default function App() {
       return;
     }
 
+    // on fabrique des objets "slave"
+    const mapped = (data || []).map((n) => ({
+      mac: n.slave_mac,
+      friendly_name: n.slave_mac, // fallback
+      is_on: false, // fallback pas de is_on en DB
+    }));
+
     setNodesByMaster((prev) => {
       const clone = { ...prev };
-      clone[masterId] = (data || []).map((n) => ({
-        mac: n.slave_mac,
-        friendly_name: n.friendly_name || "",
-        is_on: !!n.is_on,
-      }));
+      clone[masterId] = mapped;
       return clone;
     });
 
-    // init editNames si nécessaire
+    // init editNames uniquement si vide
     setEditNames((prev) => {
       const next = { ...prev };
-      (data || []).forEach((n) => {
-        if (next[n.slave_mac] == null) {
-          next[n.slave_mac] = n.friendly_name || n.slave_mac;
+      mapped.forEach((n) => {
+        if (next[n.mac] == null) {
+          next[n.mac] = n.friendly_name || n.mac;
         }
       });
       return next;
@@ -927,7 +955,7 @@ export default function App() {
   }
 
   /* =========================================================
-     COMMANDES / PHASE BARRE NOIRE
+     COMMANDES / BARRE NOIRE
      ========================================================= */
   function bumpSlavePhase(mac, phase) {
     setSlavePhase((cur) => ({ ...cur, [mac]: phase }));
@@ -985,7 +1013,7 @@ export default function App() {
     }
   }
 
-  // actions slave
+  // commandes slave
   function handleIO(masterId, mac) {
     sendCmd(masterId, mac, "SLV_IO", {
       pin: DEFAULT_IO_PIN,
@@ -1003,7 +1031,7 @@ export default function App() {
     sendCmd(masterId, mac, "SLV_HARD_RESET", { ms: 3000 });
   }
 
-  // actions master
+  // commandes master
   function handlePulse(masterId) {
     sendCmd(masterId, null, "PULSE", { ms: 500 });
   }
@@ -1033,18 +1061,11 @@ export default function App() {
   }
 
   async function renameSlave(mac) {
-    if (!sb) return;
-    const newName = editNames[mac] || mac;
-    // nécessite `friendly_name` dans nodes
-    const { error } = await sb
-      .from("nodes")
-      .update({ friendly_name: newName })
-      .eq("slave_mac", mac);
-    if (error) {
-      alert(error.message);
-    } else {
-      log(`Renommé slave ${mac} → ${newName}`);
-    }
+    // pour l'instant la table nodes n'a pas friendly_name
+    alert(
+      "Renommage slave non dispo: la colonne friendly_name n'existe pas encore dans 'nodes'."
+    );
+    return;
   }
 
   /* =========================================================
@@ -1148,16 +1169,18 @@ export default function App() {
       .from("devices")
       .select("id,name,master_mac,last_seen,online")
       .order("created_at", { ascending: false });
+
     if (edev) {
       log("Err devices: " + edev.message);
     } else {
       setDevices(devs || []);
     }
 
-    // nodes
+    // nodes (sans friendly_name, sans is_on)
     const { data: nodes, error: enodes } = await sb
       .from("nodes")
-      .select("master_id,slave_mac,friendly_name,is_on");
+      .select("master_id,slave_mac");
+
     if (enodes) {
       log("Err nodes: " + enodes.message);
     } else {
@@ -1166,19 +1189,18 @@ export default function App() {
         if (!map[n.master_id]) map[n.master_id] = [];
         map[n.master_id].push({
           mac: n.slave_mac,
-          friendly_name: n.friendly_name || "",
-          is_on: !!n.is_on,
+          friendly_name: n.slave_mac, // fallback
+          is_on: false, // fallback
         });
       });
       setNodesByMaster(map);
 
-      // init editNames
+      // init editNames local
       setEditNames((prev) => {
         const next = { ...prev };
         (nodes || []).forEach((n) => {
           if (next[n.slave_mac] == null) {
-            next[n.slave_mac] =
-              n.friendly_name || n.slave_mac;
+            next[n.slave_mac] = n.slave_mac;
           }
         });
         return next;
@@ -1187,9 +1209,8 @@ export default function App() {
   }
 
   /* =========================================================
-     HEADER + PAGE LAYOUT
+     LAYOUT STYLE (fond / header sticky / contenu scroll)
      ========================================================= */
-  // fond plein écran + pas de débordement horizontal
   const pageStyle = {
     minHeight: "100vh",
     maxHeight: "100vh",
@@ -1212,7 +1233,6 @@ export default function App() {
       'system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif',
   };
 
-  // barre du haut sticky largeur totale
   const headerBarFull = {
     position: "sticky",
     top: 0,
@@ -1291,7 +1311,7 @@ export default function App() {
     whiteSpace: "nowrap",
   };
 
-  // zone scrollable en dessous
+  // zone défilante sous le header
   const contentScroll = {
     flexGrow: 1,
     minHeight: 0,
@@ -1307,7 +1327,7 @@ export default function App() {
     boxSizing: "border-box",
   };
 
-  // colonne centrale (un peu plus large qu'avant)
+  // colonne centrale
   const mainCol = {
     width: "100%",
     maxWidth: 640,
@@ -1350,7 +1370,7 @@ export default function App() {
   };
 
   /* =========================================================
-     BOUTONS HEADER (LOGIN / LOGOUT...)
+     HEADER BUTTONS (login / logout / pair / refresh)
      ========================================================= */
   function HeaderButtons() {
     if (!user) {
@@ -1378,7 +1398,7 @@ export default function App() {
   }
 
   /* =========================================================
-     COMPOSITION UI
+     RENDU SLAVES / MASTERS
      ========================================================= */
   function renderSlavesForMaster(m) {
     const arr = nodesByMaster[m.id] || [];
@@ -1456,7 +1476,7 @@ export default function App() {
   }
 
   /* =========================================================
-     FALLBACK SI PAS DE CONFIG
+     FALLBACK SI PAS DE CONFIG .env
      ========================================================= */
   if (!SUPABASE_URL || !SUPA_ANON_KEY || !sb) {
     return (
@@ -1472,10 +1492,7 @@ export default function App() {
         }}
       >
         <h2>Configuration manquante</h2>
-        <p>
-          Définis les variables d’environnement Vite
-          pendant le build :
-        </p>
+        <p>Définis les variables d’environnement Vite :</p>
         <pre
           style={{
             background: "#1f2937",
@@ -1487,14 +1504,12 @@ export default function App() {
             fontSize: 13,
             lineHeight: 1.4,
           }}
-        >
-{`VITE_SUPABASE_URL=https://....supabase.co
+        >{`VITE_SUPABASE_URL=https://....supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
-`}
-        </pre>
+`}</pre>
         <p>
-          Vérifie aussi que les secrets GitHub Actions
-          injectent bien ces valeurs au moment du build.
+          Vérifie aussi les secrets GitHub Actions au moment du
+          build.
         </p>
       </div>
     );
@@ -1617,8 +1632,8 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
                 color: COLORS.textWeak,
               }}
             >
-              Saisis ce code dans le portail
-              Wi-Fi de l’ESP32.
+              Saisis ce code dans le portail Wi-Fi de
+              l’ESP32.
             </div>
 
             <div
