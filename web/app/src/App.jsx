@@ -1,6 +1,5 @@
 // web/app/src/App.jsx
 // UI Remote Power (Master / Slaves)
-//
 // - Auth Supabase (Google OAuth)
 // - Liste des masters + slaves
 // - Envoi de commandes
@@ -8,9 +7,15 @@
 // - Design "glass" clair façon HomeKit
 // - Colonne verticale centrée qui scrolle
 //
-// Besoin: variables d'env VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY
+// IMPORTANT : nécessite VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY
 
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+  useCallback,
+} from "react";
 import { createClient } from "@supabase/supabase-js";
 
 /* =========================
@@ -19,6 +24,13 @@ import { createClient } from "@supabase/supabase-js";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// URL publique "propre" qu'on demande à Supabase de cibler après login Google
+// ➜ DOIT être ajoutée dans Supabase > Authentication > Redirect URLs
+const PUBLIC_SITE_URL =
+  window.location.origin +
+  window.location.pathname.replace(/index\.html$/, "");
+
+// client supabase
 let sb = null;
 if (SUPABASE_URL && SUPABASE_ANON_KEY) {
   sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -36,7 +48,7 @@ const fmtTS = (s) => (s ? new Date(s).toLocaleString() : "—");
 const isLive = (d) =>
   d.last_seen && Date.now() - new Date(d.last_seen).getTime() < LIVE_TTL_MS;
 
-/* flash visuel sur la LED du slave après action */
+/* flash LED visuelle après action slave */
 function flashLed(mac) {
   const el = document.getElementById(`led-${mac}`);
   if (!el) return;
@@ -51,7 +63,7 @@ function flashLed(mac) {
    STYLES
    ========================= */
 
-// NOTE: tu peux changer l'image de fond ici ↓ dans appShell.backgroundImage
+// ⬇⬇⬇ Tu peux changer l'image de fond ici (url(...))
 const styles = {
   appShell: {
     minHeight: "100vh",
@@ -89,7 +101,6 @@ const styles = {
     justifyContent: "space-between",
     gap: 12,
 
-    // limite la largeur du header pour coller au style "panneau iPhone"
     maxWidth: 440,
     width: "100%",
     margin: "0 auto",
@@ -123,6 +134,13 @@ const styles = {
     wordBreak: "break-word",
   },
 
+  headerAuthState: {
+    fontSize: 11,
+    lineHeight: 1.3,
+    color: "rgba(15,23,42,0.4)",
+    wordBreak: "break-word",
+  },
+
   headerRight: {
     display: "flex",
     flexWrap: "wrap",
@@ -147,7 +165,11 @@ const styles = {
     whiteSpace: "nowrap",
   },
 
-  // zone scrollable sous le header
+  headerBtnDisabled: {
+    opacity: 0.4,
+    pointerEvents: "none",
+  },
+
   contentScroll: {
     flexGrow: 1,
     minHeight: 0,
@@ -162,16 +184,14 @@ const styles = {
     paddingBottom: 16,
   },
 
-  // colonne verticale centrée
   mainContent: {
     width: "100%",
-    maxWidth: 440, // largeur "carte iOS"
+    maxWidth: 440,
     display: "flex",
     flexDirection: "column",
     gap: 16,
   },
 
-  // carte MASTER (grosse tuile verre)
   masterCard: {
     borderRadius: 24,
     padding: 20,
@@ -238,6 +258,17 @@ const styles = {
     border: "1px solid rgba(127,29,29,0.4)",
   },
 
+  masterDetailsBox: {
+    fontSize: 12,
+    lineHeight: 1.4,
+    color: "rgba(15,23,42,0.7)",
+    background: "rgba(255,255,255,0.3)",
+    border: "1px solid rgba(0,0,0,0.05)",
+    borderRadius: 16,
+    padding: 12,
+    wordBreak: "break-word",
+  },
+
   masterRightActions: {
     display: "flex",
     flexWrap: "wrap",
@@ -254,7 +285,6 @@ const styles = {
     borderRadius: 9999,
     padding: "6px 12px",
     fontWeight: 500,
-    boxShadow: "0 0 0 rgba(0,0,0,0)",
     cursor: "pointer",
     whiteSpace: "nowrap",
   },
@@ -277,22 +307,9 @@ const styles = {
     fontSize: 12,
     fontWeight: 500,
     color: "#0f172a",
-    boxShadow: "0 0 0 rgba(0,0,0,0)",
     cursor: "pointer",
   },
 
-  masterDetailsBox: {
-    fontSize: 12,
-    lineHeight: 1.4,
-    color: "rgba(15,23,42,0.7)",
-    background: "rgba(255,255,255,0.3)",
-    border: "1px solid rgba(0,0,0,0.05)",
-    borderRadius: 16,
-    padding: 12,
-    wordBreak: "break-word",
-  },
-
-  // ICI : au lieu de grid multi-colonnes, on empile verticalement
   slaveGrid: {
     display: "flex",
     flexDirection: "column",
@@ -300,7 +317,6 @@ const styles = {
     width: "100%",
   },
 
-  // carte SLAVE (petite tuile verre empilée)
   slaveTile: {
     borderRadius: 20,
     padding: 16,
@@ -310,13 +326,10 @@ const styles = {
     boxShadow: "0 24px 48px rgba(0,0,0,0.08)",
     backdropFilter: "blur(30px)",
     WebkitBackdropFilter: "blur(30px)",
-
+    color: "#0f172a",
     display: "flex",
     flexDirection: "column",
-    justifyContent: "flex-start",
     gap: 16,
-
-    color: "#0f172a",
     position: "relative",
     overflow: "hidden",
   },
@@ -502,18 +515,11 @@ const styles = {
     lineHeight: 1.2,
     display: "inline-flex",
     alignItems: "center",
-    boxShadow: "0 0 0 rgba(0,0,0,0)",
     cursor: "pointer",
     whiteSpace: "nowrap",
   },
 
-  cmdBlock: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 8,
-  },
-
-  cmdTitle: {
+  cmdBlockTitle: {
     fontSize: 12,
     color: "rgba(15,23,42,0.6)",
     fontWeight: 500,
@@ -529,7 +535,6 @@ const styles = {
     color: "#0f172a",
   },
 
-  // Journal global (dernière carte sous tous les masters)
   journalCard: {
     borderRadius: 20,
     padding: 16,
@@ -566,7 +571,6 @@ const styles = {
     color: "#0f172a",
   },
 
-  // Dialog pair-code
   dialogOverlay: {
     position: "fixed",
     inset: 0,
@@ -622,7 +626,7 @@ const styles = {
    ========================= */
 
 export default function App() {
-  // sécurité: si pas de config Supabase -> message simple
+  // si Supabase pas configuré -> message erreur simple
   if (!sb) {
     return (
       <div
@@ -651,12 +655,15 @@ export default function App() {
   /* ====== STATE ====== */
   const [user, setUser] = useState(null);
 
-  // liste des masters
+  const [authBusy, setAuthBusy] = useState(false); // empêche double clic
+  const [authStateNote, setAuthStateNote] = useState("…"); // debug visuel auth
+
+  // masters
   const [devices, setDevices] = useState([]);
-  // { master_id: [slave_mac, ...] }
+  // { master_id: [slave_mac,...] }
   const [nodesByMaster, setNodesByMaster] = useState({});
 
-  // log
+  // logs
   const [lines, setLines] = useState([]);
   const logRef = useRef(null);
 
@@ -667,22 +674,24 @@ export default function App() {
     expires_at: null,
   });
 
-  // affichage détails
+  // états "infos ouvertes"
   const [masterInfoOpen, setMasterInfoOpen] = useState({});
   const [slaveInfoOpen, setSlaveInfoOpen] = useState({});
 
-  // historique commandes refs
+  // refs listes de commandes
   const cmdListsRef = useRef(new Map());
 
-  // realtime channels
+  // channels realtime
   const chDevicesRef = useRef(null);
   const chNodesRef = useRef(null);
   const chCmdsRef = useRef(null);
 
   /* ====== LOG UTILS ====== */
-  function pushLog(t) {
+  const pushLog = useCallback((t) => {
+    console.log("[LOG]", t);
     setLines((ls) => [...ls, `${new Date().toLocaleTimeString()}  ${t}`]);
-  }
+  }, []);
+
   useEffect(() => {
     if (logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
@@ -697,7 +706,7 @@ export default function App() {
     setSlaveInfoOpen((m) => ({ ...m, [slaveMac]: !m[slaveMac] }));
   }
 
-  /* ====== COMMANDES ====== */
+  /* ====== COMMANDES API ====== */
   async function sendCmd(masterId, mac, action, payload = {}) {
     const { error } = await sb.from("commands").insert({
       master_id: masterId,
@@ -727,7 +736,9 @@ export default function App() {
 
   async function deleteDevice(id) {
     if (!window.confirm(`Supprimer ${id} ?`)) return;
-    const { data: { session } } = await sb.auth.getSession();
+    const {
+      data: { session },
+    } = await sb.auth.getSession();
     if (!session) {
       alert("Non connecté");
       return;
@@ -750,7 +761,9 @@ export default function App() {
   }
 
   async function openPairDialog() {
-    const { data: { session } } = await sb.auth.getSession();
+    const {
+      data: { session },
+    } = await sb.auth.getSession();
     if (!session) {
       alert("Non connecté");
       return;
@@ -785,7 +798,7 @@ export default function App() {
     });
   }
 
-  /* ====== COMMANDS HISTORY ====== */
+  /* ====== COMMAND HISTORY ====== */
   function upsertCmdRow(masterId, c) {
     const ul = cmdListsRef.current.get(masterId);
     if (!ul) return;
@@ -862,7 +875,7 @@ export default function App() {
     });
     setNodesByMaster(map);
 
-    // charger historique de commandes pour chaque master
+    // commandes par master
     for (const d of devs || []) {
       await refreshCommands(d.id);
     }
@@ -881,7 +894,6 @@ export default function App() {
   function attachRealtime() {
     cleanupRealtime();
 
-    // devices channel
     chDevicesRef.current = sb
       .channel("rt:devices")
       .on(
@@ -913,7 +925,6 @@ export default function App() {
       )
       .subscribe();
 
-    // nodes channel
     chNodesRef.current = sb
       .channel("rt:nodes")
       .on(
@@ -934,7 +945,6 @@ export default function App() {
       )
       .subscribe();
 
-    // commands channel
     chCmdsRef.current = sb
       .channel("rt:commands")
       .on(
@@ -960,11 +970,82 @@ export default function App() {
       .subscribe();
   }
 
-  /* ====== AUTH INIT ====== */
+  /* ====== AUTH HANDLERS ====== */
+
+  // Connexion Google
+  const handleLogin = useCallback(async () => {
+    if (authBusy) return;
+    setAuthBusy(true);
+    setAuthStateNote("login…");
+    pushLog("Auth: start Google login");
+
+    try {
+      const { data, error } = await sb.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: PUBLIC_SITE_URL,
+          queryParams: { prompt: "select_account" },
+        },
+      });
+
+      if (error) {
+        console.error("Auth login error:", error);
+        pushLog("Auth login error: " + error.message);
+        setAuthStateNote("login error");
+      } else if (data?.url) {
+        // on redirige vers Google
+        window.location.href = data.url;
+      } else {
+        pushLog("Auth: pas d'URL de redirection ?");
+        setAuthStateNote("no redirect url?");
+      }
+    } catch (err) {
+      console.error("Auth login exception:", err);
+      pushLog("Auth login exception: " + err);
+      setAuthStateNote("login exception");
+    } finally {
+      // NOTE: après redirection potentielle, ce finally est un peu théorique
+      setAuthBusy(false);
+    }
+  }, [authBusy, pushLog]);
+
+  // Déconnexion
+  const handleLogout = useCallback(async () => {
+    if (authBusy) return;
+    setAuthBusy(true);
+    setAuthStateNote("logout…");
+    pushLog("Auth: signOut()");
+
+    try {
+      const { error } = await sb.auth.signOut();
+      if (error) {
+        console.error("Auth logout error:", error);
+        pushLog("Auth logout error: " + error.message);
+        setAuthStateNote("logout error");
+      } else {
+        pushLog("Auth: signed out");
+        setAuthStateNote("signed out");
+      }
+    } catch (err) {
+      console.error("Auth logout exception:", err);
+      pushLog("Auth logout exception: " + err);
+      setAuthStateNote("logout exception");
+    } finally {
+      setAuthBusy(false);
+    }
+  }, [authBusy, pushLog]);
+
+  /* ====== AUTH INIT EFFECT ====== */
   useEffect(() => {
+    // écoute les changements de session (login/logout/refresh token)
     const sub = sb.auth.onAuthStateChange((ev, session) => {
+      console.log("[onAuthStateChange]", ev, session);
+      pushLog(`Auth event: ${ev}`);
+      setAuthStateNote(`event:${ev}`);
+
       const u = session?.user || null;
       setUser(u);
+
       if (u) {
         attachRealtime();
         loadAll();
@@ -975,13 +1056,26 @@ export default function App() {
       }
     });
 
+    // récupère la session actuelle au mount
     (async () => {
-      const { data: { session } } = await sb.auth.getSession();
-      const u = session?.user || null;
-      setUser(u);
-      if (u) {
-        attachRealtime();
-        loadAll();
+      const {
+        data: { session },
+        error,
+      } = await sb.auth.getSession();
+      if (error) {
+        console.error("getSession error:", error);
+        pushLog("getSession error: " + error.message);
+        setAuthStateNote("getSession error");
+      } else {
+        console.log("[getSession] session:", session);
+        const u = session?.user || null;
+        setUser(u);
+        setAuthStateNote(u ? "has session" : "no session");
+
+        if (u) {
+          attachRealtime();
+          loadAll();
+        }
       }
     })();
 
@@ -991,23 +1085,16 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ====== AUTH BUTTONS ====== */
+  /* ====== AUTH CONTROLS RENDER ====== */
   const AuthControls = useMemo(() => {
     if (!user) {
       return (
         <button
-          style={styles.headerBtn}
-          onClick={async () => {
-            const { data, error } = await sb.auth.signInWithOAuth({
-              provider: "google",
-              options: {
-                redirectTo: location.href,
-                queryParams: { prompt: "select_account" },
-              },
-            });
-            if (error) alert(error.message);
-            else if (data?.url) location.href = data.url;
+          style={{
+            ...styles.headerBtn,
+            ...(authBusy ? styles.headerBtnDisabled : null),
           }}
+          onClick={handleLogin}
         >
           Connexion Google
         </button>
@@ -1015,24 +1102,25 @@ export default function App() {
     }
     return (
       <button
-        style={styles.headerBtn}
-        onClick={() => {
-          sb.auth.signOut();
+        style={{
+          ...styles.headerBtn,
+          ...(authBusy ? styles.headerBtnDisabled : null),
         }}
+        onClick={handleLogout}
       >
         Déconnexion
       </button>
     );
-  }, [user]);
+  }, [user, authBusy, handleLogin, handleLogout]);
 
   /* ====== SLAVE TILE ====== */
   function SlaveTile({ mac, masterId }) {
-    const shortId = mac.slice(-5).toUpperCase(); // just un suffixe lisible
+    const shortId = mac.slice(-5).toUpperCase();
     const isOpen = !!slaveInfoOpen[mac];
 
     return (
       <div style={styles.slaveTile}>
-        {/* Top row: nom + bouton "i" */}
+        {/* top row */}
         <div style={styles.slaveTopRow}>
           <div style={styles.slaveTitleWrap}>
             <div style={styles.slaveNameRow}>
@@ -1060,7 +1148,7 @@ export default function App() {
           </button>
         </div>
 
-        {/* bloc central (grosse pastille + bouton action principale) */}
+        {/* knob + action principale */}
         <div style={styles.knobSection}>
           <div style={styles.knobCircle}>
             <span>{shortId}</span>
@@ -1074,7 +1162,6 @@ export default function App() {
           <button
             style={styles.powerBtn}
             onClick={() => {
-              // IO impulsion ON côté slave
               sendCmd(masterId, mac, "SLV_IO", {
                 pin: DEFAULT_IO_PIN,
                 mode: "OUT",
@@ -1146,9 +1233,7 @@ export default function App() {
         <div style={styles.masterHeaderRow}>
           <div style={styles.masterHeaderLeft}>
             <div style={styles.masterTopLine}>
-              <div style={styles.masterName}>
-                {d.name || d.id || "MASTER"}
-              </div>
+              <div style={styles.masterName}>{d.name || d.id || "MASTER"}</div>
               <span style={badgeStyle}>
                 {live ? "EN LIGNE" : "HORS LIGNE"}
               </span>
@@ -1194,13 +1279,13 @@ export default function App() {
           </div>
         </div>
 
-        {/* slaves empilés verticalement */}
+        {/* slaves list */}
         <div style={styles.slaveGrid}>
           {slaves.map((mac) => (
             <SlaveTile mac={mac} masterId={d.id} key={mac} />
           ))}
 
-          {/* tuile d'ajout visuelle */}
+          {/* Tuile info ajout slave */}
           <div style={styles.slaveTile}>
             <div style={styles.slaveTopRow}>
               <div style={styles.slaveTitleWrap}>
@@ -1247,7 +1332,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* actions globales */}
+        {/* master actions */}
         <div style={styles.divider} />
 
         <div style={styles.masterActionsWrap}>
@@ -1277,10 +1362,10 @@ export default function App() {
           </button>
         </div>
 
-        {/* historique commandes */}
+        {/* commandes récentes */}
         <div style={styles.divider} />
         <div>
-          <div style={styles.cmdTitle}>Commandes (20 dernières)</div>
+          <div style={styles.cmdBlockTitle}>Commandes (20 dernières)</div>
           <ul
             style={styles.cmdList}
             ref={(el) => {
@@ -1292,7 +1377,7 @@ export default function App() {
     );
   }
 
-  /* pair-code countdown */
+  /* countdown du code pair */
   const pairCountdown = useMemo(() => {
     if (!pairInfo.open || !pairInfo.expires_at) return null;
     const end = new Date(pairInfo.expires_at).getTime();
@@ -1310,36 +1395,50 @@ export default function App() {
   /* RENDER FINAL */
   return (
     <div style={styles.appShell}>
-      {/* HEADER FIXE VISUELLEMENT (il ne scroll pas parce que appShell est flex-col et le scroll est en dessous) */}
+      {/* HEADER (fixe visuellement) */}
       <header style={styles.headerBar}>
         <div style={styles.headerLeft}>
           <div style={styles.headerTitleRow}>
             <div style={styles.appTitle}>Remote Power</div>
           </div>
+
           <div style={styles.headerSub}>
             Compte : {user?.email || "—"}
+          </div>
+
+          {/* mini ligne debug auth */}
+          <div style={styles.headerAuthState}>
+            Auth: {authStateNote}
           </div>
         </div>
 
         <div style={styles.headerRight}>
-          <button style={styles.headerBtn} onClick={openPairDialog}>
+          <button
+            style={styles.headerBtn}
+            onClick={openPairDialog}
+          >
             Ajouter un MASTER
           </button>
-          <button style={styles.headerBtn} onClick={loadAll}>
+
+          <button
+            style={styles.headerBtn}
+            onClick={loadAll}
+          >
             Rafraîchir
           </button>
+
           {AuthControls}
         </div>
       </header>
 
-      {/* CONTENU QUI SCROLLE */}
+      {/* CONTENU qui SCROLLE */}
       <div style={styles.contentScroll}>
         <main style={styles.mainContent}>
           {devices.map((dev) => (
             <MasterCard d={dev} key={dev.id} />
           ))}
 
-          {/* Journal global */}
+          {/* journal global */}
           <section style={styles.journalCard}>
             <div style={styles.journalTitle}>Journal</div>
             <div style={styles.logBox} ref={logRef}>
@@ -1349,11 +1448,13 @@ export default function App() {
         </main>
       </div>
 
-      {/* PAIR DIALOG */}
+      {/* POPUP PAIR */}
       {pairInfo.open && (
         <div style={styles.dialogOverlay}>
           <div style={styles.dialogCard}>
-            <div style={styles.dialogTitle}>Appairer un MASTER</div>
+            <div style={styles.dialogTitle}>
+              Appairer un MASTER
+            </div>
             <div style={styles.smallText}>
               Code :
               <code
@@ -1373,10 +1474,14 @@ export default function App() {
               )
             </div>
             <div style={styles.smallText}>
-              Saisis ce code dans le portail Wi-Fi de l’ESP32 MASTER.
+              Saisis ce code dans le portail Wi-Fi de l’ESP32
+              MASTER.
             </div>
             <div style={styles.rowEnd}>
-              <button style={styles.headerBtn} onClick={closePairDialog}>
+              <button
+                style={styles.headerBtn}
+                onClick={closePairDialog}
+              >
                 Fermer
               </button>
             </div>
