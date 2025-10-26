@@ -1,396 +1,1368 @@
-import { useEffect, useRef, useState } from "react"
-import { createClient } from "@supabase/supabase-js"
+// web/app/src/App.jsx
+// UI Remote Power (Master / Slaves)
+// - Auth Supabase (Google OAuth)
+// - Liste des masters + slaves
+// - Envoi de commandes
+// - Realtime (devices / nodes / commands)
+// - Design "glass" clair + boutons pills transparents
+//
+// NOTE: nécessite VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY définis via GitHub Actions
 
-/* ---------- CONFIG Supabase (Vite env) ---------- */
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-const SUPA_ANON    = import.meta.env.VITE_SUPABASE_ANON_KEY
-const sb = createClient(SUPABASE_URL, SUPA_ANON)
+import React, { useEffect, useRef, useState, useMemo } from "react";
+import { createClient } from "@supabase/supabase-js";
 
-/* ---------- STORAGE CONFIG ---------- */
-const BUCKET = "slave-photos"
+/* =========================
+   CONFIG SUPABASE
+   ========================= */
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-/* pin par défaut pour IO sur le SLAVE (à adapter si besoin) */
-const DEFAULT_IO_PIN = 26
-const LIVE_TTL_MS = 25_000
-
-/* ---------- STYLES (mêmes bases que ta version) ---------- */
-const styles = `
-:root{
-  --bg:#0b101b; --panel:#141b29; --card:#1a2233; --chip:#263247; --muted:#9fb0c6;
-  --fg:#e7eefb; --ok:#16a34a; --ko:#ef4444; --warn:#f59e0b; --accent:#2dd4bf;
-  --stroke:#263247; --btn:#222b3d; --btn-h:#2a3550;
-}
-*{box-sizing:border-box}
-html,body,#root{height:100%}
-body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,Segoe UI,Roboto,Arial}
-header{display:flex;justify-content:space-between;align-items:center;padding:18px 22px;background:var(--panel);border-bottom:1px solid var(--stroke)}
-h1{margin:0;font-size:18px;letter-spacing:.5px}
-.small{font-size:12px;color:var(--muted)}
-.btn{background:var(--btn);border:1px solid var(--stroke);color:var(--fg);padding:8px 12px;border-radius:10px;cursor:pointer}
-.btn:hover{background:var(--btn-h)}
-.btn.primary{background:#2563eb;border-color:#1d4ed8}
-.btn.danger{background:#7f1d1d;border-color:#991b1b}
-.btn.ghost{background:transparent;border-color:var(--stroke)}
-.badge{font-size:12px;border:1px solid var(--stroke);padding:3px 8px;border-radius:999px}
-.badge.ok{background:#0b3b2e;color:#86efac;border-color:#14532d}
-.badge.ko{background:#3b1a1a;color:#fecaca;border-color:#7f1d1d}
-
-main{max-width:1200px;margin:24px auto;padding:0 16px;display:flex;gap:16px;flex-direction:column}
-.master{background:var(--card);border:1px solid var(--stroke);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px}
-.masterHead{display:flex;justify-content:space-between;align-items:center;gap:10px}
-.masterTitle{display:flex;align-items:center;gap:10px}
-.slaveGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
-.slaveCard{background:#202a3e;border:1px solid var(--stroke);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px}
-.slaveHead{display:flex;justify-content:space-between;align-items:center}
-.slaveKnob{width:90px;height:90px;border-radius:50%;border:4px solid #3a4a68;display:flex;align-items:center;justify-content:center;margin:6px auto 0;position:relative;overflow:hidden}
-.slaveLed{position:absolute;right:-2px;bottom:-2px;width:12px;height:12px;border-radius:50%;background:#1f2937;border:2px solid #0f172a}
-.slaveActions{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
-.pill{background:var(--chip);border:1px solid var(--stroke);border-radius:999px;padding:2px 8px;color:var(--fg);font-size:12px;display:inline-flex;align-items:center;gap:6px}
-.pill .mac{font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px}
-.icon{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1e293b}
-.tileAdd{background:#1f2739;border:1px dashed #334155;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#9fb0c6}
-.tileAdd:hover{background:#232f45}
-.hr{height:1px;background:var(--stroke);margin:6px 0}
-.cmdTitle{color:var(--muted);font-size:12px}
-.cmdList{margin:0;padding-left:18px;max-height:140px;overflow:auto}
-.log{white-space:pre-wrap;background:#0b1220;border:1px solid var(--stroke);border-radius:12px;padding:10px;height:150px;overflow:auto}
-.row{display:flex;gap:10px;align-items:center}
-.right{margin-left:auto}
-.tiny{font-size:12px;padding:5px 8px;border-radius:8px}
-.imgFit{width:100%;height:100%;object-fit:cover;border-radius:50%}
-`;
-
-/* ---------- HELPERS ---------- */
-const fmtTS  = s => (s ? new Date(s).toLocaleString() : "—")
-const isLive = d => d.last_seen && Date.now() - new Date(d.last_seen) < LIVE_TTL_MS
-
-/* ---------- Helpers: Storage ---------- */
-function getPublicUrl(path) {
-  const { data } = sb.storage.from(BUCKET).getPublicUrl(path)
-  return data?.publicUrl || null
-}
-async function uploadSlavePhoto(masterId, slaveMac, file) {
-  if (!file) throw new Error("Aucun fichier sélectionné")
-  const objectPath = `master/${masterId}/${slaveMac}.jpg` // chemin attendu par les policies
-
-  const { error: upErr } = await sb.storage
-    .from(BUCKET)
-    .upload(objectPath, file, { upsert: true, contentType: file.type || "image/jpeg" })
-  if (upErr) throw upErr
-
-  const publicUrl = getPublicUrl(objectPath)
-  if (!publicUrl) throw new Error("Impossible d’obtenir l’URL publique")
-
-  const { error: upNodeErr } = await sb
-    .from("nodes")
-    .update({ photo_url: publicUrl })
-    .eq("master_id", masterId)
-    .eq("slave_mac", slaveMac)
-  if (upNodeErr) throw upNodeErr
-
-  return publicUrl
+let sb = null;
+if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+  sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
 
-export default function App(){
-  if(!SUPABASE_URL || !SUPA_ANON){
+// TTL pour considérer le master "en ligne"
+const LIVE_TTL_MS = 25_000;
+// pin IO par défaut sur les slaves
+const DEFAULT_IO_PIN = 26;
+
+/* =========================
+   HELPERS
+   ========================= */
+const fmtTS = (s) => (s ? new Date(s).toLocaleString() : "—");
+const isLive = (d) =>
+  d.last_seen && Date.now() - new Date(d.last_seen).getTime() < LIVE_TTL_MS;
+
+/* Petite fonction pour LED flash locale */
+function flashLed(mac) {
+  const el = document.getElementById(`led-${mac}`);
+  if (!el) return;
+  const original = el.style.background;
+  el.style.background = "#16a34a"; // vert
+  setTimeout(() => {
+    el.style.background = original || "#1f2937";
+  }, 600);
+}
+
+/* =========================
+   STYLES
+   ========================= */
+
+const styles = {
+  appShell: {
+    minHeight: "100vh",
+    backgroundImage:
+      'radial-gradient(circle at 20% 20%, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 60%), radial-gradient(circle at 80% 30%, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 70%), url("https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=60")',
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    backgroundRepeat: "no-repeat",
+    backgroundAttachment: "fixed",
+    color: "#0f172a",
+    fontFamily:
+      'system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif',
+    padding: 16,
+    display: "flex",
+    flexDirection: "column",
+    gap: 16,
+  },
+
+  headerBar: {
+    borderRadius: 24,
+    padding: "16px 20px",
+    background: "rgba(255,255,255,0.35)",
+    backdropFilter: "blur(20px)",
+    WebkitBackdropFilter: "blur(20px)",
+    border: "1px solid rgba(0,0,0,0.08)",
+    boxShadow: "0 30px 60px rgba(0,0,0,0.12)",
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  headerLeft: {
+    display: "flex",
+    flexDirection: "column",
+    minWidth: 0,
+  },
+
+  headerTitleRow: {
+    display: "flex",
+    alignItems: "baseline",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+
+  appTitle: {
+    fontSize: 16,
+    fontWeight: 600,
+    color: "#0f172a",
+    lineHeight: 1.2,
+    letterSpacing: "-0.03em",
+  },
+
+  headerSub: {
+    fontSize: 12,
+    color: "rgba(15,23,42,0.6)",
+    lineHeight: 1.3,
+    wordBreak: "break-word",
+  },
+
+  headerRight: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  // pill button (transparent)
+  headerBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: 9999,
+    border: "1px solid rgba(0,0,0,0.2)",
+    background: "transparent",
+    color: "#0f172a",
+    fontSize: 12,
+    fontWeight: 500,
+    padding: "8px 14px",
+    lineHeight: 1.2,
+    boxShadow: "0 0 0 rgba(0,0,0,0)",
+    cursor: "pointer",
+  },
+
+  mainContent: {
+    maxWidth: 1200,
+    width: "100%",
+    margin: "0 auto",
+    display: "flex",
+    flexDirection: "column",
+    gap: 16,
+  },
+
+  // carte MASTER
+  masterCard: {
+    borderRadius: 24,
+    padding: 20,
+    background:
+      "linear-gradient(to bottom right, rgba(255,255,255,0.45), rgba(255,255,255,0.25))",
+    border: "1px solid rgba(0,0,0,0.08)",
+    boxShadow: "0 30px 60px rgba(0,0,0,0.18)",
+    backdropFilter: "blur(30px)",
+    WebkitBackdropFilter: "blur(30px)",
+    display: "flex",
+    flexDirection: "column",
+    gap: 16,
+    color: "#0f172a",
+  },
+
+  masterHeaderRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  masterHeaderLeft: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    minWidth: 0,
+  },
+
+  masterTopLine: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  masterName: {
+    fontSize: 15,
+    fontWeight: 600,
+    color: "#0f172a",
+    lineHeight: 1.2,
+    letterSpacing: "-0.03em",
+    wordBreak: "break-word",
+  },
+
+  masterBadgeBase: {
+    fontSize: 12,
+    lineHeight: "16px",
+    fontWeight: 500,
+    borderRadius: 9999,
+    padding: "2px 8px",
+    border: "1px solid transparent",
+  },
+  masterBadgeOnline: {
+    background: "rgba(16,185,129,0.15)",
+    color: "#065f46",
+    border: "1px solid rgba(5,150,105,0.4)",
+  },
+  masterBadgeOffline: {
+    background: "rgba(239,68,68,0.12)",
+    color: "#7f1d1d",
+    border: "1px solid rgba(127,29,29,0.4)",
+  },
+
+  masterRightActions: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  masterSmallBtn: {
+    background: "transparent",
+    border: "1px solid rgba(0,0,0,0.2)",
+    color: "#0f172a",
+    fontSize: 11,
+    lineHeight: 1.2,
+    borderRadius: 9999,
+    padding: "6px 12px",
+    fontWeight: 500,
+    boxShadow: "0 0 0 rgba(0,0,0,0)",
+    cursor: "pointer",
+  },
+
+  dangerText: {
+    color: "#7f1d1d",
+  },
+
+  infoBtn: {
+    background: "transparent",
+    border: "1px solid rgba(0,0,0,0.2)",
+    borderRadius: 9999,
+    width: 28,
+    height: 28,
+    minWidth: 28,
+    minHeight: 28,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 12,
+    fontWeight: 500,
+    color: "#0f172a",
+    boxShadow: "0 0 0 rgba(0,0,0,0)",
+    cursor: "pointer",
+  },
+
+  masterDetailsBox: {
+    fontSize: 12,
+    lineHeight: 1.4,
+    color: "rgba(15,23,42,0.7)",
+    background: "rgba(255,255,255,0.3)",
+    border: "1px solid rgba(0,0,0,0.05)",
+    borderRadius: 16,
+    padding: 12,
+    wordBreak: "break-word",
+  },
+
+  // grille des slaves
+  slaveGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
+    gap: 16,
+    width: "100%",
+  },
+
+  slaveTile: {
+    // carte slave en glass
+    borderRadius: 20,
+    padding: 16,
+    background:
+      "linear-gradient(to bottom right, rgba(255,255,255,0.18), rgba(255,255,255,0.08))",
+    border: "1px solid rgba(0,0,0,0.07)",
+    boxShadow: "0 24px 48px rgba(0,0,0,0.08)",
+    backdropFilter: "blur(30px)",
+    WebkitBackdropFilter: "blur(30px)",
+
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "flex-start",
+    gap: 16,
+
+    color: "#0f172a",
+    position: "relative",
+    overflow: "hidden",
+  },
+
+  slaveTopRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+
+  slaveTitleWrap: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    minWidth: 0,
+    flex: "1 1 auto",
+  },
+
+  slaveNameRow: {
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+
+  slaveName: {
+    fontSize: 14,
+    fontWeight: 600,
+    lineHeight: 1.2,
+    color: "#0f172a",
+    letterSpacing: "-0.03em",
+  },
+
+  slaveInfoArea: {
+    fontSize: 12,
+    lineHeight: 1.4,
+    color: "rgba(15,23,42,0.7)",
+    background: "rgba(255,255,255,0.3)",
+    border: "1px solid rgba(0,0,0,0.05)",
+    borderRadius: 14,
+    padding: 10,
+    wordBreak: "break-word",
+  },
+
+  infoBtnSmall: {
+    background: "transparent",
+    border: "1px solid rgba(0,0,0,0.2)",
+    borderRadius: 9999,
+    width: 24,
+    height: 24,
+    minWidth: 24,
+    minHeight: 24,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 11,
+    fontWeight: 500,
+    color: "#0f172a",
+    cursor: "pointer",
+  },
+
+  knobSection: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  knobCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: "50%",
+    border: "4px solid rgba(0,0,0,0.15)",
+    background: "rgba(255,255,255,0.2)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+    fontSize: 11,
+    fontWeight: 500,
+    color: "#0f172a",
+    lineHeight: 1.2,
+  },
+
+  knobLed: {
+    position: "absolute",
+    right: 2,
+    bottom: 2,
+    width: 10,
+    height: 10,
+    borderRadius: "50%",
+    background: "#1f2937",
+    border: "2px solid rgba(0,0,0,0.5)",
+  },
+
+  powerBtn: {
+    background: "transparent",
+    border: "1px solid rgba(0,0,0,0.2)",
+    color: "#0f172a",
+    borderRadius: 9999,
+    padding: "6px 10px",
+    fontSize: 11,
+    fontWeight: 500,
+    lineHeight: 1.2,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    maxWidth: "100%",
+    whiteSpace: "nowrap",
+    textOverflow: "ellipsis",
+    overflow: "hidden",
+    cursor: "pointer",
+  },
+
+  slaveActionsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2,minmax(0,1fr))",
+    gap: 8,
+    fontSize: 11,
+    fontWeight: 500,
+    width: "100%",
+  },
+
+  subBtn: {
+    background: "transparent",
+    border: "1px solid rgba(0,0,0,0.2)",
+    borderRadius: 9999,
+    color: "#0f172a",
+    padding: "6px 10px",
+    lineHeight: 1.2,
+    textAlign: "center",
+    fontWeight: 500,
+    fontSize: 11,
+    maxWidth: "100%",
+    whiteSpace: "nowrap",
+    textOverflow: "ellipsis",
+    overflow: "hidden",
+    cursor: "pointer",
+  },
+
+  dangerBtn: {
+    background: "transparent",
+    border: "1px solid rgba(127,29,29,0.3)",
+    borderRadius: 9999,
+    color: "#7f1d1d",
+    padding: "6px 10px",
+    lineHeight: 1.2,
+    textAlign: "center",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: 500,
+    fontSize: 11,
+    maxWidth: "100%",
+    whiteSpace: "nowrap",
+    textOverflow: "ellipsis",
+    overflow: "hidden",
+    cursor: "pointer",
+  },
+
+  // action chips globales du master
+  masterActionsWrap: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+    alignItems: "center",
+  },
+
+  actionChip: {
+    background: "transparent",
+    border: "1px solid rgba(0,0,0,0.2)",
+    borderRadius: 9999,
+    color: "#0f172a",
+    padding: "8px 12px",
+    fontSize: 12,
+    fontWeight: 500,
+    lineHeight: 1.2,
+    display: "inline-flex",
+    alignItems: "center",
+    boxShadow: "0 0 0 rgba(0,0,0,0)",
+    cursor: "pointer",
+  },
+
+  // Liste commandes
+  cmdBlock: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  },
+
+  cmdTitle: {
+    fontSize: 12,
+    color: "rgba(15,23,42,0.6)",
+    fontWeight: 500,
+  },
+
+  cmdList: {
+    margin: 0,
+    paddingLeft: 18,
+    maxHeight: 140,
+    overflowY: "auto",
+    fontSize: 12,
+    lineHeight: 1.4,
+    color: "#0f172a",
+  },
+
+  divider: {
+    height: 1,
+    background: "rgba(0,0,0,0.07)",
+  },
+
+  // Journal global
+  journalCard: {
+    borderRadius: 20,
+    padding: 16,
+    background:
+      "linear-gradient(to bottom right, rgba(255,255,255,0.4), rgba(255,255,255,0.2))",
+    border: "1px solid rgba(0,0,0,0.08)",
+    boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
+    backdropFilter: "blur(24px)",
+    WebkitBackdropFilter: "blur(24px)",
+    color: "#0f172a",
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  },
+
+  journalTitle: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: "#0f172a",
+    lineHeight: 1.2,
+    letterSpacing: "-0.03em",
+  },
+
+  logBox: {
+    background: "rgba(255,255,255,0.4)",
+    border: "1px solid rgba(0,0,0,0.08)",
+    borderRadius: 16,
+    padding: 10,
+    maxHeight: 150,
+    overflowY: "auto",
+    fontSize: 12,
+    lineHeight: 1.4,
+    whiteSpace: "pre-wrap",
+    color: "#0f172a",
+  },
+
+  // Pair dialog style
+  dialogOverlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.3)",
+    backdropFilter: "blur(2px)",
+    WebkitBackdropFilter: "blur(2px)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    zIndex: 9999,
+  },
+
+  dialogCard: {
+    minWidth: 280,
+    maxWidth: 360,
+    borderRadius: 20,
+    background:
+      "linear-gradient(to bottom right, rgba(255,255,255,0.5), rgba(255,255,255,0.3))",
+    border: "1px solid rgba(0,0,0,0.08)",
+    boxShadow: "0 30px 60px rgba(0,0,0,0.25)",
+    backdropFilter: "blur(30px)",
+    WebkitBackdropFilter: "blur(30px)",
+    color: "#0f172a",
+    padding: 16,
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+
+  dialogTitle: {
+    fontSize: 15,
+    fontWeight: 600,
+    color: "#0f172a",
+    letterSpacing: "-0.03em",
+    lineHeight: 1.2,
+  },
+
+  smallText: {
+    fontSize: 12,
+    color: "rgba(15,23,42,0.7)",
+    lineHeight: 1.4,
+  },
+
+  rowEnd: {
+    display: "flex",
+    justifyContent: "flex-end",
+  },
+};
+
+/* =========================
+   COMPOSANT PRINCIPAL
+   ========================= */
+
+export default function App() {
+  // sécurité: si pas de config Supabase -> message simple
+  if (!sb) {
     return (
-      <div style={{padding:24,fontFamily:"system-ui,Segoe UI,Roboto,Arial",color:"#e11d48"}}>
-        <h2>Configuration manquante</h2>
-        <p>Définis les variables d’environnement Vite :</p>
-        <code>VITE_SUPABASE_URL</code> &nbsp;et&nbsp; <code>VITE_SUPABASE_ANON_KEY</code>
+      <div
+        style={{
+          fontFamily:
+            'system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif',
+          minHeight: "100vh",
+          background: "#fff",
+          color: "#000",
+          padding: 24,
+        }}
+      >
+        <h2 style={{ marginTop: 0 }}>Configuration manquante</h2>
+        <p style={{ maxWidth: 480, lineHeight: 1.4, fontSize: 14 }}>
+          Les variables d’environnement Vite ne sont pas définies :
+          <br />
+          <code>VITE_SUPABASE_URL</code> et{" "}
+          <code>VITE_SUPABASE_ANON_KEY</code>.
+          <br />
+          Assure-toi que GitHub Actions injecte bien ces secrets.
+        </p>
       </div>
-    )
+    );
   }
 
-  /* state */
-  const [user,setUser]=useState(null)
-  const [devices,setDevices]=useState([])
-  // nodesByMaster : { [master_id]: Array<{ slave_mac, photo_url? }> }
-  const [nodesByMaster,setNodesByMaster]=useState({})
-  const [pair,setPair]=useState({open:false,code:null,expires_at:null})
+  /* ====== STATE ====== */
+  const [user, setUser] = useState(null);
 
-  /* log */
-  const [lines,setLines]=useState([])
-  const logRef=useRef(null)
-  const log = t => setLines(ls=>[...ls,`${new Date().toLocaleTimeString()}  ${t}`])
-  useEffect(()=>{ if(logRef.current) logRef.current.scrollTop=logRef.current.scrollHeight },[lines])
+  // liste des masters
+  const [devices, setDevices] = useState([]);
+  // { master_id: [slave_mac, ...] }
+  const [nodesByMaster, setNodesByMaster] = useState({});
 
-  /* keep refs for cmd lists (per master) */
-  const cmdLists=useRef(new Map())
-  function upsertCmdRow(masterId, c){
-    const ul = cmdLists.current.get(masterId); if(!ul) return
-    const id=`cmd-${c.id}`
-    const html = `<code>${c.status}</code> · ${c.action}${c.target_mac?' → '+c.target_mac:' (local)'} <span class="small">· ${fmtTS(c.created_at)}</span>`
-    let li = ul.querySelector(`#${CSS.escape(id)}`)
-    if(!li){ li=document.createElement('li'); li.id=id; li.innerHTML=html; ul.prepend(li); while(ul.children.length>20) ul.removeChild(ul.lastChild) }
-    else { li.innerHTML=html }
+  // log
+  const [lines, setLines] = useState([]);
+  const logRef = useRef(null);
+
+  // pair-code (ajouter master)
+  const [pairInfo, setPairInfo] = useState({
+    open: false,
+    code: null,
+    expires_at: null,
+  });
+
+  // affichage détails techniques master/slave
+  const [masterInfoOpen, setMasterInfoOpen] = useState({});
+  const [slaveInfoOpen, setSlaveInfoOpen] = useState({});
+
+  // Pour historique des commandes par master: on garde une ref -> <ul>
+  const cmdListsRef = useRef(new Map());
+
+  // realtime channels
+  const chDevicesRef = useRef(null);
+  const chNodesRef = useRef(null);
+  const chCmdsRef = useRef(null);
+
+  /* ====== LOG UTILS ====== */
+  function pushLog(t) {
+    setLines((ls) => [...ls, `${new Date().toLocaleTimeString()}  ${t}`]);
   }
+  useEffect(() => {
+    if (logRef.current) {
+      logRef.current.scrollTop = logRef.current.scrollHeight;
+    }
+  }, [lines]);
 
-  /* auth bootstrap */
-  useEffect(()=>{
-    const sub = sb.auth.onAuthStateChange((ev,session)=>{
-      setUser(session?.user||null)
-      if(session?.user){ attachRealtime(); loadAll() } else { cleanupRealtime(); setDevices([]); setNodesByMaster({}) }
-    })
-    ;(async()=>{ const {data:{session}} = await sb.auth.getSession(); setUser(session?.user||null); if(session?.user){ attachRealtime(); loadAll() } })()
-    return ()=>sub.data.subscription.unsubscribe()
-    // eslint-disable-next-line
-  },[])
-
-  /* realtime channels */
-  const chDevices=useRef(null), chNodes=useRef(null), chCmds=useRef(null)
-  function cleanupRealtime(){
-    if(chDevices.current) sb.removeChannel(chDevices.current)
-    if(chNodes.current)   sb.removeChannel(chNodes.current)
-    if(chCmds.current)    sb.removeChannel(chCmds.current)
-    chDevices.current=chNodes.current=chCmds.current=null
+  /* ====== INFO TOGGLE ====== */
+  function toggleMasterInfo(masterId) {
+    setMasterInfoOpen((m) => ({ ...m, [masterId]: !m[masterId] }));
   }
-  function attachRealtime(){
-    cleanupRealtime()
-    chDevices.current = sb.channel("rt:devices")
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'devices'}, p => { log(`+ device ${p.new.id}`); setDevices(ds=>[p.new,...ds]); refreshCommands(p.new.id) })
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'devices'}, p => { const d=p.new; setDevices(ds=>ds.map(x=>x.id===d.id?{...x,...d}:x)) })
-      .on('postgres_changes',{event:'DELETE',schema:'public',table:'devices'}, p => { log(`- device ${p.old.id}`); setDevices(ds=>ds.filter(x=>x.id!==p.old.id)) })
-      .subscribe()
-    chNodes.current = sb.channel("rt:nodes")
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'nodes'}, p => { log(`+ node ${p.new.slave_mac} → ${p.new.master_id}`); refreshSlavesFor(p.new.master_id) })
-      .on('postgres_changes',{event:'DELETE',schema:'public',table:'nodes'}, p => { log(`- node ${p.old.slave_mac} ← ${p.old.master_id}`); refreshSlavesFor(p.old.master_id) })
-      .subscribe()
-    chCmds.current = sb.channel("rt:commands")
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'commands'}, p => { upsertCmdRow(p.new.master_id,p.new); log(`cmd + ${p.new.action} (${p.new.status}) → ${p.new.master_id}`) })
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'commands'}, p => { upsertCmdRow(p.new.master_id,p.new); log(`cmd ~ ${p.new.action} (${p.new.status}) → ${p.new.master_id}`) })
-      .subscribe()
+  function toggleSlaveInfo(slaveMac) {
+    setSlaveInfoOpen((m) => ({ ...m, [slaveMac]: !m[slaveMac] }));
   }
 
-  /* queries */
-  async function loadAll(){
-    const {data:devs,error:ed}=await sb.from('devices').select('id,name,master_mac,last_seen,online').order('created_at',{ascending:false})
-    if(ed){ log("Err devices: "+ed.message); return }
-    setDevices(devs||[])
-    // charger aussi photo_url
-    const {data:nodes,error:en}=await sb.from('nodes').select('master_id,slave_mac,photo_url')
-    if(en){ log("Err nodes: "+en.message); return }
-    const map={}; (nodes||[]).forEach(n => {
-      (map[n.master_id]??=[]).push({ slave_mac:n.slave_mac, photo_url:n.photo_url||null })
-    })
-    setNodesByMaster(map)
-    for(const d of devs||[]) await refreshCommands(d.id)
-  }
-  async function refreshCommands(mid){
-    const {data,error}=await sb.from('commands')
-      .select('id,action,target_mac,status,created_at')
-      .eq('master_id',mid).order('created_at',{ascending:false}).limit(20)
-    if(error){ log("Err cmds: "+error.message); return }
-    const ul=cmdLists.current.get(mid); if(!ul) return
-    ul.innerHTML=""; (data||[]).forEach(c => upsertCmdRow(mid,c))
-  }
-  async function refreshSlavesFor(mid){
-    const {data}=await sb.from('nodes').select('slave_mac,photo_url').eq('master_id',mid)
-    setNodesByMaster(m => ({...m,[mid]:(data||[]).map(x=>({ slave_mac:x.slave_mac, photo_url:x.photo_url||null }))}))
+  /* ====== COMMANDES ====== */
+  async function sendCmd(masterId, mac, action, payload = {}) {
+    const { error } = await sb.from("commands").insert({
+      master_id: masterId,
+      target_mac: mac || null,
+      action,
+      payload,
+    });
+    if (error) {
+      pushLog("cmd err: " + error.message);
+    } else {
+      pushLog(
+        `[cmd] ${action} → ${masterId}${mac ? " ▶ " + mac : ""}`
+      );
+    }
   }
 
-  /* commands */
-  async function sendCmd(mid,mac,action,payload={}){
-    const {error}=await sb.from('commands').insert({master_id:mid,target_mac:mac||null,action,payload})
-    if(error) log("cmd err: "+error.message)
-    else log(`[cmd] ${action} → ${mid}${mac?" ▶ "+mac:""}`)
-  }
-  async function renameMaster(id){
-    const name=prompt("Nouveau nom du master ?",""); if(!name) return
-    const {error}=await sb.from('devices').update({name}).eq('id',id)
-    if(error) alert(error.message); else log(`Renommé ${id} → ${name}`)
-  }
-  async function deleteDevice(id){
-    if(!confirm(`Supprimer ${id} ?`)) return
-    const {data:{session}}=await sb.auth.getSession(); if(!session){alert("Non connecté"); return}
-    const r=await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`,{
-      method:"POST",
-      headers:{ "Content-Type":"application/json", apikey:SUPA_ANON, Authorization:`Bearer ${session.access_token}` },
-      body:JSON.stringify({ master_id:id })
-    })
-    log(r.ok?`MASTER supprimé : ${id}`:`❌ Suppression : ${await r.text()}`)
-  }
-  async function openPairDialog(){
-    const {data:{session}}=await sb.auth.getSession(); if(!session){alert("Non connecté"); return}
-    const r=await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`,{
-      method:"POST",
-      headers:{ "Content-Type":"application/json", apikey:SUPA_ANON, Authorization:`Bearer ${session.access_token}` },
-      body:JSON.stringify({ ttl_minutes:10 })
-    })
-    if(!r.ok){ alert(await r.text()); return }
-    const {code,expires_at}=await r.json()
-    setPair({open:true,code,expires_at})
-    log(`Pair-code ${code}`)
+  async function renameMaster(id) {
+    const name = prompt("Nouveau nom du master ?", "");
+    if (!name) return;
+    const { error } = await sb.from("devices").update({ name }).eq("id", id);
+    if (error) {
+      alert(error.message);
+    } else {
+      pushLog(`Renommé ${id} → ${name}`);
+    }
   }
 
-  /* UI bits */
-  const UserControls = (
-    <div className="row">
-      <span className="small">{user?.email || "non connecté"}</span>
-      {!user
-        ? <button className="btn primary" onClick={async ()=>{
-            const {data,error}=await sb.auth.signInWithOAuth({provider:"google",options:{redirectTo:location.href,queryParams:{prompt:"select_account"}}})
-            if(error) alert(error.message); else if(data?.url) location.href=data.url
-          }}>CONNEXION GOOGLE</button>
-        : <button className="btn" onClick={()=>sb.auth.signOut()}>DECONNEXION</button>}
-    </div>
-  )
+  async function deleteDevice(id) {
+    if (!window.confirm(`Supprimer ${id} ?`)) return;
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+      alert("Non connecté");
+      return;
+    }
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ master_id: id }),
+    });
+    if (r.ok) {
+      pushLog(`MASTER supprimé : ${id}`);
+    } else {
+      const tt = await r.text();
+      pushLog(`❌ Suppression : ${tt}`);
+    }
+  }
+
+  async function openPairDialog() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+      alert("Non connecté");
+      return;
+    }
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ ttl_minutes: 10 }),
+    });
+    if (!r.ok) {
+      alert(await r.text());
+      return;
+    }
+    const { code, expires_at } = await r.json();
+    setPairInfo({
+      open: true,
+      code,
+      expires_at,
+    });
+    pushLog(`Pair-code ${code}`);
+  }
+
+  function closePairDialog() {
+    setPairInfo({
+      open: false,
+      code: null,
+      expires_at: null,
+    });
+  }
+
+  /* ====== COMMANDES LIST / REALTIME HISTORIQUE ====== */
+  function upsertCmdRow(masterId, c) {
+    const ul = cmdListsRef.current.get(masterId);
+    if (!ul) return;
+    const rowId = `cmd-${c.id}`;
+    const html = `<code>${c.status}</code> · ${c.action}${
+      c.target_mac ? " → " + c.target_mac : " (local)"
+    } <span style="color:rgba(15,23,42,0.6)">· ${fmtTS(c.created_at)}</span>`;
+    let li = ul.querySelector(`#${CSS.escape(rowId)}`);
+    if (!li) {
+      li = document.createElement("li");
+      li.id = rowId;
+      li.innerHTML = html;
+      ul.prepend(li);
+      // limite à 20 éléments
+      while (ul.children.length > 20) {
+        ul.removeChild(ul.lastChild);
+      }
+    } else {
+      li.innerHTML = html;
+    }
+  }
+
+  async function refreshCommands(masterId) {
+    const { data, error } = await sb
+      .from("commands")
+      .select("id,action,target_mac,status,created_at")
+      .eq("master_id", masterId)
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (error) {
+      pushLog("Err cmds: " + error.message);
+      return;
+    }
+    const ul = cmdListsRef.current.get(masterId);
+    if (!ul) return;
+    ul.innerHTML = "";
+    (data || []).forEach((c) => upsertCmdRow(masterId, c));
+  }
+
+  async function refreshSlavesFor(masterId) {
+    const { data } = await sb
+      .from("nodes")
+      .select("slave_mac")
+      .eq("master_id", masterId);
+
+    setNodesByMaster((m) => ({
+      ...m,
+      [masterId]: (data || []).map((x) => x.slave_mac),
+    }));
+  }
+
+  async function loadAll() {
+    // masters
+    const { data: devs, error: ed } = await sb
+      .from("devices")
+      .select("id,name,master_mac,last_seen,online")
+      .order("created_at", { ascending: false });
+    if (ed) {
+      pushLog("Err devices: " + ed.message);
+      return;
+    }
+    setDevices(devs || []);
+
+    // slaves
+    const { data: nodes, error: en } = await sb
+      .from("nodes")
+      .select("master_id,slave_mac");
+    if (en) {
+      pushLog("Err nodes: " + en.message);
+      return;
+    }
+    const map = {};
+    (nodes || []).forEach((n) => {
+      (map[n.master_id] ??= []).push(n.slave_mac);
+    });
+    setNodesByMaster(map);
+
+    // charger historique de commandes pour chaque master
+    for (const d of devs || []) {
+      await refreshCommands(d.id);
+    }
+  }
+
+  /* ====== REALTIME ====== */
+  function cleanupRealtime() {
+    if (chDevicesRef.current) sb.removeChannel(chDevicesRef.current);
+    if (chNodesRef.current) sb.removeChannel(chNodesRef.current);
+    if (chCmdsRef.current) sb.removeChannel(chCmdsRef.current);
+    chDevicesRef.current = null;
+    chNodesRef.current = null;
+    chCmdsRef.current = null;
+  }
+
+  function attachRealtime() {
+    cleanupRealtime();
+
+    // devices channel
+    chDevicesRef.current = sb
+      .channel("rt:devices")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "devices" },
+        (p) => {
+          pushLog(`+ device ${p.new.id}`);
+          setDevices((ds) => [p.new, ...ds]);
+          refreshCommands(p.new.id);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "devices" },
+        (p) => {
+          const devNew = p.new;
+          setDevices((ds) =>
+            ds.map((x) => (x.id === devNew.id ? { ...x, ...devNew } : x))
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "devices" },
+        (p) => {
+          pushLog(`- device ${p.old.id}`);
+          setDevices((ds) => ds.filter((x) => x.id !== p.old.id));
+        }
+      )
+      .subscribe();
+
+    // nodes channel
+    chNodesRef.current = sb
+      .channel("rt:nodes")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "nodes" },
+        (p) => {
+          pushLog(`+ node ${p.new.slave_mac} → ${p.new.master_id}`);
+          refreshSlavesFor(p.new.master_id);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "nodes" },
+        (p) => {
+          pushLog(`- node ${p.old.slave_mac} ← ${p.old.master_id}`);
+          refreshSlavesFor(p.old.master_id);
+        }
+      )
+      .subscribe();
+
+    // commands channel
+    chCmdsRef.current = sb
+      .channel("rt:commands")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "commands" },
+        (p) => {
+          upsertCmdRow(p.new.master_id, p.new);
+          pushLog(
+            `cmd + ${p.new.action} (${p.new.status}) → ${p.new.master_id}`
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "commands" },
+        (p) => {
+          upsertCmdRow(p.new.master_id, p.new);
+          pushLog(
+            `cmd ~ ${p.new.action} (${p.new.status}) → ${p.new.master_id}`
+          );
+        }
+      )
+      .subscribe();
+  }
+
+  /* ====== AUTH INIT ====== */
+  useEffect(() => {
+    const sub = sb.auth.onAuthStateChange((ev, session) => {
+      const u = session?.user || null;
+      setUser(u);
+      if (u) {
+        attachRealtime();
+        loadAll();
+      } else {
+        cleanupRealtime();
+        setDevices([]);
+        setNodesByMaster({});
+      }
+    });
+
+    (async () => {
+      const { data: { session } } = await sb.auth.getSession();
+      const u = session?.user || null;
+      setUser(u);
+      if (u) {
+        attachRealtime();
+        loadAll();
+      }
+    })();
+
+    return () => {
+      sub.data.subscription.unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ====== RENDU UI ====== */
+
+  // bouton connexion / déconnexion
+  const AuthControls = useMemo(() => {
+    if (!user) {
+      return (
+        <button
+          style={styles.headerBtn}
+          onClick={async () => {
+            const { data, error } = await sb.auth.signInWithOAuth({
+              provider: "google",
+              options: {
+                redirectTo: location.href,
+                queryParams: { prompt: "select_account" },
+              },
+            });
+            if (error) alert(error.message);
+            else if (data?.url) location.href = data.url;
+          }}
+        >
+          Connexion Google
+        </button>
+      );
+    }
+    return (
+      <button
+        style={styles.headerBtn}
+        onClick={() => {
+          sb.auth.signOut();
+        }}
+      >
+        Déconnexion
+      </button>
+    );
+  }, [user]);
+
+  // rendu d'une tuile SLAVE
+  function SlaveTile({ mac, masterId }) {
+    const shortId = mac.slice(-5).toUpperCase(); // suffixe MAC pour affichage court
+    const isOpen = !!slaveInfoOpen[mac];
+
+    return (
+      <div style={styles.slaveTile}>
+        {/* top row: titre + btn info */}
+        <div style={styles.slaveTopRow}>
+          <div style={styles.slaveTitleWrap}>
+            <div style={styles.slaveNameRow}>
+              <div style={styles.slaveName}>SLAVE {shortId}</div>
+            </div>
+
+            {isOpen && (
+              <div style={styles.slaveInfoArea}>
+                <div>
+                  MAC : <code>{mac}</code>
+                </div>
+                <div style={{ opacity: 0.7 }}>
+                  Actions pilotables: IO / RESET / FORCE OFF / HARD RESET
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button
+            style={styles.infoBtnSmall}
+            title="Infos"
+            onClick={() => toggleSlaveInfo(mac)}
+          >
+            i
+          </button>
+        </div>
+
+        {/* bloc bouton principal */}
+        <div style={styles.knobSection}>
+          <div style={styles.knobCircle}>
+            <span>{shortId}</span>
+            <span
+              id={`led-${mac}`}
+              style={styles.knobLed}
+              aria-hidden="true"
+            />
+          </div>
+
+          <button
+            style={styles.powerBtn}
+            onClick={() => {
+              // On envoie une impulsion IO ON (force ON)
+              sendCmd(masterId, mac, "SLV_IO", {
+                pin: DEFAULT_IO_PIN,
+                mode: "OUT",
+                value: 1,
+              });
+              flashLed(mac);
+            }}
+          >
+            Impulsion
+          </button>
+        </div>
+
+        {/* actions 2 colonnes */}
+        <div style={styles.slaveActionsGrid}>
+          <button
+            style={styles.subBtn}
+            onClick={() =>
+              sendCmd(masterId, mac, "SLV_IO", {
+                pin: DEFAULT_IO_PIN,
+                mode: "OUT",
+                value: 0,
+              })
+            }
+          >
+            OFF
+          </button>
+
+          <button
+            style={styles.subBtn}
+            onClick={() => sendCmd(masterId, mac, "SLV_RESET", {})}
+          >
+            RESET
+          </button>
+
+          <button
+            style={styles.dangerBtn}
+            onClick={() => sendCmd(masterId, mac, "SLV_FORCE_OFF", {})}
+          >
+            FORCE OFF
+          </button>
+
+          <button
+            style={styles.dangerBtn}
+            onClick={() =>
+              sendCmd(masterId, mac, "SLV_HARD_RESET", { ms: 3000 })
+            }
+          >
+            HARD RESET
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // rendu carte MASTER
+  function MasterCard({ d }) {
+    const live = isLive(d);
+    const badgeStyle = {
+      ...styles.masterBadgeBase,
+      ...(live ? styles.masterBadgeOnline : styles.masterBadgeOffline),
+    };
+
+    const slaves = nodesByMaster[d.id] || [];
+    const open = !!masterInfoOpen[d.id];
+
+    return (
+      <section style={styles.masterCard}>
+        <div style={styles.masterHeaderRow}>
+          <div style={styles.masterHeaderLeft}>
+            <div style={styles.masterTopLine}>
+              <div style={styles.masterName}>
+                {d.name || d.id || "MASTER"}
+              </div>
+              <span style={badgeStyle}>
+                {live ? "EN LIGNE" : "HORS LIGNE"}
+              </span>
+            </div>
+
+            {open && (
+              <div style={styles.masterDetailsBox}>
+                <div>
+                  ID : <code>{d.id}</code>
+                </div>
+                <div>
+                  MAC : <code>{d.master_mac || "—"}</code>
+                </div>
+                <div>
+                  Dernier contact :{" "}
+                  {fmtTS(d.last_seen) || "jamais"}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div style={styles.masterRightActions}>
+            <button
+              style={styles.masterSmallBtn}
+              onClick={() => renameMaster(d.id)}
+            >
+              Renommer
+            </button>
+
+            <button
+              style={{
+                ...styles.masterSmallBtn,
+                ...styles.dangerText,
+              }}
+              onClick={() => deleteDevice(d.id)}
+            >
+              Supprimer
+            </button>
+
+            <button
+              style={styles.infoBtn}
+              title="Infos"
+              onClick={() => toggleMasterInfo(d.id)}
+            >
+              i
+            </button>
+          </div>
+        </div>
+
+        {/* SLAVES list */}
+        <div style={styles.slaveGrid}>
+          {slaves.map((mac) => (
+            <SlaveTile mac={mac} masterId={d.id} key={mac} />
+          ))}
+
+          {/* tile vide visuelle "ajouter un SLAVE" (pairing via MASTER bouton physique) */}
+          <div style={styles.slaveTile}>
+            <div style={styles.slaveTopRow}>
+              <div style={styles.slaveTitleWrap}>
+                <div style={styles.slaveNameRow}>
+                  <div style={styles.slaveName}>Ajouter un SLAVE</div>
+                </div>
+                <div style={styles.slaveInfoArea}>
+                  Appuie long sur le bouton pair du MASTER
+                  pour associer un nouveau SLAVE.
+                </div>
+              </div>
+            </div>
+
+            <div style={styles.knobSection}>
+              <div style={styles.knobCircle}>
+                <span style={{ opacity: 0.6 }}>+</span>
+              </div>
+              <button
+                style={styles.powerBtn}
+                onClick={() => {
+                  alert(
+                    "Mettre le MASTER en mode appairage, puis allumer le SLAVE."
+                  );
+                }}
+              >
+                Associer
+              </button>
+            </div>
+
+            <div style={styles.slaveActionsGrid}>
+              <button style={styles.subBtn} disabled>—</button>
+              <button style={styles.subBtn} disabled>—</button>
+              <button style={styles.subBtn} disabled>—</button>
+              <button style={styles.subBtn} disabled>—</button>
+            </div>
+          </div>
+        </div>
+
+        {/* séparateur */}
+        <div style={styles.divider} />
+
+        {/* actions globales MASTER */}
+        <div style={styles.masterActionsWrap}>
+          <button
+            style={styles.actionChip}
+            onClick={() => sendCmd(d.id, null, "PULSE", { ms: 500 })}
+          >
+            Pulse 500ms
+          </button>
+          <button
+            style={styles.actionChip}
+            onClick={() => sendCmd(d.id, null, "POWER_ON", {})}
+          >
+            Power ON
+          </button>
+          <button
+            style={styles.actionChip}
+            onClick={() => sendCmd(d.id, null, "POWER_OFF", {})}
+          >
+            Power OFF
+          </button>
+          <button
+            style={styles.actionChip}
+            onClick={() => sendCmd(d.id, null, "RESET", {})}
+          >
+            Reset
+          </button>
+        </div>
+
+        {/* séparateur */}
+        <div style={styles.divider} />
+
+        {/* historique commandes */}
+        <div style={styles.cmdBlock}>
+          <div style={styles.cmdTitle}>Commandes (20 dernières)</div>
+          <ul
+            style={styles.cmdList}
+            ref={(el) => {
+              if (el) cmdListsRef.current.set(d.id, el);
+            }}
+          />
+        </div>
+      </section>
+    );
+  }
+
+  /* pair-code dialog countdown */
+  const pairCountdown = useMemo(() => {
+    if (!pairInfo.open || !pairInfo.expires_at) return null;
+    const end = new Date(pairInfo.expires_at).getTime();
+    const leftSec = Math.max(
+      0,
+      Math.floor((end - Date.now()) / 1000)
+    );
+    return (
+      Math.floor(leftSec / 60) +
+      ":" +
+      String(leftSec % 60).padStart(2, "0")
+    );
+  }, [pairInfo.open, pairInfo.expires_at]);
 
   return (
-    <>
-      <style>{styles}</style>
+    <div style={styles.appShell}>
+      {/* HEADER */}
+      <header style={styles.headerBar}>
+        <div style={styles.headerLeft}>
+          <div style={styles.headerTitleRow}>
+            <div style={styles.appTitle}>Remote Power</div>
+          </div>
+          <div style={styles.headerSub}>
+            Compte : {user?.email || "—"}
+          </div>
+        </div>
 
-      <header>
-        <h1>REMOTE POWER</h1>
-        {UserControls}
+        <div style={styles.headerRight}>
+          <button
+            style={styles.headerBtn}
+            onClick={openPairDialog}
+          >
+            Ajouter un MASTER
+          </button>
+          <button
+            style={styles.headerBtn}
+            onClick={loadAll}
+          >
+            Rafraîchir
+          </button>
+          {AuthControls}
+        </div>
       </header>
 
-      <main>
-        <div className="row" style={{justifyContent:"space-between"}}>
-          <span className="small">Compte : {user?.email || "—"}</span>
-          <div className="row">
-            <button className="btn primary" onClick={openPairDialog}>Ajouter un MASTER</button>
-            <button className="btn" onClick={loadAll}>Rafraîchir</button>
-          </div>
-        </div>
-
-        {devices.map(d=>{
-          const live=isLive(d)
-          const slaves=(nodesByMaster[d.id]||[])  // [{slave_mac, photo_url}]
-          return (
-            <section className="master" key={d.id}>
-              <div className="masterHead">
-                <div className="masterTitle">
-                  <strong style={{fontSize:16}}>MASTER</strong>
-                  <span className={`badge ${live?'ok':'ko'}`}>{live?'EN LIGNE':'HORS LIGNE'}</span>
-                </div>
-                <div className="row">
-                  <button className="btn tiny" onClick={()=>renameMaster(d.id)}>RENOMER</button>
-                  <button className="btn tiny danger" onClick={()=>deleteDevice(d.id)}>SUPPRIMER</button>
-                </div>
-              </div>
-
-              <div className="small" style={{opacity:.85}}>
-                ID : <code>{d.id}</code> &nbsp;•&nbsp; MAC : <code>{d.master_mac||'—'}</code> &nbsp;•&nbsp; Dernier contact : {fmtTS(d.last_seen)||'jamais'}
-              </div>
-
-              <div className="slaveGrid">
-                {slaves.map(({slave_mac: mac, photo_url})=>(
-                  <article className="slaveCard" key={mac}>
-                    <div className="slaveHead">
-                      <div className="row" style={{gap:6}}>
-                        <span style={{fontWeight:700}}>SLAVE</span>
-                        <span className="pill" title={mac}><span className="icon">⚙️</span><span className="mac">{mac}</span></span>
-                      </div>
-                    </div>
-
-                    <div className="slaveKnob">
-                      {photo_url
-                        ? <img src={photo_url} alt="photo slave" className="imgFit" />
-                        : <span style={{fontSize:11,opacity:.8}}>PHOTO</span>}
-                      <span className="slaveLed" id={`led-${mac}`}></span>
-                    </div>
-
-                    {/* Upload photo */}
-                    <div className="row" style={{justifyContent:"center",gap:8}}>
-                      <label className="btn tiny">
-                        Importer photo
-                        <input
-                          type="file"
-                          accept="image/*"
-                          style={{ display: "none" }}
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            try {
-                              await uploadSlavePhoto(d.id, mac, file);
-                              log(`Upload photo OK → ${mac}`);
-                              await refreshSlavesFor(d.id);
-                            } catch (err) {
-                              console.error(err);
-                              log(`Upload photo ❌ : ${err.message || err}`);
-                              alert(err.message || String(err));
-                            } finally {
-                              e.target.value = "";
-                            }
-                          }}
-                        />
-                      </label>
-                    </div>
-
-                    {/* Bouton power (impulsion IO) */}
-                    <div className="row" style={{justifyContent:"center"}}>
-                      <button
-                        className="btn"
-                        onClick={()=>{
-                          sendCmd(d.id,mac,"SLV_IO",{pin:DEFAULT_IO_PIN,mode:"OUT",value:1})
-                          const led=document.getElementById(`led-${mac}`); if(led){ led.style.background='#16a34a'; setTimeout(()=>led.style.background='#1f2937',600) }
-                        }}
-                        title="Impulsion IO"
-                      >⏻</button>
-                    </div>
-
-                    <div className="slaveActions">
-                      <button className="btn tiny" onClick={()=>sendCmd(d.id,mac,"SLV_RESET",{})}>RESET</button>
-                      <button className="btn tiny" onClick={()=>sendCmd(d.id,mac,"SLV_IO",{pin:DEFAULT_IO_PIN,mode:"OUT",value:0})}>OFF</button>
-                      <button className="btn tiny" style={{background:"#7c2d12"}} onClick={()=>sendCmd(d.id,mac,"SLV_FORCE_OFF",{})}>HARD STOP</button>
-                      <button className="btn tiny" style={{background:"#7f1d1d"}} onClick={()=>sendCmd(d.id,mac,"SLV_HARD_RESET",{ms:3000})}>HARD RESET</button>
-                    </div>
-                  </article>
-                ))}
-
-                {/* Tuile "ajouter un slave" (visuelle) */}
-                <div className="tileAdd" title="Ajouter un slave (pairing via bouton sur MASTER)">
-                  <div style={{fontSize:36,lineHeight:1}}>＋</div>
-                  <div className="small">Ajouter un SLAVE</div>
-                </div>
-              </div>
-
-              <div className="hr" />
-
-              <div className="row" style={{gap:8,flexWrap:"wrap"}}>
-                <button className="btn tiny" onClick={()=>sendCmd(d.id,null,"PULSE",{ms:500})}>Pulse 500 ms</button>
-                <button className="btn tiny" onClick={()=>sendCmd(d.id,null,"POWER_ON",{})}>Power ON</button>
-                <button className="btn tiny" onClick={()=>sendCmd(d.id,null,"POWER_OFF",{})}>Power OFF</button>
-                <button className="btn tiny" onClick={()=>sendCmd(d.id,null,"RESET",{})}>Reset</button>
-                <span className="right small">Nom : <strong>{d.name||d.id}</strong></span>
-              </div>
-
-              <div className="hr" />
-              <div className="cmdTitle">Commandes (20 dernières)</div>
-              <ul className="cmdList" ref={el=>{ if(el) cmdLists.current.set(d.id,el) }}/>
-            </section>
-          )
-        })}
+      {/* CONTENU PRINCIPAL */}
+      <main style={styles.mainContent}>
+        {devices.map((dev) => (
+          <MasterCard d={dev} key={dev.id} />
+        ))}
 
         {/* Journal global */}
-        <div>
-          <h3 style={{margin:"8px 0"}}>Journal</h3>
-          <div className="log" ref={logRef}>{lines.join("\n")}</div>
-        </div>
+        <section style={styles.journalCard}>
+          <div style={styles.journalTitle}>Journal</div>
+          <div style={styles.logBox} ref={logRef}>
+            {lines.join("\n")}
+          </div>
+        </section>
       </main>
 
-      {/* Pair-code dialog */}
-      {pair.open && (
-        <dialog open onClose={()=>setPair({open:false,code:null,expires_at:null})}>
-          <div style={{padding:16,display:"flex",flexDirection:"column",gap:10}}>
-            <h3>Appairer un MASTER</h3>
-            <div>Code : <code>{String(pair.code).padStart(6,"0")}</code>
-              {" "} (expire <span className="small">
-                {(()=>{
-                  const end = pair.expires_at ? new Date(pair.expires_at).getTime() : 0
-                  const l = Math.max(0, Math.floor((end - Date.now())/1000))
-                  return `${Math.floor(l/60)}:${String(l%60).padStart(2,'0')}`
-                })()}
-              </span>)
+      {/* PAIR DIALOG */}
+      {pairInfo.open && (
+        <div style={styles.dialogOverlay}>
+          <div style={styles.dialogCard}>
+            <div style={styles.dialogTitle}>
+              Appairer un MASTER
             </div>
-            <div className="small">Saisis ce code dans le portail Wi-Fi de l’ESP32.</div>
-            <div className="row" style={{justifyContent:"flex-end"}}>
-              <button className="btn" onClick={()=>setPair({open:false,code:null,expires_at:null})}>Fermer</button>
+            <div style={styles.smallText}>
+              Code :
+              <code
+                style={{
+                  fontWeight: 600,
+                  marginLeft: 6,
+                  marginRight: 6,
+                  fontSize: 13,
+                }}
+              >
+                {String(pairInfo.code).padStart(6, "0")}
+              </code>
+              (expire dans{" "}
+              <span style={{ fontWeight: 500 }}>
+                {pairCountdown || "0:00"}
+              </span>
+              )
+            </div>
+            <div style={styles.smallText}>
+              Saisis ce code dans le portail Wi-Fi de l’ESP32
+              MASTER lors de l’appairage.
+            </div>
+            <div style={styles.rowEnd}>
+              <button
+                style={styles.headerBtn}
+                onClick={closePairDialog}
+              >
+                Fermer
+              </button>
             </div>
           </div>
-        </dialog>
+        </div>
       )}
-    </>
-  )
+    </div>
+  );
 }
