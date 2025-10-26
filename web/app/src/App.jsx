@@ -29,7 +29,7 @@ const HAS_SLAVE_STATE = false;
 
 // image de fond
 const BACKGROUND_IMAGE_URL =
-  "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1600&q=60";
+  "https://blackstone.scene7.com/is/image/blackstone/alex-mNJ7c7-XCZQ-unsplash_editted?wid=1280&hei=853";
 
 /* =========================================================
    PALETTE / TOKENS
