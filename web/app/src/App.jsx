@@ -73,7 +73,7 @@ const styles = {
     boxSizing: "border-box",
 
     backgroundImage:
-      'radial-gradient(circle at 20% 20%, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 60%), radial-gradient(circle at 80% 30%, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 70%), url("https://free-3dtextureshd.com/wp-content/uploads/2024/03/207.jpg.webp")',
+      'radial-gradient(circle at 20% 20%, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 60%), radial-gradient(circle at 80% 30%, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 70%), url("https://blackstone.scene7.com/is/image/blackstone/alex-mNJ7c7-XCZQ-unsplash_editted?wid=1280&hei=853")',
     backgroundSize: "cover",
     backgroundPosition: "center",
     backgroundRepeat: "no-repeat",
