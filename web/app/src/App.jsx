@@ -16,7 +16,7 @@ const DEFAULT_IO_PIN = 26;
 
 /* Image de fond */
 const BG_URL =
-  "https://blackstone.scene7.com/is/image/blackstone/alex-mNJ7c7-XCZQ-unsplash_editted?wid=1280&hei=853";
+  "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1600&q=60";
 
 /* =========================
    STYLES GLOBAUX
@@ -90,7 +90,6 @@ html,body,#root {
   font-size: 12px;
   color: var(--text-dim);
 }
-
 .appSession {
   font-size: 11px;
   color: var(--text-dimmer);
@@ -395,7 +394,7 @@ html,body,#root {
   transform: scale(.96);
 }
 
-/* panneau info (MAC + rename local) */
+/* panneau info */
 .infoPanel {
   position: absolute;
   left: 8px;
@@ -448,7 +447,7 @@ html,body,#root {
   cursor:pointer;
 }
 
-/* menu "..." force off / hard reset */
+/* panneau "..." */
 .morePanel {
   position: absolute;
   right: 8px;
@@ -480,7 +479,7 @@ html,body,#root {
   background:rgba(0,0,0,0.07);
 }
 
-/* hr light dans master */
+/* hr light */
 .masterHr {
   width:100%;
   height:1px;
@@ -490,7 +489,7 @@ html,body,#root {
   margin-bottom:8px;
 }
 
-/* liste des commandes récentes */
+/* commandes récentes */
 .cmdSectionHeader {
   font-size:12px;
   font-weight:500;
@@ -544,7 +543,7 @@ html,body,#root {
   border:1px solid rgba(0,0,0,0.8);
 }
 
-/* dialog pairing (code) */
+/* dialog pairing */
 dialog[open] {
   border:1px solid rgba(0,0,0,0.25);
   border-radius:20px;
@@ -607,11 +606,11 @@ function isLiveDevice(dev) {
   return Date.now() - new Date(dev.last_seen) < LIVE_TTL_MS;
 }
 
-// petit format de secours si pas de friendly_name
+// fallback nom si pas de friendly_name
 function fallbackSlaveName(mac) {
   if (!mac) return "—";
   const parts = mac.split(":").map((p) => p.toUpperCase());
-  return parts.slice(-3).join(":"); // genre "AA:BB:CC"
+  return parts.slice(-3).join(":"); // ex: "AA:BB:CC"
 }
 
 /* =========================
@@ -650,7 +649,6 @@ function SlaveCard({
 
   return (
     <div className="slaveCard">
-      {/* top: info + ... */}
       <div className="slaveTopRow">
         <button className="infoBtn" onClick={onToggleInfo}>
           i
@@ -660,7 +658,6 @@ function SlaveCard({
         </button>
       </div>
 
-      {/* bloc nom + état + barre progression */}
       <div className="slaveNameBlock">
         <div className="slaveName">{displayName}</div>
         <div className="slavePcState" style={pcStateColor}>
@@ -687,7 +684,6 @@ function SlaveCard({
         </div>
       </div>
 
-      {/* boutons ronds */}
       <div className="slaveBtns">
         <button className="iconBtn" title="Impulsion IO" onClick={onIO}>
           ⏻
@@ -700,7 +696,6 @@ function SlaveCard({
         </button>
       </div>
 
-      {/* panneau info */}
       {infoOpen && (
         <div className="infoPanel">
           <div>
@@ -722,7 +717,6 @@ function SlaveCard({
         </div>
       )}
 
-      {/* panneau "..." */}
       {moreOpen && (
         <div className="morePanel">
           <button className="moreActionBtn" onClick={onForceOff}>
@@ -745,25 +739,24 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState(null);
 
-  /* ---------- data masters/slaves ---------- */
-  // devices = tableau des masters {id,name,master_mac,last_seen,...}
+  /* ---------- devices / slaves ---------- */
+  // devices = liste des masters
   const [devices, setDevices] = useState([]);
 
   // nodesByMaster = { masterId: [ { mac, friendly_name, pc_on }, ... ] }
   const [nodesByMaster, setNodesByMaster] = useState({});
 
-  /* ---------- UI state des slaves ---------- */
-  // slaveUI[mac] = { phase, infoOpen, moreOpen, editName }
+  // UI par slave (phase, infoOpen, moreOpen, editName...)
   const [slaveUI, setSlaveUI] = useState({});
 
-  /* ---------- Pair dialog ---------- */
+  // pair dialog
   const [pair, setPair] = useState({
     open: false,
     code: null,
     expires_at: null,
   });
 
-  /* ---------- logs ---------- */
+  // logs
   const [lines, setLines] = useState([]);
   const logRef = useRef(null);
   const log = (t) => {
@@ -775,7 +768,7 @@ export default function App() {
     }
   }, [lines]);
 
-  /* ---------- commandes affichées ---------- */
+  // liste des commandes par master pour affichage
   const cmdLists = useRef(new Map());
   function upsertCmdRow(masterId, c) {
     const ul = cmdLists.current.get(masterId);
@@ -798,7 +791,7 @@ export default function App() {
     }
   }
 
-  /* ---------- realtime refs ---------- */
+  // realtime refs
   const chDevices = useRef(null);
   const chNodes = useRef(null);
   const chCmds = useRef(null);
@@ -810,9 +803,9 @@ export default function App() {
     chDevices.current = chNodes.current = chCmds.current = null;
   }
 
-  /* =========================================================
-     helpers UI state par slave
-     ========================================================= */
+  /* =========================
+     UI helpers / per-slave state
+     ========================= */
   function bumpSlavePhase(mac, newPhase) {
     setSlaveUI((prev) => ({
       ...prev,
@@ -888,8 +881,6 @@ export default function App() {
       log(`rename ignoré (vide) pour ${mac}`);
       return;
     }
-
-    // on enregistre en base: update nodes set friendly_name=... where master_id=... and slave_mac=...
     const { error } = await sb
       .from("nodes")
       .update({ friendly_name: newName })
@@ -902,7 +893,6 @@ export default function App() {
 
     log(`rename OK ${mac} -> ${newName}`);
 
-    // on met à jour l'état local nodesByMaster
     setNodesByMaster((prev) => {
       const list = prev[masterId] || [];
       const updated = list.map((sl) =>
@@ -911,7 +901,6 @@ export default function App() {
       return { ...prev, [masterId]: updated };
     });
 
-    // on ferme le panneau d'info après rename ?
     setSlaveUI((prev) => ({
       ...prev,
       [mac]: {
@@ -921,9 +910,80 @@ export default function App() {
     }));
   }
 
-  /* =========================================================
-     fetch/refresh DB
-     ========================================================= */
+  /* =========================
+     DB fetch helpers
+     ========================= */
+
+  // Essaie de SELECT avec pc_on. Si ça échoue (colonne absente),
+  // retente sans pc_on pour ne pas bloquer l'UI.
+  async function fetchNodesAllMasters() {
+    // tentative avec pc_on
+    let { data: nodes, error } = await sb
+      .from("nodes")
+      .select("master_id,slave_mac,friendly_name,pc_on");
+
+    if (error) {
+      // fallback sans pc_on
+      log("Err nodes (avec pc_on): " + error.message + " -> retry sans pc_on");
+      const fallback = await sb
+        .from("nodes")
+        .select("master_id,slave_mac,friendly_name");
+      nodes = fallback.data;
+      error = fallback.error;
+    }
+
+    if (error) {
+      log("Err nodes (fallback): " + error.message);
+      return {};
+    }
+
+    const map = {};
+    (nodes || []).forEach((n) => {
+      if (!map[n.master_id]) map[n.master_id] = [];
+      map[n.master_id].push({
+        mac: n.slave_mac,
+        friendly_name: n.friendly_name || null,
+        pc_on:
+          typeof n.pc_on === "boolean" ? n.pc_on : undefined,
+      });
+    });
+    return map;
+  }
+
+  async function fetchNodesForMaster(masterId) {
+    // tentative avec pc_on
+    let { data, error } = await sb
+      .from("nodes")
+      .select("slave_mac,friendly_name,pc_on")
+      .eq("master_id", masterId);
+
+    if (error) {
+      log(
+        "Err nodes refresh (avec pc_on): " +
+          error.message +
+          " -> retry sans pc_on"
+      );
+      const fallback = await sb
+        .from("nodes")
+        .select("slave_mac,friendly_name")
+        .eq("master_id", masterId);
+      data = fallback.data;
+      error = fallback.error;
+    }
+
+    if (error) {
+      log("Err nodes refresh (fallback): " + error.message);
+      return [];
+    }
+
+    return (data || []).map((x) => ({
+      mac: x.slave_mac,
+      friendly_name: x.friendly_name || null,
+      pc_on:
+        typeof x.pc_on === "boolean" ? x.pc_on : undefined,
+    }));
+  }
+
   async function loadAll() {
     // masters
     const { data: devs, error: ed } = await sb
@@ -937,56 +997,21 @@ export default function App() {
     }
     setDevices(devs || []);
 
-    // slaves
-    // IMPORTANT: on récupère maintenant friendly_name (et pc_on si dispo)
-    const { data: nodes, error: en } = await sb
-      .from("nodes")
-      .select("master_id,slave_mac,friendly_name,pc_on");
-
-    if (en) {
-      log("Err nodes: " + en.message);
-      return;
-    }
-
-    const map = {};
-    (nodes || []).forEach((n) => {
-      if (!map[n.master_id]) map[n.master_id] = [];
-      map[n.master_id].push({
-        mac: n.slave_mac,
-        friendly_name: n.friendly_name || null,
-        pc_on:
-          typeof n.pc_on === "boolean"
-            ? n.pc_on
-            : undefined, // si pas de colonne pc_on ça restera undefined
-      });
-    });
+    // slaves (tous masters)
+    const map = await fetchNodesAllMasters();
     setNodesByMaster(map);
 
-    // commandes pour chaque master
+    // commandes
     for (const d of devs || []) {
       await refreshCommands(d.id);
     }
   }
 
   async function refreshSlavesFor(masterId) {
-    const { data, error } = await sb
-      .from("nodes")
-      .select("slave_mac,friendly_name,pc_on")
-      .eq("master_id", masterId);
-
-    if (error) {
-      log("Err nodes refresh: " + error.message);
-      return;
-    }
-
+    const list = await fetchNodesForMaster(masterId);
     setNodesByMaster((m) => ({
       ...m,
-      [masterId]: (data || []).map((x) => ({
-        mac: x.slave_mac,
-        friendly_name: x.friendly_name || null,
-        pc_on:
-          typeof x.pc_on === "boolean" ? x.pc_on : undefined,
-      })),
+      [masterId]: list,
     }));
   }
 
@@ -1010,22 +1035,19 @@ export default function App() {
     });
   }
 
-  /* =========================================================
-     send commands
-     ========================================================= */
+  /* =========================
+     COMMANDS to Supabase
+     ========================= */
   async function sendCmd(mid, mac, action, payload = {}) {
-    // feedback immédiat si slave ciblé
     if (mac) {
       bumpSlavePhase(mac, "queue");
     }
-
     const { error } = await sb.from("commands").insert({
       master_id: mid,
       target_mac: mac || null,
       action,
       payload,
     });
-
     if (error) {
       log("cmd err: " + error.message);
     } else {
@@ -1047,7 +1069,6 @@ export default function App() {
       data: { session },
       error: sessErr,
     } = await sb.auth.getSession();
-
     if (sessErr) {
       log("auth session err: " + sessErr.message);
     }
@@ -1055,7 +1076,6 @@ export default function App() {
       alert("Non connecté");
       return;
     }
-
     const r = await fetch(
       `${SUPABASE_URL}/functions/v1/release_and_delete`,
       {
@@ -1114,11 +1134,10 @@ export default function App() {
     }
   }
 
-  /* =========================================================
+  /* =========================
      AUTH bootstrap + realtime
-     ========================================================= */
+     ========================= */
   useEffect(() => {
-    // écoute auth
     const sub = sb.auth.onAuthStateChange((ev, session) => {
       setUser(session?.user || null);
       setAuthReady(true);
@@ -1133,15 +1152,12 @@ export default function App() {
       }
     });
 
-    // session initiale
     (async () => {
       const { data: { session }, error: sessErr } =
         await sb.auth.getSession();
-
       if (sessErr) {
         log("auth init err: " + sessErr.message);
       }
-
       setUser(session?.user || null);
       setAuthReady(true);
 
@@ -1215,7 +1231,6 @@ export default function App() {
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "nodes" },
         (p) => {
-          // si quelqu'un rename friendly_name ailleurs → reflect
           log(`~ node ${p.new.slave_mac} (${p.new.master_id}) update`);
           refreshSlavesFor(p.new.master_id);
         }
@@ -1254,11 +1269,10 @@ export default function App() {
       .subscribe();
   }
 
-  /* =========================================================
+  /* =========================
      RENDER
-     ========================================================= */
+     ========================= */
 
-  // si auth pas encore déterminée → splash
   if (!authReady) {
     return (
       <>
@@ -1284,7 +1298,6 @@ export default function App() {
     );
   }
 
-  // header right controls (login/logout etc)
   const headerRight = (
     <div className="appHeader-right">
       <div style={{ color: "var(--text-dim)" }}>
@@ -1358,16 +1371,12 @@ export default function App() {
 
       {/* CONTENU */}
       <main className="appMainOuter">
-        {/* Pour chaque master */}
         {devices.map((dev) => {
           const live = isLiveDevice(dev);
-
-          // liste {mac, friendly_name, pc_on}
           const slaveList = nodesByMaster[dev.id] || [];
 
           return (
             <section className="masterCard" key={dev.id}>
-              {/* top row master */}
               <div className="masterTopRow">
                 <div className="masterLeft">
                   <div className="masterNameRow">
@@ -1412,7 +1421,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* actions master */}
                 <div className="masterActions">
                   <div className="masterButtonsRow">
                     <button
@@ -1472,7 +1480,6 @@ export default function App() {
 
               <div className="masterHr" />
 
-              {/* SLAVES GRID */}
               <div className="slaveGridOuter">
                 <div className="slaveGrid">
                   {slaveList.map((sl) => {
@@ -1491,7 +1498,7 @@ export default function App() {
                         key={mac}
                         mac={mac}
                         displayName={nameToShow}
-                        pcOn={sl.pc_on} // si colonne pc_on existe
+                        pcOn={sl.pc_on}
                         phase={ui.phase || null}
                         infoOpen={!!ui.infoOpen}
                         moreOpen={!!ui.moreOpen}
@@ -1534,7 +1541,6 @@ export default function App() {
 
               <div className="masterHr" />
 
-              {/* COMMANDES RÉCENTES */}
               <div className="cmdSectionHeader">
                 Commandes (20 dernières)
               </div>
@@ -1548,7 +1554,6 @@ export default function App() {
           );
         })}
 
-        {/* Journal global */}
         <div className="logWrap">
           <p className="logTitle">Journal</p>
           <div className="logBox" ref={logRef}>
@@ -1557,7 +1562,6 @@ export default function App() {
         </div>
       </main>
 
-      {/* DIALOG PAIRING */}
       {pair.open && (
         <dialog
           open
