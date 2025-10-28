@@ -49,7 +49,7 @@ html, body, #root {
   color: var(--text-main);
 }
 
-/* ==== FOND GLOBAL WITH IMAGE ==== */
+/* ==== FOND GLOBAL ==== */
 .appBg {
   min-height: 100%;
   background-color: #f5f6fa;
@@ -60,7 +60,8 @@ html, body, #root {
   background-size: cover;
   background-position: center;
   background-attachment: fixed;
-  padding-top: 64px; /* espace sous la barre du haut */
+  padding-top: 80px; /* espace sous la barre du haut */
+  padding-bottom: 60px;
 }
 
 /* ==== BARRE TOP FIXE ==== */
@@ -97,6 +98,7 @@ html, body, #root {
 .topRight {
   display:flex;
   align-items:center;
+  flex-wrap:wrap;
   gap:10px;
   font-size:13px;
   color:var(--text-main);
@@ -138,52 +140,20 @@ html, body, #root {
   background:#1e4ed8;
 }
 
-/* ==== PAGE CONTENT WRAPPER ==== */
+/* ==== WRAPPER DE PAGE ==== */
 .pageContent {
   max-width:1400px;
-  margin:24px auto 60px auto;
-  padding:0 16px 40px 16px;
+  margin:0 auto;
+  padding:0 16px;
   display:flex;
   flex-direction:column;
   gap:24px;
 }
 
-/* ==== SECTIONS TITLES ==== */
-.sectionBlock {
-  display:flex;
-  flex-direction:column;
-  gap:12px;
-}
-.sectionHeader {
-  display:flex;
-  flex-wrap:wrap;
-  align-items:flex-end;
-  justify-content:space-between;
-  row-gap:8px;
-}
-.sectionTitle {
-  font-size:15px;
-  font-weight:600;
-  color:var(--text-main);
-  letter-spacing:-0.03em;
-  display:flex;
-  flex-direction:column;
-  line-height:1.25;
-}
-.sectionSubtitle {
-  font-size:12px;
-  font-weight:400;
-  color:var(--text-dim);
-}
-.sectionActions {
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-  font-size:12px;
-}
-
-/* ==== GLASS CARD ==== */
-.glassCard {
+/* =========================================================
+   PANNEAUX (Groupes / Masters / Journal)
+   ========================================================= */
+.panelOuter {
   background: var(--glass-bg);
   border:1px solid var(--glass-stroke);
   border-radius: var(--card-radius-lg);
@@ -192,26 +162,59 @@ html, body, #root {
   -webkit-backdrop-filter: blur(20px) saturate(1.3);
   padding:16px;
   color:var(--text-main);
-}
-
-/* ==== GROUP LIST LAYOUT ==== */
-.groupsWrap {
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr));
+  max-width:1100px;
+  margin:0 auto;
+  display:flex;
+  flex-direction:column;
   gap:16px;
 }
 
-/* ==== EACH GROUP CARD ==== */
+/* Header interne du panneau */
+.panelHeader {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-end;
+  justify-content:space-between;
+  row-gap:8px;
+}
+.panelTitle {
+  font-size:15px;
+  font-weight:600;
+  color:var(--text-main);
+  letter-spacing:-0.03em;
+  display:flex;
+  flex-direction:column;
+  line-height:1.25;
+}
+.panelSubtitle {
+  font-size:12px;
+  font-weight:400;
+  color:var(--text-dim);
+}
+
+/* =========================================================
+   GROUPES
+   ========================================================= */
+.groupsListRow {
+  display:flex;
+  flex-wrap:wrap;
+  gap:16px;
+}
+
+/* Carte d'un groupe */
 .groupCard {
   background: var(--glass-bg-strong);
   border:1px solid var(--glass-stroke);
   border-radius: var(--card-radius-md);
   padding:16px;
+  min-width:260px;
+  flex:0 1 320px;
   min-height:180px;
   display:flex;
   flex-direction:column;
   justify-content:space-between;
   position:relative;
+  color:var(--text-main);
 }
 .groupTopRow {
   display:flex;
@@ -268,8 +271,6 @@ html, body, #root {
 .subtleBtn:hover {
   color:var(--text-main);
 }
-
-/* overflow list of "on" slaves button */
 .listOnBtn {
   background:transparent;
   border:0;
@@ -281,7 +282,9 @@ html, body, #root {
 }
 .listOnBtn:hover { color:#1e4ed8; }
 
-/* ==== MASTER CARD ==== */
+/* =========================================================
+   MASTER CARD + SLAVES
+   ========================================================= */
 .masterCardOuter {
   background: var(--glass-bg);
   border:1px solid var(--glass-stroke);
@@ -295,8 +298,6 @@ html, body, #root {
   display:flex;
   flex-direction:column;
   gap:16px;
-  max-width:1100px;
-  margin:0 auto; /* centré dans la page */
 }
 .masterHeadRow {
   display:flex;
@@ -358,15 +359,15 @@ html, body, #root {
   background:rgba(0,0,0,0.07);
 }
 
-/* ==== SLAVES GRID ==== */
+/* ==== Slaves grid */
 .slavesGrid {
   display:flex;
   flex-wrap:wrap;
-  justify-content:center; /* <-- IMPORTANT: centred */
+  justify-content:center;
   gap:16px;
 }
 
-/* ==== SLAVE CARD ==== */
+/* Carte Slave */
 .slaveCard {
   position:relative;
   flex:0 1 180px;
@@ -426,6 +427,8 @@ html, body, #root {
   color:var(--text-dim);
   margin-top:4px;
 }
+
+/* barre de progression noire */
 .progressOuter {
   width:100%;
   height:4px;
@@ -479,13 +482,23 @@ html, body, #root {
   line-height:42px;
 }
 
-/* ==== JOURNAL GÉNÉRAL ==== */
-.journalBlock {
+/* =========================================================
+   JOURNAL
+   ========================================================= */
+.journalPanelOuter {
+  background: var(--glass-bg);
+  border:1px solid var(--glass-stroke);
+  border-radius: var(--card-radius-lg);
+  box-shadow:0 20px 60px rgba(0,0,0,0.25);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  padding:16px;
+  color:var(--text-main);
   max-width:1100px;
   margin:0 auto;
   display:flex;
   flex-direction:column;
-  gap:8px;
+  gap:12px;
 }
 .journalTitle {
   font-size:13px;
@@ -510,7 +523,9 @@ html, body, #root {
   white-space:pre-wrap;
 }
 
-/* ==== MODALS (pair, membres groupe, liste ON, menu "...") ==== */
+/* =========================================================
+   MODALS
+   ========================================================= */
 .modalBackdrop {
   position:fixed;
   inset:0;
@@ -608,8 +623,6 @@ html, body, #root {
   line-height:1.4;
   box-shadow:inset 0 2px 4px rgba(0,0,0,0.06);
 }
-
-/* mini menu pour "..." slave actions avancées */
 .moreMenuList {
   display:flex;
   flex-direction:column;
@@ -632,8 +645,6 @@ html, body, #root {
   background:#fee2e2;
   color:#991b1b;
 }
-
-/* pair code line */
 .pairCodeBox {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size:20px;
@@ -647,7 +658,6 @@ html, body, #root {
   min-width:100px;
   text-align:center;
 }
-
 `;
 
 /* =========================================================
@@ -655,8 +665,7 @@ html, body, #root {
    ========================================================= */
 function fmtTS(s) {
   if (!s) return "—";
-  const d = new Date(s);
-  return d.toLocaleString();
+  return new Date(s).toLocaleString();
 }
 function isMasterLive(dev) {
   if (!dev.last_seen) return false;
@@ -665,79 +674,70 @@ function isMasterLive(dev) {
 }
 
 /* =========================================================
-   COMPOSANT PRINCIPAL
+   APP
    ========================================================= */
 export default function App() {
-  /* ---------- AUTH STATE ---------- */
+  /* ---------- AUTH ---------- */
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
 
-  /* ---------- DATA STATE ---------- */
-  const [devices, setDevices] = useState([]); // masters
-  // nodesByMaster[master_id] = [ { mac, nameShort, pc_on } , ... ]
+  /* ---------- DATA ---------- */
+  const [devices, setDevices] = useState([]);
+  // nodesByMaster[master_id] = [ { mac, nameShort, pc_on }, ... ]
   const [nodesByMaster, setNodesByMaster] = useState({});
-
-  // groups list [{id,name},...]
+  // groups + membres
   const [groups, setGroups] = useState([]);
-  // groupMembers[group_id] = [ { master_id, mac } , ...]
+  // groupMembers[group_id] = [ { master_id, mac }, ... ]
   const [groupMembers, setGroupMembers] = useState({});
 
-  /* ---------- CMD ACTIVITY PAR SLAVE ---------- */
-  // cmdActivity[slaveMac] = { phase:"idle"|"pending"|"acked"|"error", ts:number }
+  /* activité cmd par slaveMac */
+  // cmdActivity[mac] = { phase:"queued"/"sent"/"acked"/"error", ts:number }
   const [cmdActivity, setCmdActivity] = useState({});
 
-  /* ---------- LOG UI ---------- */
+  /* logs UI */
   const [lines, setLines] = useState([]);
   const logRef = useRef(null);
   function addLog(txt) {
-    setLines((prev) => [
-      ...prev,
-      new Date().toLocaleTimeString() + "  " + txt,
-    ]);
+    setLines(prev => [...prev, `${new Date().toLocaleTimeString()}  ${txt}`]);
   }
-  useEffect(() => {
-    if (logRef.current) {
+  useEffect(()=>{
+    if(logRef.current){
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
-  }, [lines]);
+  },[lines]);
 
-  /* ---------- REALTIME CHANNEL REFS ---------- */
+  /* realtime refs */
   const chDevices = useRef(null);
-  const chNodes = useRef(null);
-  const chGroups = useRef(null);
-  const chCmds = useRef(null);
+  const chNodes   = useRef(null);
+  const chGroups  = useRef(null);
+  const chCmds    = useRef(null);
 
-  /* ---------- MODALS / UI ---------- */
-  // Ajouter MASTER (pair-code)
+  /* MODALS / UI STATE */
+  // pair master
   const [pairInfo, setPairInfo] = useState({
-    open: false,
-    code: null,
-    expires_at: null,
+    open:false,
+    code:null,
+    expires_at:null
   });
 
-  // Slave action "..." menu
+  // slave "..." menu
   const [openSlaveMoreMac, setOpenSlaveMoreMac] = useState(null);
   const [openSlaveMoreMaster, setOpenSlaveMoreMaster] = useState(null);
 
-  // Affichage liste des slaves allumés d'un groupe
+  // liste ON d'un groupe
   const [listOnGroupId, setListOnGroupId] = useState(null);
 
-  // Édition membres d’un groupe
+  // édition membres groupe
   const [editGroupId, setEditGroupId] = useState(null);
-
-  // Sélection temporaire des membres dans l'éditeur de groupe
-  // (Set de "master_id|mac") => vit au niveau App pour survivre aux rerenders
+  // persistance des cases cochées pendant édition
   const [editMembersSel, setEditMembersSel] = useState(new Set());
 
-  /* =========================================================
-     AUTH BOOTSTRAP
-     ========================================================= */
-  useEffect(() => {
-    // écoute des changements auth
-    const sub = sb.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null);
+  /* ---------- AUTH BOOTSTRAP ---------- */
+  useEffect(()=>{
+    const sub = sb.auth.onAuthStateChange((_event, session)=>{
+      setUser(session?.user||null);
       setAuthReady(true);
-      if (session?.user) {
+      if(session?.user){
         attachRealtime();
         loadAllData();
       } else {
@@ -749,149 +749,122 @@ export default function App() {
       }
     });
 
-    // session initiale
-    (async () => {
-      const { data: { session } } = await sb.auth.getSession();
-      setUser(session?.user || null);
+    (async()=>{
+      const { data:{session} } = await sb.auth.getSession();
+      setUser(session?.user||null);
       setAuthReady(true);
-      if (session?.user) {
+      if(session?.user){
         attachRealtime();
         loadAllData();
       }
     })();
 
-    return () => {
-      try {
-        sub.data.subscription.unsubscribe();
-      } catch {}
+    return ()=>{
+      try { sub.data.subscription.unsubscribe(); } catch{}
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  },[]); // eslint-disable-line
 
-  /* =========================================================
-     REALTIME
-     ========================================================= */
-  function cleanupRealtime() {
-    if (chDevices.current) sb.removeChannel(chDevices.current);
-    if (chNodes.current)   sb.removeChannel(chNodes.current);
-    if (chGroups.current)  sb.removeChannel(chGroups.current);
-    if (chCmds.current)    sb.removeChannel(chCmds.current);
+  /* ---------- REALTIME ---------- */
+  function cleanupRealtime(){
+    if(chDevices.current) sb.removeChannel(chDevices.current);
+    if(chNodes.current)   sb.removeChannel(chNodes.current);
+    if(chGroups.current)  sb.removeChannel(chGroups.current);
+    if(chCmds.current)    sb.removeChannel(chCmds.current);
     chDevices.current = chNodes.current = chGroups.current = chCmds.current = null;
   }
 
-  function attachRealtime() {
+  function attachRealtime(){
     cleanupRealtime();
 
-    // devices
     chDevices.current = sb.channel("rt:devices")
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'devices' },
-        (p) => {
-          addLog(`+ device ${p.new.id}`);
-          setDevices((ds) => [p.new, ...ds]);
-        }
-      )
-      .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'devices' },
-        (p) => {
-          const d = p.new;
-          setDevices((ds) => ds.map(x => x.id === d.id ? { ...x, ...d } : x));
-        }
-      )
-      .on('postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'devices' },
-        (p) => {
-          addLog(`- device ${p.old.id}`);
-          setDevices((ds) => ds.filter(x => x.id !== p.old.id));
-        }
-      )
-      .subscribe();
+    .on('postgres_changes',
+      {event:'INSERT',schema:'public',table:'devices'},
+      p=>{
+        addLog(`+ device ${p.new.id}`);
+        setDevices(ds=>[p.new,...ds]);
+      }
+    )
+    .on('postgres_changes',
+      {event:'UPDATE',schema:'public',table:'devices'},
+      p=>{
+        const d=p.new;
+        setDevices(ds=>ds.map(x=>x.id===d.id?{...x,...d}:x));
+      }
+    )
+    .on('postgres_changes',
+      {event:'DELETE',schema:'public',table:'devices'},
+      p=>{
+        addLog(`- device ${p.old.id}`);
+        setDevices(ds=>ds.filter(x=>x.id!==p.old.id));
+      }
+    )
+    .subscribe();
 
-    // nodes
     chNodes.current = sb.channel("rt:nodes")
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'nodes' },
-        (p) => {
-          addLog(`+ node ${p.new.slave_mac} → ${p.new.master_id}`);
-          reloadNodes(); // on recharge la liste des slaves + états
-        }
-      )
-      .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'nodes' },
-        (p) => {
-          // ex: pc_on bouge
-          reloadNodes();
-        }
-      )
-      .on('postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'nodes' },
-        (p) => {
-          addLog(`- node ${p.old.slave_mac} ← ${p.old.master_id}`);
-          reloadNodes();
-        }
-      )
-      .subscribe();
+    .on('postgres_changes',
+      {event:'INSERT',schema:'public',table:'nodes'},
+      _p=>{
+        addLog(`+ node`);
+        reloadNodes();
+      }
+    )
+    .on('postgres_changes',
+      {event:'UPDATE',schema:'public',table:'nodes'},
+      _p=>{
+        reloadNodes();
+      }
+    )
+    .on('postgres_changes',
+      {event:'DELETE',schema:'public',table:'nodes'},
+      _p=>{
+        addLog(`- node`);
+        reloadNodes();
+      }
+    )
+    .subscribe();
 
-    // groups + group_members (on écoute 2 tables via un même channel)
     chGroups.current = sb.channel("rt:groups-and-members")
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'groups' },
-        (_p) => {
-          reloadGroups();
-        }
-      )
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'group_members' },
-        (_p) => {
-          reloadGroups();
-        }
-      )
-      .subscribe();
+    .on('postgres_changes',
+      {event:'*',schema:'public',table:'groups'},
+      _p=>{ reloadGroups(); }
+    )
+    .on('postgres_changes',
+      {event:'*',schema:'public',table:'group_members'},
+      _p=>{ reloadGroups(); }
+    )
+    .subscribe();
 
-    // commands (pour activité / ack etc.)
     chCmds.current = sb.channel("rt:commands")
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'commands' },
-        (p) => {
-          handleCommandRealtime(p.new);
-        }
-      )
-      .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'commands' },
-        (p) => {
-          handleCommandRealtime(p.new);
-        }
-      )
-      .subscribe();
+    .on('postgres_changes',
+      {event:'INSERT',schema:'public',table:'commands'},
+      p=>{ handleCommandRealtime(p.new); }
+    )
+    .on('postgres_changes',
+      {event:'UPDATE',schema:'public',table:'commands'},
+      p=>{ handleCommandRealtime(p.new); }
+    )
+    .subscribe();
   }
 
-  // on reçoit un event commande pour mettre à jour barre noire (acked / error...)
-  function handleCommandRealtime(cmdRow) {
-    // si commande vers un slave précis → on marque son activité
-    if (cmdRow.target_mac) {
-      setCmdActivity((map) => {
-        const next = { ...map };
-        // status peut être 'queued', 'sent', 'acked', 'error'
-        const phase = cmdRow.status || "queued";
-        next[cmdRow.target_mac] = {
-          phase,
-          ts: Date.now(),
+  function handleCommandRealtime(cmdRow){
+    if(cmdRow.target_mac){
+      setCmdActivity(map=>{
+        const next={...map};
+        next[cmdRow.target_mac]={
+          phase: cmdRow.status || "queued",
+          ts:Date.now()
         };
         return next;
       });
     }
-    // log global
     addLog(
-      `cmd ${cmdRow.action} (${cmdRow.status}) → ${
-        cmdRow.master_id
-      }${cmdRow.target_mac ? " ▶ " + cmdRow.target_mac : ""}`
+      `cmd ${cmdRow.action} (${cmdRow.status}) → ${cmdRow.master_id}`+
+      (cmdRow.target_mac?` ▶ ${cmdRow.target_mac}`:"")
     );
   }
 
-  /* =========================================================
-     LOAD DATA
-     ========================================================= */
-  async function loadAllData() {
+  /* ---------- LOAD DATA ---------- */
+  async function loadAllData(){
     await Promise.all([
       reloadDevices(),
       reloadNodes(),
@@ -899,293 +872,224 @@ export default function App() {
     ]);
   }
 
-  async function reloadDevices() {
-    const { data, error } = await sb
+  async function reloadDevices(){
+    const {data,error}=await sb
       .from("devices")
       .select("id,name,master_mac,last_seen,online")
-      .order("created_at", { ascending: false });
-    if (error) {
-      addLog("Err devices: " + error.message);
-      return;
-    }
-    setDevices(data || []);
+      .order("created_at",{ascending:false});
+    if(error){ addLog("Err devices: "+error.message); return; }
+    setDevices(data||[]);
   }
 
-  async function reloadNodes() {
-    // On récupère le friendly_name et l'état pc_on
-    const { data, error } = await sb
+  async function reloadNodes(){
+    const {data,error}=await sb
       .from("nodes")
       .select("master_id,slave_mac,friendly_name,pc_on");
-    if (error) {
-      addLog("Err nodes: " + error.message);
-      return;
-    }
-    const map = {};
-    (data || []).forEach((row) => {
-      const mid = row.master_id;
-      if (!map[mid]) map[mid] = [];
-      map[mid].push({
+    if(error){ addLog("Err nodes: "+error.message); return; }
+    const map={};
+    (data||[]).forEach(row=>{
+      if(!map[row.master_id]) map[row.master_id]=[];
+      map[row.master_id].push({
         mac: row.slave_mac,
         nameShort: row.friendly_name || row.slave_mac,
-        pc_on: !!row.pc_on,
+        pc_on: !!row.pc_on
       });
     });
     setNodesByMaster(map);
   }
 
-  async function reloadGroups() {
-    const { data: grps, error: eg } = await sb
+  async function reloadGroups(){
+    const {data:grps,error:eg}=await sb
       .from("groups")
       .select("id,name")
-      .order("created_at", { ascending: true });
-    if (eg) {
-      addLog("Err groups: " + eg.message);
-      return;
-    }
-    const { data: gm, error: em } = await sb
+      .order("created_at",{ascending:true});
+    if(eg){ addLog("Err groups: "+eg.message); return; }
+
+    const {data:gm,error:em}=await sb
       .from("group_members")
       .select("group_id,master_id,slave_mac");
-    if (em) {
-      addLog("Err group_members: " + em.message);
-      return;
-    }
-    const memMap = {};
-    (gm || []).forEach((m) => {
-      if (!memMap[m.group_id]) memMap[m.group_id] = [];
+    if(em){ addLog("Err group_members: "+em.message); return; }
+
+    const memMap={};
+    (gm||[]).forEach(m=>{
+      if(!memMap[m.group_id]) memMap[m.group_id]=[];
       memMap[m.group_id].push({
-        master_id: m.master_id,
-        mac: m.slave_mac,
+        master_id:m.master_id,
+        mac:m.slave_mac
       });
     });
 
-    setGroups(grps || []);
+    setGroups(grps||[]);
     setGroupMembers(memMap);
   }
 
-  // recharger un seul groupe après modif
-  async function reloadSingleGroup(groupId) {
-    // recharge tout pour rester simple
+  async function reloadSingleGroup(groupId){
     await reloadGroups();
   }
 
-  /* =========================================================
-     COMMANDES / ACTIONS BACKEND
-     ========================================================= */
-  async function sendCmd(masterId, targetMac, action, payload = {}) {
-    // on note l'activité du slave direct en phase "queued"
-    if (targetMac) {
-      setCmdActivity((map) => {
-        const next = { ...map };
-        next[targetMac] = { phase: "queued", ts: Date.now() };
+  /* ---------- COMMANDES ---------- */
+  async function sendCmd(masterId,targetMac,action,payload={}){
+    if(targetMac){
+      setCmdActivity(map=>{
+        const next={...map};
+        next[targetMac]={phase:"queued",ts:Date.now()};
         return next;
       });
     }
 
-    const { error } = await sb.from("commands").insert({
-      master_id: masterId,
-      target_mac: targetMac || null,
+    const {error}=await sb.from("commands").insert({
+      master_id:masterId,
+      target_mac:targetMac||null,
       action,
-      payload,
+      payload
     });
-    if (error) {
-      addLog("cmd err: " + error.message);
-      // si erreur immédiate -> marquer error
-      if (targetMac) {
-        setCmdActivity((map) => {
-          const next = { ...map };
-          next[targetMac] = { phase: "error", ts: Date.now() };
+    if(error){
+      addLog("cmd err: "+error.message);
+      if(targetMac){
+        setCmdActivity(map=>{
+          const next={...map};
+          next[targetMac]={phase:"error",ts:Date.now()};
           return next;
         });
       }
       return;
     }
-    addLog(
-      `[cmd] ${action} → ${masterId}${
-        targetMac ? " ▶ " + targetMac : ""
-      }`
-    );
+    addLog(`[cmd] ${action} → ${masterId}${targetMac?" ▶ "+targetMac:""}`);
   }
 
-  async function renameMaster(masterId) {
-    const name = prompt("Nouveau nom du master ?", "");
-    if (!name) return;
-    const { error } = await sb
-      .from("devices")
-      .update({ name })
-      .eq("id", masterId);
-    if (error) alert(error.message);
-    else addLog(`Renommé ${masterId} → ${name}`);
+  async function renameMaster(mid){
+    const name=prompt("Nouveau nom du master ?","");
+    if(!name)return;
+    const {error}=await sb.from("devices").update({name}).eq("id",mid);
+    if(error) alert(error.message);
+    else addLog(`Renommé ${mid} → ${name}`);
   }
 
-  async function deleteMaster(masterId) {
-    if (!confirm(`Supprimer ${masterId} ?`)) return;
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) {
-      alert("Non connecté");
-      return;
-    }
-    const r = await fetch(
+  async function deleteMaster(mid){
+    if(!confirm(`Supprimer ${mid} ?`)) return;
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session){alert("Non connecté");return;}
+    const r=await fetch(
       `${SUPABASE_URL}/functions/v1/release_and_delete`,
       {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: SUPA_ANON_KEY,
-          Authorization: `Bearer ${session.access_token}`,
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          apikey:SUPA_ANON_KEY,
+          Authorization:`Bearer ${session.access_token}`
         },
-        body: JSON.stringify({ master_id: masterId }),
+        body:JSON.stringify({ master_id:mid })
       }
     );
     addLog(
       r.ok
-        ? `MASTER supprimé : ${masterId}`
-        : `❌ Suppression : ${await r.text()}`
+        ?`MASTER supprimé : ${mid}`
+        :`❌ Suppression : ${await r.text()}`
     );
   }
 
-  async function openPairDialog() {
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) {
-      alert("Non connecté");
-      return;
-    }
-    try {
-      const r = await fetch(
+  async function openPairDialog(){
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session){alert("Non connecté");return;}
+    try{
+      const r=await fetch(
         `${SUPABASE_URL}/functions/v1/create_pair_code`,
         {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: SUPA_ANON_KEY,
-            Authorization: `Bearer ${session.access_token}`,
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json",
+            apikey:SUPA_ANON_KEY,
+            Authorization:`Bearer ${session.access_token}`
           },
-          body: JSON.stringify({ ttl_minutes: 10 }),
+          body:JSON.stringify({ttl_minutes:10})
         }
       );
-      if (!r.ok) {
-        alert(await r.text());
-        return;
-      }
-      const { code, expires_at } = await r.json();
-      setPairInfo({
-        open: true,
-        code,
-        expires_at,
-      });
+      if(!r.ok){ alert(await r.text()); return; }
+      const {code,expires_at}=await r.json();
+      setPairInfo({open:true,code,expires_at});
       addLog(`Pair-code ${code}`);
-    } catch (e) {
-      addLog("Erreur pair-code: " + e.message);
+    }catch(e){
+      addLog("Erreur pair-code: "+e.message);
     }
   }
-
-  function closePairDialog() {
-    setPairInfo({ open: false, code: null, expires_at: null });
+  function closePairDialog(){
+    setPairInfo({open:false,code:null,expires_at:null});
   }
 
-  /* GROUP CRUD */
-  async function createGroup() {
-    const name = prompt("Nom du nouveau groupe ?", "Groupe");
-    if (!name) return;
-    const { error } = await sb.from("groups").insert({ name });
-    if (error) {
-      alert("Erreur création groupe: " + error.message);
-      return;
-    }
+  /* ---------- GROUP CRUD ---------- */
+  async function createGroup(){
+    const name=prompt("Nom du nouveau groupe ?","Groupe");
+    if(!name)return;
+    const {error}=await sb.from("groups").insert({name});
+    if(error){ alert("Erreur création groupe: "+error.message); return; }
     addLog(`Groupe "${name}" créé`);
     reloadGroups();
   }
 
-  async function renameGroup(id) {
-    const cur = groups.find((g) => g.id === id);
-    const name = prompt(
-      "Nouveau nom du groupe ?",
-      cur ? cur.name : "Groupe"
-    );
-    if (!name) return;
-    const { error } = await sb
-      .from("groups")
-      .update({ name })
-      .eq("id", id);
-    if (error) {
-      alert("Erreur renommage groupe: " + error.message);
-      return;
-    }
+  async function renameGroup(id){
+    const cur=groups.find(g=>g.id===id);
+    const name=prompt("Nouveau nom du groupe ?",cur?cur.name:"Groupe");
+    if(!name)return;
+    const {error}=await sb.from("groups").update({name}).eq("id",id);
+    if(error){alert("Erreur renommage groupe: "+error.message);return;}
     addLog(`Groupe ${id} renommé → ${name}`);
     reloadGroups();
   }
 
-  async function deleteGroup(id) {
-    if (!confirm("Supprimer ce groupe ?")) return;
-    const { error } = await sb.from("groups").delete().eq("id", id);
-    if (error) {
-      alert("Erreur suppression groupe: " + error.message);
-      return;
-    }
+  async function deleteGroup(id){
+    if(!confirm("Supprimer ce groupe ?")) return;
+    const {error}=await sb.from("groups").delete().eq("id",id);
+    if(error){alert("Erreur suppression groupe: "+error.message);return;}
     addLog(`Groupe ${id} supprimé`);
     reloadGroups();
   }
 
-  /* Gestion ouverture éditeur membres d'un groupe */
-  function openEditGroupMembers(id) {
-    const currentMembers = groupMembers[id] || [];
-    const initialSet = new Set();
-    currentMembers.forEach((m) => {
+  function openEditGroupMembers(id){
+    const currentMembers=groupMembers[id]||[];
+    const initialSet=new Set();
+    currentMembers.forEach(m=>{
       initialSet.add(`${m.master_id}|${m.mac}`);
     });
     setEditMembersSel(initialSet);
     setEditGroupId(id);
   }
-
-  function closeEditGroupMembers() {
+  function closeEditGroupMembers(){
     setEditGroupId(null);
   }
 
-  async function saveGroupMembers(groupId) {
-    const selectedKeys = editMembersSel;
-    const current = groupMembers[groupId] || [];
-    const curSet = new Set(
-      current.map((m) => `${m.master_id}|${m.mac}`)
-    );
+  async function saveGroupMembers(groupId){
+    const selectedKeys=editMembersSel;
+    const current=groupMembers[groupId]||[];
+    const curSet=new Set(current.map(m=>`${m.master_id}|${m.mac}`));
 
-    const toAdd = [];
-    selectedKeys.forEach((k) => {
-      if (!curSet.has(k)) {
-        const [mid, mac] = k.split("|");
-        toAdd.push({
-          group_id: groupId,
-          master_id: mid,
-          slave_mac: mac,
-        });
+    const toAdd=[];
+    selectedKeys.forEach(k=>{
+      if(!curSet.has(k)){
+        const [mid,mac]=k.split("|");
+        toAdd.push({group_id:groupId,master_id:mid,slave_mac:mac});
       }
     });
 
-    const toRemove = [];
-    curSet.forEach((k) => {
-      if (!selectedKeys.has(k)) {
-        const [mid, mac] = k.split("|");
-        toRemove.push({ master_id: mid, slave_mac: mac });
+    const toRemove=[];
+    curSet.forEach(k=>{
+      if(!selectedKeys.has(k)){
+        const [mid,mac]=k.split("|");
+        toRemove.push({master_id:mid,slave_mac:mac});
       }
     });
 
-    if (toAdd.length) {
-      const { error } = await sb
-        .from("group_members")
-        .insert(toAdd);
-      if (error) {
-        alert("Erreur insert membres: " + error.message);
-      }
+    if(toAdd.length){
+      const {error}=await sb.from("group_members").insert(toAdd);
+      if(error) alert("Erreur insert membres: "+error.message);
     }
 
-    for (const rem of toRemove) {
-      const { error } = await sb
-        .from("group_members")
+    for(const rem of toRemove){
+      const {error}=await sb.from("group_members")
         .delete()
-        .eq("group_id", groupId)
-        .eq("master_id", rem.master_id)
-        .eq("slave_mac", rem.slave_mac);
-      if (error) {
-        alert("Erreur delete membre: " + error.message);
-      }
+        .eq("group_id",groupId)
+        .eq("master_id",rem.master_id)
+        .eq("slave_mac",rem.slave_mac);
+      if(error) alert("Erreur delete membre: "+error.message);
     }
 
     addLog(`Membres groupe ${groupId} mis à jour`);
@@ -1193,40 +1097,39 @@ export default function App() {
     setEditGroupId(null);
   }
 
-  /* ouvrir / fermer le mini-menu "..." d'un slave */
-  function openSlaveMore(masterId, mac) {
+  /* ---------- SLAVE MORE ( … menu ) ---------- */
+  function openSlaveMore(masterId,mac){
     setOpenSlaveMoreMac(mac);
     setOpenSlaveMoreMaster(masterId);
   }
-  function closeSlaveMore() {
+  function closeSlaveMore(){
     setOpenSlaveMoreMac(null);
     setOpenSlaveMoreMaster(null);
   }
 
-  /* ouvrir / fermer la liste "X/X allumés" */
-  function openListOnGroup(id) {
+  /* ---------- LIST ON MODAL ---------- */
+  function openListOnGroup(id){
     setListOnGroupId(id);
   }
-  function closeListOnGroup() {
+  function closeListOnGroup(){
     setListOnGroupId(null);
   }
 
   /* =========================================================
-     RENDU GROUP CARD
+     UI SUBCOMPONENTS
      ========================================================= */
-  function GroupCard({ g }) {
-    // membres du groupe
+
+  function GroupCard({ g }){
     const members = groupMembers[g.id] || [];
-    // on croise avec nodesByMaster pour savoir qui est "on"
-    let onCount = 0;
-    let totalCount = members.length;
-    const onList = [];
-    members.forEach((m) => {
-      const arr = nodesByMaster[m.master_id] || [];
-      const found = arr.find((sl) => sl.mac === m.mac);
-      if (found && found.pc_on) {
+
+    let onCount=0;
+    let totalCount=members.length;
+    // pour bouton "liste"
+    members.forEach(m=>{
+      const arr=nodesByMaster[m.master_id]||[];
+      const found=arr.find(sl=>sl.mac===m.mac);
+      if(found && found.pc_on){
         onCount++;
-        onList.push(found.nameShort || found.mac);
       }
     });
 
@@ -1236,12 +1139,10 @@ export default function App() {
           <div>
             <div className="groupName">{g.name || "Groupe"}</div>
             <div className="groupMetaLine">
-              <span>
-                {onCount}/{totalCount} allumé(s)
-              </span>
+              <span>{onCount}/{totalCount} allumé(s)</span>
               <button
                 className="listOnBtn"
-                onClick={() => openListOnGroup(g.id)}
+                onClick={()=>openListOnGroup(g.id)}
                 disabled={!totalCount}
               >
                 liste
@@ -1249,93 +1150,53 @@ export default function App() {
             </div>
           </div>
 
-          <div style={{ textAlign: "right" }}>
-            <button
-              className="subtleBtn"
-              onClick={() => renameGroup(g.id)}
-            >
-              Renommer
-            </button>
-            <button
-              className="subtleBtn"
-              onClick={() => deleteGroup(g.id)}
-            >
-              Supprimer
-            </button>
-            <button
-              className="subtleBtn"
-              onClick={() => openEditGroupMembers(g.id)}
-            >
-              Membres
-            </button>
+          <div style={{textAlign:"right"}}>
+            <button className="subtleBtn" onClick={()=>renameGroup(g.id)}>Renommer</button>
+            <button className="subtleBtn" onClick={()=>deleteGroup(g.id)}>Supprimer</button>
+            <button className="subtleBtn" onClick={()=>openEditGroupMembers(g.id)}>Membres</button>
           </div>
         </div>
 
         <div className="groupBtnsRow">
-          {/* Boutons d'actions groupées :
-             -> envoi de commandes broadcast vers tous les slaves du groupe */}
           <button
             className="smallBtn"
-            onClick={() => {
-              members.forEach((m) =>
-                sendCmd(m.master_id, m.mac, "SLV_IO", {
-                  pin: 26,
-                  mode: "OUT",
-                  value: 1,
-                })
-              );
-            }}
-          >
+            onClick={()=>{
+              members.forEach(m=>{
+                sendCmd(m.master_id,m.mac,"SLV_IO",{pin:26,mode:"OUT",value:1});
+              });
+            }}>
             IO ON
           </button>
 
           <button
             className="smallBtn"
-            onClick={() => {
-              members.forEach((m) =>
-                sendCmd(m.master_id, m.mac, "SLV_RESET", {})
-              );
-            }}
-          >
+            onClick={()=>{
+              members.forEach(m=>sendCmd(m.master_id,m.mac,"SLV_RESET",{}));
+            }}>
             RESET
           </button>
 
           <button
             className="smallBtn"
-            onClick={() => {
-              members.forEach((m) =>
-                sendCmd(m.master_id, m.mac, "SLV_IO", {
-                  pin: 26,
-                  mode: "OUT",
-                  value: 0,
-                })
-              );
-            }}
-          >
+            onClick={()=>{
+              members.forEach(m=>sendCmd(m.master_id,m.mac,"SLV_IO",{pin:26,mode:"OUT",value:0}));
+            }}>
             OFF
           </button>
 
           <button
             className="smallBtn"
-            onClick={() => {
-              members.forEach((m) =>
-                sendCmd(m.master_id, m.mac, "SLV_FORCE_OFF", {})
-              );
-            }}
-          >
+            onClick={()=>{
+              members.forEach(m=>sendCmd(m.master_id,m.mac,"SLV_FORCE_OFF",{}));
+            }}>
             HARD OFF
           </button>
 
           <button
             className="smallBtn"
-            onClick={() => {
-              members.forEach((m) =>
-                sendCmd(m.master_id, m.mac, "SLV_HARD_RESET", {
-                  ms: 3000,
-                })
-              );
-            }}
-          >
+            onClick={()=>{
+              members.forEach(m=>sendCmd(m.master_id,m.mac,"SLV_HARD_RESET",{ms:3000}));
+            }}>
             HARD RESET
           </button>
         </div>
@@ -1343,26 +1204,20 @@ export default function App() {
     );
   }
 
-  /* =========================================================
-     RENDU SLAVE CARD
-     ========================================================= */
-  function SlaveCard({ masterId, slave }) {
-    const mac = slave.mac;
-    const isOn = !!slave.pc_on;
-
-    // activité commande (barre noire)
-    const activity = cmdActivity[mac];
-    let barWidth = "0%";
-    if (activity) {
-      if (activity.phase === "queued") barWidth = "33%";
-      else if (activity.phase === "sent") barWidth = "66%";
-      else if (activity.phase === "acked") barWidth = "100%";
-      else if (activity.phase === "error") barWidth = "100%";
+  function SlaveCard({ masterId, slave }){
+    const mac   = slave.mac;
+    const isOn  = !!slave.pc_on;
+    const act   = cmdActivity[mac];
+    let barWidth="0%";
+    if(act){
+      if(act.phase==="queued") barWidth="33%";
+      else if(act.phase==="sent") barWidth="66%";
+      else if(act.phase==="acked") barWidth="100%";
+      else if(act.phase==="error") barWidth="100%";
     }
 
     return (
       <div className="slaveCard">
-        {/* coin haut droite : bouton "i" */}
         <div className="slaveLineTop">
           <div
             className="infoChip"
@@ -1372,60 +1227,47 @@ export default function App() {
           </div>
         </div>
 
-        {/* Nom du slave + statut machine */}
         <div className="slaveNameBlock">
           <div className="slaveNameBig">{slave.nameShort}</div>
           <div className="pcStatus">
             {isOn ? "Ordinateur allumé" : "Ordinateur éteint"}
           </div>
 
-          {/* barre de progression noire */}
           <div className="progressOuter">
             <div
               className="progressInner"
               style={{
-                width: barWidth,
-                background:
-                  activity && activity.phase === "error"
-                    ? "#ef4444"
-                    : "#000",
+                width:barWidth,
+                background: act && act.phase==="error" ? "#ef4444" : "#000"
               }}
             />
           </div>
         </div>
 
-        {/* Boutons en bas */}
         <div className="slaveBtnsRow">
-          {/* IO */}
           <button
             className="circleBtn"
-            onClick={() => {
-              sendCmd(masterId, mac, "SLV_IO", {
-                pin: 26,
-                mode: "OUT",
-                value: 1,
-              });
+            onClick={()=>{
+              sendCmd(masterId,mac,"SLV_IO",{pin:26,mode:"OUT",value:1});
             }}
             title="IO / Power pulse"
           >
             ⏻
           </button>
 
-          {/* RESET */}
           <button
             className="circleBtn"
-            onClick={() => {
-              sendCmd(masterId, mac, "SLV_RESET", {});
+            onClick={()=>{
+              sendCmd(masterId,mac,"SLV_RESET",{});
             }}
             title="RESET soft"
           >
             ↺
           </button>
 
-          {/* "..." menu avancé */}
           <button
             className="circleBtn moreBtn"
-            onClick={() => openSlaveMore(masterId, mac)}
+            onClick={()=>openSlaveMore(masterId,mac)}
             title="Options avancées"
           >
             …
@@ -1435,137 +1277,77 @@ export default function App() {
     );
   }
 
-  /* =========================================================
-     RENDU MASTER CARD
-     ========================================================= */
-  function MasterCard({ d }) {
-    const live = isMasterLive(d);
-    const slavesArr = nodesByMaster[d.id] || [];
+  function MasterCard({ d }){
+    const live=isMasterLive(d);
+    const slavesArr=nodesByMaster[d.id]||[];
 
     return (
-      <section className="masterCardOuter">
+      <div className="masterCardOuter">
+        {/* header master */}
         <div className="masterHeadRow">
           <div className="masterHeadMain">
             <div className="masterTitleRow">
-              <div className="masterName">
-                {d.name || d.id || "MASTER"}
-              </div>
-              <div
-                className={
-                  live
-                    ? "masterStatusOnline"
-                    : "masterStatusOffline"
-                }
-              >
-                {live ? "EN LIGNE" : "HORS LIGNE"}
+              <div className="masterName">{d.name || d.id || "MASTER"}</div>
+              <div className={live? "masterStatusOnline":"masterStatusOffline"}>
+                {live? "EN LIGNE":"HORS LIGNE"}
               </div>
             </div>
-
             <div className="masterMeta">
-              ID : <strong>{d.id}</strong> <br />
-              MAC : <strong>{d.master_mac || "—"}</strong> <br />
-              Dernier contact :{" "}
-              {d.last_seen ? fmtTS(d.last_seen) : "jamais"}
+              ID : <strong>{d.id}</strong><br/>
+              MAC : <strong>{d.master_mac||"—"}</strong><br/>
+              Dernier contact : {d.last_seen?fmtTS(d.last_seen):"jamais"}
             </div>
           </div>
 
           <div className="masterBtns">
-            <button
-              className="masterActionBtn"
-              onClick={() => renameMaster(d.id)}
-            >
-              Renommer
-            </button>
-            <button
-              className="masterActionBtn"
-              onClick={() => deleteMaster(d.id)}
-            >
-              Supprimer
-            </button>
-            <button
-              className="masterActionBtn"
-              onClick={() => sendCmd(d.id, null, "PULSE", { ms: 500 })}
-            >
-              Pulse 500ms
-            </button>
-            <button
-              className="masterActionBtn"
-              onClick={() => sendCmd(d.id, null, "POWER_ON", {})}
-            >
-              Power ON
-            </button>
-            <button
-              className="masterActionBtn"
-              onClick={() => sendCmd(d.id, null, "POWER_OFF", {})}
-            >
-              Power OFF
-            </button>
-            <button
-              className="masterActionBtn"
-              onClick={() => sendCmd(d.id, null, "RESET", {})}
-            >
-              Reset
-            </button>
+            <button className="masterActionBtn" onClick={()=>renameMaster(d.id)}>Renommer</button>
+            <button className="masterActionBtn" onClick={()=>deleteMaster(d.id)}>Supprimer</button>
+            <button className="masterActionBtn" onClick={()=>sendCmd(d.id,null,"PULSE",{ms:500})}>Pulse 500ms</button>
+            <button className="masterActionBtn" onClick={()=>sendCmd(d.id,null,"POWER_ON",{})}>Power ON</button>
+            <button className="masterActionBtn" onClick={()=>sendCmd(d.id,null,"POWER_OFF",{})}>Power OFF</button>
+            <button className="masterActionBtn" onClick={()=>sendCmd(d.id,null,"RESET",{})}>Reset</button>
           </div>
         </div>
 
         {/* slaves */}
         <div className="slavesGrid">
-          {slavesArr.map((sl) => (
-            <SlaveCard
-              key={sl.mac}
-              masterId={d.id}
-              slave={sl}
-            />
+          {slavesArr.map(sl=>(
+            <SlaveCard key={sl.mac} masterId={d.id} slave={sl}/>
           ))}
         </div>
-      </section>
+      </div>
     );
   }
 
   /* =========================================================
-     MODAL: AJOUT MASTER (PAIR CODE)
+     MODALS
      ========================================================= */
-  function PairDialog() {
-    if (!pairInfo.open) return null;
-    const endMS = pairInfo.expires_at
-      ? new Date(pairInfo.expires_at).getTime()
-      : 0;
-    const ttlSec = Math.max(
-      0,
-      Math.floor((endMS - Date.now()) / 1000)
-    );
-    const mm = Math.floor(ttlSec / 60);
-    const ss = String(ttlSec % 60).padStart(2, "0");
+
+  function PairDialog(){
+    if(!pairInfo.open) return null;
+    const endMS = pairInfo.expires_at ? new Date(pairInfo.expires_at).getTime() : 0;
+    const ttlSec = Math.max(0, Math.floor((endMS - Date.now())/1000));
+    const mm=Math.floor(ttlSec/60);
+    const ss=String(ttlSec%60).padStart(2,"0");
 
     return (
-      <div
-        className="modalBackdrop"
-        onClick={closePairDialog}
-      >
-        <div
-          className="modalCard"
-          onClick={(e) => e.stopPropagation()}
-        >
+      <div className="modalBackdrop" onClick={closePairDialog}>
+        <div className="modalCard" onClick={e=>e.stopPropagation()}>
           <div className="modalTitle">Appairer un MASTER</div>
           <div>
             Code :
             <div className="pairCodeBox">
-              {String(pairInfo.code || "").padStart(6, "0")}
+              {String(pairInfo.code||"").padStart(6,"0")}
             </div>
             <div className="smallNote">
               expire dans {mm}:{ss}
             </div>
           </div>
           <div className="smallNote">
-            Ouvre le portail Wi-Fi de l’ESP32 MASTER et saisis
-            ce code.
+            Ouvre le portail Wi-Fi du MASTER et saisis ce code.
           </div>
           <div className="rowBetween">
-            <button
-              className="primaryBtn"
-              onClick={closePairDialog}
-            >
+            <button className="primaryBtn" onClick={closePairDialog}>
               Fermer
             </button>
           </div>
@@ -1574,39 +1356,22 @@ export default function App() {
     );
   }
 
-  /* =========================================================
-     MODAL: MORE MENU POUR SLAVE ("...")
-     ========================================================= */
-  function SlaveMoreMenu() {
-    if (!openSlaveMoreMac || !openSlaveMoreMaster) return null;
-    const mac = openSlaveMoreMac;
-    const mid = openSlaveMoreMaster;
-
+  function SlaveMoreMenu(){
+    if(!openSlaveMoreMac || !openSlaveMoreMaster) return null;
+    const mac=openSlaveMoreMac;
+    const mid=openSlaveMoreMaster;
     return (
-      <div
-        className="modalBackdrop"
-        onClick={closeSlaveMore}
-      >
-        <div
-          className="modalCard"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="modalTitle">
-            Options avancées
-          </div>
+      <div className="modalBackdrop" onClick={closeSlaveMore}>
+        <div className="modalCard" onClick={e=>e.stopPropagation()}>
+          <div className="modalTitle">Options avancées</div>
           <div className="smallNote">
-            {mac} <br />
-            Master {mid}
+            {mac}<br/>Master {mid}
           </div>
           <div className="moreMenuList">
             <button
               className="moreMenuBtn"
-              onClick={() => {
-                sendCmd(mid, mac, "SLV_IO", {
-                  pin: 26,
-                  mode: "OUT",
-                  value: 0,
-                });
+              onClick={()=>{
+                sendCmd(mid,mac,"SLV_IO",{pin:26,mode:"OUT",value:0});
                 closeSlaveMore();
               }}
             >
@@ -1615,8 +1380,8 @@ export default function App() {
 
             <button
               className="moreMenuBtn"
-              onClick={() => {
-                sendCmd(mid, mac, "SLV_RESET", {});
+              onClick={()=>{
+                sendCmd(mid,mac,"SLV_RESET",{});
                 closeSlaveMore();
               }}
             >
@@ -1625,8 +1390,8 @@ export default function App() {
 
             <button
               className="moreMenuBtn dangerous"
-              onClick={() => {
-                sendCmd(mid, mac, "SLV_FORCE_OFF", {});
+              onClick={()=>{
+                sendCmd(mid,mac,"SLV_FORCE_OFF",{});
                 closeSlaveMore();
               }}
             >
@@ -1635,10 +1400,8 @@ export default function App() {
 
             <button
               className="moreMenuBtn dangerous"
-              onClick={() => {
-                sendCmd(mid, mac, "SLV_HARD_RESET", {
-                  ms: 3000,
-                });
+              onClick={()=>{
+                sendCmd(mid,mac,"SLV_HARD_RESET",{ms:3000});
                 closeSlaveMore();
               }}
             >
@@ -1647,10 +1410,7 @@ export default function App() {
           </div>
 
           <div className="rowBetween">
-            <button
-              className="primaryBtn"
-              onClick={closeSlaveMore}
-            >
+            <button className="primaryBtn" onClick={closeSlaveMore}>
               Fermer
             </button>
           </div>
@@ -1659,143 +1419,106 @@ export default function App() {
     );
   }
 
-  /* =========================================================
-     MODAL: LISTE DES SLAVES ALLUMÉS POUR UN GROUPE
-     ========================================================= */
-  function OnListModal() {
-    if (!listOnGroupId) return null;
-    const gid = listOnGroupId;
-    const group = groups.find((g) => g.id === gid);
-    const members = groupMembers[gid] || [];
+  function OnListModal(){
+    if(!listOnGroupId) return null;
+    const gid=listOnGroupId;
+    const grp=groups.find(g=>g.id===gid);
+    const members=groupMembers[gid]||[];
 
-    // prépare la liste ON
-    const onItems = [];
-    members.forEach((m) => {
-      const arr = nodesByMaster[m.master_id] || [];
-      const found = arr.find((sl) => sl.mac === m.mac);
-      if (found && found.pc_on) {
-        onItems.push(found.nameShort || found.mac);
+    const onItems=[];
+    members.forEach(m=>{
+      const arr=nodesByMaster[m.master_id]||[];
+      const found=arr.find(sl=>sl.mac===m.mac);
+      if(found && found.pc_on){
+        onItems.push(found.nameShort||found.mac);
       }
     });
 
     return (
-      <div
-        className="modalBackdrop"
-        onClick={closeListOnGroup}
-      >
-        <div
-          className="modalCard"
-          onClick={(e) => e.stopPropagation()}
-        >
+      <div className="modalBackdrop" onClick={closeListOnGroup}>
+        <div className="modalCard" onClick={e=>e.stopPropagation()}>
           <div className="modalTitle">
-            Allumés – {group ? group.name : "?"}
+            Allumés – {grp?grp.name:"?"}
           </div>
           <div className="scrollY">
-            {onItems.length === 0 ? (
-              <div className="smallNote">
-                Aucun esclave détecté comme allumé.
-              </div>
-            ) : (
-              onItems.map((label, idx) => (
-                <div
-                  key={idx}
+            {onItems.length===0 ? (
+              <div className="smallNote">Aucun esclave détecté comme allumé.</div>
+            ):(
+              onItems.map((label,idx)=>(
+                <div key={idx}
                   style={{
-                    fontSize: "13px",
-                    lineHeight: "1.4",
-                    padding: "4px 0",
-                    borderBottom: "1px solid #e5e7eb",
-                    color: "#000",
-                  }}
-                >
+                    fontSize:"13px",
+                    lineHeight:"1.4",
+                    padding:"4px 0",
+                    borderBottom:"1px solid #e5e7eb",
+                    color:"#000"
+                  }}>
                   {label}
                 </div>
               ))
             )}
           </div>
           <div className="rowBetween">
-            <button
-              className="primaryBtn"
-              onClick={closeListOnGroup}
-            >
-              Fermer
-            </button>
+            <button className="primaryBtn" onClick={closeListOnGroup}>Fermer</button>
           </div>
         </div>
       </div>
     );
   }
 
-  /* =========================================================
-     MODAL: EDITION MEMBRES GROUPE
-     (checkboxes avec état PERSISTANT)
-     ========================================================= */
-  function GroupMembersEditor() {
-    if (!editGroupId) return null;
-    const gid = editGroupId;
-    const grp = groups.find((g) => g.id === gid);
+  function GroupMembersEditor(){
+    if(!editGroupId) return null;
+    const gid=editGroupId;
+    const grp=groups.find(g=>g.id===gid);
 
-    // tous les slaves connus (tous masters confondus)
-    const allSlaves = useMemo(() => {
-      const acc = [];
-      Object.entries(nodesByMaster).forEach(([mid, arr]) => {
-        arr.forEach((sl) => {
+    const allSlaves=useMemo(()=>{
+      const acc=[];
+      Object.entries(nodesByMaster).forEach(([mid,arr])=>{
+        arr.forEach(sl=>{
           acc.push({
-            master_id: mid,
-            mac: sl.mac,
-            nameShort: sl.nameShort || sl.mac,
+            master_id:mid,
+            mac:sl.mac,
+            nameShort:sl.nameShort || sl.mac,
           });
         });
       });
       return acc;
-    }, [nodesByMaster]);
+    },[nodesByMaster]);
 
-    function toggleOne(masterId, mac) {
-      const key = `${masterId}|${mac}`;
-      setEditMembersSel((sel) => {
-        const n = new Set(sel);
-        if (n.has(key)) n.delete(key);
+    function toggleOne(mid,mac){
+      const key=`${mid}|${mac}`;
+      setEditMembersSel(sel=>{
+        const n=new Set(sel);
+        if(n.has(key)) n.delete(key);
         else n.add(key);
         return n;
       });
     }
 
     return (
-      <div
-        className="modalBackdrop"
-        onClick={closeEditGroupMembers}
-      >
-        <div
-          className="modalCard"
-          onClick={(e) => e.stopPropagation()}
-        >
+      <div className="modalBackdrop" onClick={closeEditGroupMembers}>
+        <div className="modalCard" onClick={e=>e.stopPropagation()}>
           <div className="modalTitle">
-            Membres du groupe{" "}
-            <strong>{grp ? grp.name : "?"}</strong>
+            Membres du groupe <strong>{grp?grp.name:"?"}</strong>
           </div>
 
           <div className="scrollY">
-            {allSlaves.length === 0 && (
-              <div className="smallNote">
-                Aucun slave détecté.
-              </div>
+            {allSlaves.length===0 && (
+              <div className="smallNote">Aucun slave détecté.</div>
             )}
-            {allSlaves.map((sl) => {
-              const key = `${sl.master_id}|${sl.mac}`;
+            {allSlaves.map(sl=>{
+              const key=`${sl.master_id}|${sl.mac}`;
               return (
                 <label key={key} className="checkboxRow">
                   <input
                     type="checkbox"
                     checked={editMembersSel.has(key)}
-                    onChange={() =>
-                      toggleOne(sl.master_id, sl.mac)
-                    }
+                    onChange={()=>toggleOne(sl.master_id,sl.mac)}
                   />
                   <span>
-                    <strong>{sl.nameShort}</strong>
-                    <br />
+                    <strong>{sl.nameShort}</strong><br/>
                     <span className="smallLabel">
-                      {sl.mac} • Master{" "}
-                      {sl.master_id.slice(0, 8)}
+                      {sl.mac} • Master {sl.master_id.slice(0,8)}
                     </span>
                   </span>
                 </label>
@@ -1804,23 +1527,17 @@ export default function App() {
           </div>
 
           <div className="rowBetween">
-            <button
-              className="primaryBtn"
-              onClick={() => saveGroupMembers(gid)}
-            >
+            <button className="primaryBtn" onClick={()=>saveGroupMembers(gid)}>
               Enregistrer
             </button>
-            <button
-              className="primaryBtn"
-              onClick={closeEditGroupMembers}
-            >
+            <button className="primaryBtn" onClick={closeEditGroupMembers}>
               Annuler
             </button>
           </div>
 
           <div className="smallNote">
-            Astuce : un groupe peut contenir
-            des slaves de masters différents.
+            Astuce : un groupe peut contenir des slaves
+            de masters différents.
           </div>
         </div>
       </div>
@@ -1828,84 +1545,58 @@ export default function App() {
   }
 
   /* =========================================================
-     HEADER TOP BAR (REMOTE POWER + actions globales)
+     TOP BAR
      ========================================================= */
-  function TopBar() {
-    // On va afficher l'état global "online/offline" ?
-    // Ici on calcule si au moins un master est live.
-    const anyLive = devices.some((d) => isMasterLive(d));
-
+  function TopBar(){
+    const anyLive = devices.some(d=>isMasterLive(d));
     return (
       <div className="topBar">
         <div className="topLeft">
           <span>REMOTE POWER</span>
           <small>
-            {anyLive ? (
-              <span className="badgeOnline">Actif</span>
-            ) : (
-              <span className="badgeOffline">Inactif</span>
-            )}{" "}
-            • tableau de contrôle
+            {anyLive
+              ? <span className="badgeOnline">Actif</span>
+              : <span className="badgeOffline">Inactif</span>
+            } • tableau de contrôle
           </small>
         </div>
 
         <div className="topRight">
           <span className="topUserMail">
-            {authReady
-              ? user?.email || "non connecté"
-              : "…auth..."}
+            {authReady ? (user?.email||"non connecté") : "…auth..."}
           </span>
 
           {!user ? (
             <button
               className="topBtn primary"
-              onClick={async () => {
-                const { data, error } =
-                  await sb.auth.signInWithOAuth({
-                    provider: "google",
-                    options: {
-                      redirectTo: location.href,
-                      queryParams: {
-                        prompt: "select_account",
-                      },
-                      skipBrowserRedirect: true,
-                    },
-                  });
-                if (error) alert(error.message);
-                else if (data?.url) location.href = data.url;
+              onClick={async()=>{
+                const {data,error}=await sb.auth.signInWithOAuth({
+                  provider:"google",
+                  options:{
+                    redirectTo:location.href,
+                    queryParams:{prompt:"select_account"},
+                    skipBrowserRedirect:true,
+                  },
+                });
+                if(error) alert(error.message);
+                else if(data?.url) location.href=data.url;
               }}
             >
               Connexion Google
             </button>
-          ) : (
-            <button
-              className="topBtn"
-              onClick={() => {
-                sb.auth.signOut();
-              }}
-            >
+          ):(
+            <button className="topBtn" onClick={()=>{ sb.auth.signOut(); }}>
               Déconnexion
             </button>
           )}
 
-          <button
-            className="topBtn"
-            onClick={openPairDialog}
-          >
+          <button className="topBtn" onClick={openPairDialog}>
             + MASTER
           </button>
-
-          <button
-            className="topBtn"
-            onClick={createGroup}
-          >
+          <button className="topBtn" onClick={createGroup}>
             + Groupe
           </button>
-
-          <button
-            className="topBtn"
-            onClick={loadAllData}
-          >
+          <button className="topBtn" onClick={loadAllData}>
             Rafraîchir
           </button>
         </div>
@@ -1914,78 +1605,28 @@ export default function App() {
   }
 
   /* =========================================================
-     SECTION GROUPES
+     PANNEAU GROUPES
      ========================================================= */
-  function GroupsSection() {
+  function GroupsPanel(){
     return (
-      <section className="sectionBlock">
-        <div className="sectionHeader">
-          <div className="sectionTitle">
+      <section className="panelOuter">
+        <div className="panelHeader">
+          <div className="panelTitle">
             <span>Groupes</span>
-            <span className="sectionSubtitle">
+            <span className="panelSubtitle">
               Contrôler plusieurs machines en même temps
             </span>
           </div>
-          {/* actions de section si besoin */}
         </div>
 
-        <div className="groupsWrap">
-          {groups.length === 0 ? (
-            <div className="glassCard">
-              <div
-                style={{
-                  fontSize: "13px",
-                  color: "var(--text-dim)",
-                }}
-              >
-                Aucun groupe. Clique sur “+ Groupe” pour
-                en créer un.
-              </div>
+        <div className="groupsListRow">
+          {groups.length===0 ? (
+            <div style={{fontSize:"13px", color:"var(--text-dim)"}}>
+              Aucun groupe. Clique sur “+ Groupe”.
             </div>
-          ) : (
-            groups.map((g) => <GroupCard key={g.id} g={g} />)
-          )}
-        </div>
-      </section>
-    );
-  }
-
-  /* =========================================================
-     SECTION MASTERS
-     ========================================================= */
-  function MastersSection() {
-    return (
-      <section className="sectionBlock">
-        <div className="sectionHeader">
-          <div className="sectionTitle">
-            <span>Masters</span>
-            <span className="sectionSubtitle">
-              Chaque master pilote ses slaves
-            </span>
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gap: "20px",
-          }}
-        >
-          {devices.length === 0 ? (
-            <div className="glassCard">
-              <div
-                style={{
-                  fontSize: "13px",
-                  color: "var(--text-dim)",
-                }}
-              >
-                Aucun master pour l’instant.
-                Ajoute-en un avec “+ MASTER”.
-              </div>
-            </div>
-          ) : (
-            devices.map((d) => (
-              <MasterCard key={d.id} d={d} />
+          ):(
+            groups.map(g=>(
+              <GroupCard key={g.id} g={g}/>
             ))
           )}
         </div>
@@ -1994,34 +1635,71 @@ export default function App() {
   }
 
   /* =========================================================
-     RENDU PRINCIPAL
+     PANNEAU MASTERS
+     ========================================================= */
+  function MastersPanel(){
+    return (
+      <section className="panelOuter">
+        <div className="panelHeader">
+          <div className="panelTitle">
+            <span>Masters</span>
+            <span className="panelSubtitle">
+              Chaque master pilote ses slaves
+            </span>
+          </div>
+        </div>
+
+        <div style={{display:"grid",gap:"20px"}}>
+          {devices.length===0 ? (
+            <div style={{fontSize:"13px",color:"var(--text-dim)"}}>
+              Aucun master pour l’instant. Ajoute-en un
+              avec “+ MASTER”.
+            </div>
+          ):(
+            devices.map(d=>(
+              <MasterCard key={d.id} d={d}/>
+            ))
+          )}
+        </div>
+      </section>
+    );
+  }
+
+  /* =========================================================
+     PANNEAU JOURNAL
+     ========================================================= */
+  function JournalPanel(){
+    return (
+      <section className="journalPanelOuter">
+        <div className="journalTitle">Journal</div>
+        <div className="journalBox" ref={logRef}>
+          {lines.join("\n")}
+        </div>
+      </section>
+    );
+  }
+
+  /* =========================================================
+     RENDU FINAL
      ========================================================= */
   return (
     <>
       <style>{styles}</style>
 
-      {/* BARRE FIXE HAUT */}
-      <TopBar />
+      <TopBar/>
 
-      {/* MODALS */}
-      <PairDialog />
-      <SlaveMoreMenu />
-      <OnListModal />
-      <GroupMembersEditor />
+      {/* Modals */}
+      <PairDialog/>
+      <SlaveMoreMenu/>
+      <OnListModal/>
+      <GroupMembersEditor/>
 
-      {/* CONTENU PAGE */}
+      {/* Contenu */}
       <div className="appBg">
         <div className="pageContent">
-          <GroupsSection />
-          <MastersSection />
-
-          {/* Journal global */}
-          <div className="journalBlock">
-            <div className="journalTitle">Journal</div>
-            <div className="journalBox" ref={logRef}>
-              {lines.join("\n")}
-            </div>
-          </div>
+          <GroupsPanel/>
+          <MastersPanel/>
+          <JournalPanel/>
         </div>
       </div>
     </>
