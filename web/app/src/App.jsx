@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 /* =========================================================
@@ -7,22 +7,19 @@ import { createClient } from "@supabase/supabase-js";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Sécurité : si l'env n'est pas présent, on affiche un message plutôt que planter
+// si jamais les env ne sont pas définies, on évite de crasher
 const sb = (SUPABASE_URL && SUPABASE_ANON_KEY)
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
 
 /* =========================================================
-   CONSTANTES UI / LOGIQUE
+   CONSTANTES
    ========================================================= */
-const LIVE_TTL_MS = 8000; // master considéré "en ligne" si last_seen < 8s
-const DEFAULT_IO_PIN = 26; // pin que tu pilotais pour IO sur le SLAVE
+const LIVE_TTL_MS = 8000;         // master online si last_seen < 8s
+const DEFAULT_IO_PIN = 26;        // pin impulsion power du slave
 
 /* =========================================================
    STYLES GLOBAUX
-   - fond pleine largeur avec image
-   - top bar fixe
-   - cartes "glass"
    ========================================================= */
 const styles = `
 :root {
@@ -71,7 +68,6 @@ html, body, #root {
   background-size:cover;
   background-position:center;
   background-repeat:no-repeat;
-  /* Multi-overlay: halos + image */
   background-image:
     radial-gradient(circle at 20% 20%, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 60%),
     radial-gradient(circle at 80% 30%, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 70%),
@@ -109,6 +105,7 @@ html, body, #root {
 .topBar-right {
   display:flex;
   align-items:center;
+  flex-wrap:wrap;
   gap:8px;
 }
 .badgeOnline {
@@ -150,11 +147,12 @@ html, body, #root {
   cursor:pointer;
 }
 .tbBtn:hover { background:var(--btn-bg-hover); }
+.tbBtn.danger { color:#b91c1c; }
 
-/* ===== MAIN WRAPPER ===== */
+/* ===== MAIN WRAP ===== */
 .mainWrap {
   position:relative;
-  z-index:1; /* au-dessus du bg */
+  z-index:1; /* passer devant le fond */
   padding-top:calc(var(--header-height) + 16px);
   padding-bottom:48px;
   max-width:1200px;
@@ -244,7 +242,7 @@ html, body, #root {
 /* ===== SLAVE CARD ===== */
 .slaveCard {
   position:relative;
-  flex: 0 1 180px; /* base ~180px de large */
+  flex:0 1 180px;
   min-width:150px;
   max-width:220px;
   display:flex;
@@ -260,7 +258,7 @@ html, body, #root {
   font-size:14px;
 }
 
-/* petit bouton "i" en haut à droite */
+/* bouton "i" */
 .slaveInfoBtn {
   position:absolute;
   top:8px;
@@ -280,7 +278,7 @@ html, body, #root {
   background:var(--btn-bg-hover);
 }
 
-/* overlay info */
+/* panneau info/rename */
 .slaveInfoPanel {
   position:absolute;
   top:8px;
@@ -333,7 +331,7 @@ html, body, #root {
 }
 .slaveRenameBtn:hover { background:var(--btn-bg-hover); }
 
-/* nom du slave EN GROS */
+/* Nom du SLAVE en gros */
 .slaveName {
   font-size:16px;
   font-weight:600;
@@ -344,7 +342,7 @@ html, body, #root {
   max-width:100%;
 }
 
-/* statut ordinateur */
+/* statut PC */
 .pcStatus {
   font-size:12px;
   line-height:1.3;
@@ -362,7 +360,7 @@ html, body, #root {
   font-weight:400;
 }
 
-/* barre d'activité sous le statut */
+/* barre d'activité */
 .activityBarWrap {
   position:relative;
   width:100%;
@@ -381,7 +379,7 @@ html, body, #root {
   transition:width .2s linear, background .2s linear;
 }
 
-/* zone boutons ronds */
+/* rangée de boutons ronds */
 .slaveBtnRow {
   display:flex;
   justify-content:center;
@@ -490,6 +488,82 @@ html, body, #root {
   font-size:12px;
   color:var(--text-dim);
 }
+
+/* ===== PAIR MODAL ===== */
+.pairOverlay {
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.4);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:999;
+}
+.pairCard {
+  background:rgba(255,255,255,0.8);
+  border:1px solid var(--glass-stroke);
+  backdrop-filter:blur(20px);
+  border-radius:var(--border-radius-lg);
+  box-shadow:0 24px 60px -10px rgba(0,0,0,0.4);
+  width:90%;
+  max-width:320px;
+  padding:16px;
+  color:var(--text-main);
+  font-size:14px;
+  line-height:1.4;
+}
+.pairTitle {
+  font-size:16px;
+  font-weight:600;
+  margin-bottom:8px;
+  color:var(--text-main);
+}
+.pairRow {
+  font-size:14px;
+  margin-bottom:8px;
+  word-break:break-word;
+}
+.pairLabel {
+  font-size:12px;
+  font-weight:500;
+  color:var(--text-dim);
+  margin-right:4px;
+}
+.pairCodeBox {
+  font-size:20px;
+  font-weight:600;
+  font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing:2px;
+  background:#fff;
+  border:1px solid var(--glass-stroke);
+  border-radius:var(--border-radius-md);
+  padding:8px 12px;
+  display:inline-block;
+}
+.pairFooter {
+  font-size:12px;
+  color:var(--text-dim);
+  margin-top:4px;
+}
+.pairBtnRow {
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+  margin-top:12px;
+}
+.pairBtn {
+  appearance:none;
+  background:var(--btn-bg);
+  border:1px solid var(--glass-stroke);
+  border-radius:999px;
+  min-height:32px;
+  line-height:32px;
+  padding:0 12px;
+  font-size:13px;
+  color:var(--text-main);
+  cursor:pointer;
+}
+.pairBtn:hover { background:var(--btn-bg-hover); }
 `;
 
 /* =========================================================
@@ -516,11 +590,11 @@ export default function App(){
   const [user,setUser] = useState(null);
 
   // ---------- data ----------
-  const [masters,setMasters] = useState([]); // [{id,name,master_mac,last_seen,online}]
-  // { master_id: [ {slave_mac, friendly_name, pc_on, last_seen}, ... ] }
+  const [masters,setMasters] = useState([]);
+  // { master_id: [ {slave_mac,friendly_name,pc_on,last_seen}, ... ] }
   const [slavesByMaster,setSlavesByMaster] = useState({});
 
-  // pour logs / journal
+  // logs / journal
   const [lines,setLines] = useState([]);
   const logRef = useRef(null);
   const log = (txt)=>{
@@ -532,16 +606,18 @@ export default function App(){
     }
   },[lines]);
 
-  // ---------- UI local pour chaque slave ----------
-  // panneau info ouvert ?
-  const [openInfo,setOpenInfo] = useState({});      // { mac: bool }
-  // menu "..." ouvert ?
-  const [openMore,setOpenMore] = useState({});      // { mac: bool }
-  // rename field local
-  const [editName,setEditName] = useState({});      // { mac: "new text" }
-  // phase d'envoi de commande -> détermine la barre noire
-  // { mac: "idle" | "sending" | "acked" }
-  const [phase,setPhase] = useState({});
+  // UI state par slave
+  const [openInfo,setOpenInfo] = useState({});   // { mac: bool }
+  const [openMore,setOpenMore] = useState({});   // { mac: bool }
+  const [editName,setEditName] = useState({});   // { mac: "text" }
+  const [phase,setPhase] = useState({});         // { mac: "idle"|"sending"|"acked" }
+
+  // Pairing dialog
+  const [pair,setPair] = useState({
+    open:false,
+    code:null,
+    expires_at:null
+  });
 
   // refs realtime
   const chDevices = useRef(null);
@@ -557,8 +633,7 @@ export default function App(){
       return;
     }
 
-    // onAuthStateChange + récupérer la session existante
-    const { data: sub } = sb.auth.onAuthStateChange(async (event,session)=>{
+    const { data: sub } = sb.auth.onAuthStateChange(async (_ev,session)=>{
       setUser(session?.user || null);
       setAuthReady(true);
 
@@ -572,7 +647,6 @@ export default function App(){
       }
     });
 
-    // init
     (async ()=>{
       const { data:{ session } } = await sb.auth.getSession();
       setUser(session?.user || null);
@@ -585,12 +659,11 @@ export default function App(){
     })();
 
     return ()=>{ sub.subscription.unsubscribe(); };
-
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
   /* =================================
-     REALTIME MANAGEMENT
+     REALTIME
      ================================= */
   function cleanupRealtime(){
     if(chDevices.current) sb.removeChannel(chDevices.current);
@@ -626,7 +699,7 @@ export default function App(){
             log(`- master ${id}`);
             setMasters(ms=>ms.filter(m=>m.id!==id));
             setSlavesByMaster(cur=>{
-              const copy = {...cur};
+              const copy={...cur};
               delete copy[id];
               return copy;
             });
@@ -646,7 +719,6 @@ export default function App(){
           { event:"UPDATE", schema:"public", table:"nodes" },
           p => {
             const row = p.new;
-            // pc_on, friendly_name, last_seen etc. peuvent bouger
             setSlavesByMaster(cur => {
               const list = cur[row.master_id] || [];
               const upd  = list.map(s => s.slave_mac===row.slave_mac ? {...s, ...row} : s);
@@ -672,7 +744,6 @@ export default function App(){
           { event:"INSERT", schema:"public", table:"commands" },
           p => {
             const c = p.new;
-            // quand on insère une commande pour un slave, passe en "sending"
             if(c.target_mac){
               setPhase(ph => ({...ph, [c.target_mac]:"sending"}));
             }
@@ -682,13 +753,10 @@ export default function App(){
           { event:"UPDATE", schema:"public", table:"commands" },
           p => {
             const c = p.new;
-            // si status = "acked", avance la barre
             if(c.target_mac && c.status==="acked"){
-              // passe la phase sur mac = acked
               setPhase(ph => ({...ph, [c.target_mac]:"acked"}));
-              // puis repasse à idle après petit délai
               setTimeout(()=>{
-                setPhase(ph2 => ({...ph2, [c.target_mac]:"idle"}));
+                setPhase(ph2 => ({...ph2,[c.target_mac]:"idle"}));
               },1200);
             }
             log(`cmd ~ ${c.action} (${c.status}) → ${c.master_id}${c.target_mac?" ▶ "+c.target_mac:""}`);
@@ -697,11 +765,11 @@ export default function App(){
   }
 
   /* =================================
-     LOAD / REFRESH
+     LOAD DATA
      ================================= */
   async function loadAll(){
     if(!sb) return;
-    // masters
+
     const { data:devs, error:ed } = await sb
       .from("devices")
       .select("id,name,master_mac,last_seen,online")
@@ -712,16 +780,15 @@ export default function App(){
       setMasters(devs||[]);
     }
 
-    // nodes
     const { data:nodes, error:en } = await sb
       .from("nodes")
-      .select("master_id,slave_mac,friendly_name,pc_on,last_seen")
+      .select("master_id,slave_mac,friendly_name,pc_on,last_seen");
     if(en){
       log("Err nodes: "+en.message);
     } else {
       const map = {};
       (nodes||[]).forEach(n=>{
-        if(!map[n.master_id]) map[n.master_id] = [];
+        if(!map[n.master_id]) map[n.master_id]=[];
         map[n.master_id].push(n);
       });
       setSlavesByMaster(map);
@@ -738,7 +805,7 @@ export default function App(){
       log("Err nodes: "+error.message);
       return;
     }
-    setSlavesByMaster(cur => ({...cur, [masterId]: data||[] }));
+    setSlavesByMaster(cur => ({...cur,[masterId]:data||[]}));
   }
 
   /* =================================
@@ -746,25 +813,23 @@ export default function App(){
      ================================= */
   async function sendCmd(masterId, targetMac, action, payload={}){
     if(!sb) return;
-    // On marque visuellement le début
     if(targetMac){
-      setPhase(ph => ({...ph, [targetMac]:"sending"}));
+      setPhase(ph => ({...ph,[targetMac]:"sending"}));
     }
 
     const { error } = await sb
       .from("commands")
       .insert({
-        master_id  : masterId,
-        target_mac : targetMac || null,
+        master_id: masterId,
+        target_mac: targetMac || null,
         action,
         payload
       });
 
     if(error){
       log("cmd err: "+error.message);
-      // on revient à idle en cas d'erreur
       if(targetMac){
-        setPhase(ph => ({...ph, [targetMac]:"idle"}));
+        setPhase(ph => ({...ph,[targetMac]:"idle"}));
       }
     } else {
       log(`[cmd] ${action} → ${masterId}${targetMac?" ▶ "+targetMac:""}`);
@@ -799,7 +864,7 @@ export default function App(){
         apikey:SUPABASE_ANON_KEY,
         Authorization:`Bearer ${session.access_token}`
       },
-      body:JSON.stringify({ master_id: masterId })
+      body:JSON.stringify({ master_id:masterId })
     });
     if(r.ok){
       log(`MASTER supprimé : ${masterId}`);
@@ -809,15 +874,14 @@ export default function App(){
     }
   }
 
-  // renommer le slave (friendly_name)
-  async function submitRenameSlave(masterId,mac){
-    const newName = editName[mac]?.trim();
+  async function submitRenameSlave(masterId, mac){
+    const newName = (editName[mac] ?? "").trim();
     if(!newName) return;
     const { error } = await sb
       .from("nodes")
       .update({ friendly_name:newName })
-      .eq("master_id", masterId)
-      .eq("slave_mac", mac);
+      .eq("master_id",masterId)
+      .eq("slave_mac",mac);
     if(error){
       alert(error.message);
     } else {
@@ -825,16 +889,73 @@ export default function App(){
     }
   }
 
-  /* simple helper d'UI pour toggles */
+  /* =================================
+     PAIRING MASTER
+     ================================= */
+  async function openPairDialog(){
+    const { data:{session} } = await sb.auth.getSession();
+    if(!session){
+      alert("Non connecté");
+      return;
+    }
+    try {
+      const r = await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`, {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          apikey:SUPABASE_ANON_KEY,
+          Authorization:`Bearer ${session.access_token}`
+        },
+        body:JSON.stringify({ ttl_minutes:10 })
+      });
+      if(!r.ok){
+        const t = await r.text();
+        alert(t);
+        return;
+      }
+      const { code, expires_at } = await r.json();
+      setPair({
+        open:true,
+        code,
+        expires_at
+      });
+      log(`Pair-code ${code}`);
+    } catch(e){
+      console.error(e);
+      alert("Erreur pair-code");
+    }
+  }
+
+  function closePairDialog(){
+    setPair({
+      open:false,
+      code:null,
+      expires_at:null
+    });
+  }
+
+  // compte à rebours d'expiration du code
+  const pairCountdownText = (() => {
+    if(!pair.open || !pair.expires_at) return "—";
+    const end = new Date(pair.expires_at).getTime();
+    const left = Math.max(0, Math.floor((end - Date.now())/1000));
+    const min = Math.floor(left/60);
+    const sec = left%60;
+    return `${min}:${String(sec).padStart(2,"0")}`;
+  })();
+
+  /* =================================
+     TOGGLES UI SLAVE
+     ================================= */
   function toggleInfo(mac){
-    setOpenInfo(cur=>({...cur,[mac]: !cur[mac]}));
+    setOpenInfo(cur=>({...cur,[mac]:!cur[mac]}));
   }
   function toggleMore(mac){
-    setOpenMore(cur=>({...cur,[mac]: !cur[mac]}));
+    setOpenMore(cur=>({...cur,[mac]:!cur[mac]}));
   }
 
   /* =================================
-     TOP BAR LOGIQUE
+     AUTH BUTTONS
      ================================= */
   function handleLogin(){
     if(!sb) return;
@@ -850,6 +971,7 @@ export default function App(){
       else if(data?.url) window.location.href=data.url;
     });
   }
+
   function handleLogout(){
     if(!sb) return;
     sb.auth.signOut();
@@ -858,31 +980,22 @@ export default function App(){
   const accountEmail = user?.email || "non connecté";
 
   /* =================================
-     RENDU CARTE SLAVE
+     RENDER SLAVE
      ================================= */
-  function SlaveCard({masterId,slave}){
+  function SlaveCard({ masterId, slave }){
     const mac = slave.slave_mac;
     const niceName = slave.friendly_name || mac;
-    const pcState = slave.pc_on; // true / false / null
-    const isInfoOpen  = !!openInfo[mac];
-    const isMoreOpen  = !!openMore[mac];
-    const ph          = phase[mac] || "idle";
+    const pcState = slave.pc_on; // true/false/null
+    const isInfoOpen = !!openInfo[mac];
+    const isMoreOpen = !!openMore[mac];
+    const ph = phase[mac] || "idle";
 
-    // état barre d'activité
-    // sending  -> 30%
-    // acked    -> 100%
-    // idle     -> 0% (barre masquée visuellement en width)
-    let barWidth = "0%";
-    let barColor = "#0a0a0a";
-    if(ph==="sending"){
-      barWidth = "30%";
-      barColor = "#0a0a0a";
-    } else if(ph==="acked"){
-      barWidth = "100%";
-      barColor = "#0a0a0a";
-    }
+    // barre activité
+    let barWidth="0%";
+    if(ph==="sending") barWidth="30%";
+    else if(ph==="acked") barWidth="100%";
 
-    // affichage du pc_on
+    // statut PC
     let pcText;
     if(pcState===true){
       pcText = <span className="on">Ordinateur : Allumé</span>;
@@ -894,7 +1007,7 @@ export default function App(){
 
     return (
       <div className="slaveCard">
-        {/* bouton i */}
+        {/* bouton info */}
         <button
           className="slaveInfoBtn"
           onClick={()=>toggleInfo(mac)}
@@ -903,7 +1016,7 @@ export default function App(){
           i
         </button>
 
-        {/* panneau info/rename */}
+        {/* panneau info / rename */}
         {isInfoOpen && (
           <div className="slaveInfoPanel">
             <div className="slaveInfoRow">
@@ -916,7 +1029,7 @@ export default function App(){
             </div>
 
             <div className="slaveInfoRow">
-              <span className="slaveInfoLabel">Renommer le slave</span>
+              <span className="slaveInfoLabel">Renommer le SLAVE</span>
               <div className="slaveRenameRow">
                 <input
                   className="slaveRenameInput"
@@ -936,20 +1049,18 @@ export default function App(){
               <button
                 className="slaveRenameBtn"
                 onClick={()=>toggleInfo(mac)}
-              >Fermer</button>
+              >
+                Fermer
+              </button>
             </div>
           </div>
         )}
 
-        {/* gros nom */}
-        <div className="slaveName">
-          {niceName}
-        </div>
+        {/* nom du slave */}
+        <div className="slaveName">{niceName}</div>
 
-        {/* statut PC */}
-        <div className="pcStatus">
-          {pcText}
-        </div>
+        {/* statut pc */}
+        <div className="pcStatus">{pcText}</div>
 
         {/* barre d'activité */}
         <div className="activityBarWrap">
@@ -957,14 +1068,14 @@ export default function App(){
             className="activityBarInner"
             style={{
               width:barWidth,
-              background:barColor
+              background:"#0a0a0a"
             }}
           />
         </div>
 
-        {/* boutons ronds en bas */}
+        {/* boutons ronds */}
         <div className="slaveBtnRow">
-          {/* IO */}
+          {/* IO / power pulse */}
           <button
             className="roundBtn"
             onClick={()=>sendCmd(masterId, mac, "SLV_IO", {
@@ -975,7 +1086,7 @@ export default function App(){
             ⏻
           </button>
 
-          {/* RESET */}
+          {/* RESET normal */}
           <button
             className="roundBtn"
             onClick={()=>sendCmd(masterId, mac, "SLV_RESET", {})}
@@ -993,6 +1104,7 @@ export default function App(){
             >
               …
             </button>
+
             {isMoreOpen && (
               <div className="moreMenu">
                 <div
@@ -1024,7 +1136,7 @@ export default function App(){
   }
 
   /* =================================
-     CARTE MASTER
+     RENDER MASTER
      ================================= */
   function MasterCard({m}){
     const live = isMasterLive(m);
@@ -1032,7 +1144,6 @@ export default function App(){
 
     return (
       <section className="masterCard">
-        {/* header master */}
         <div className="masterHead">
           <div className="masterInfoL">
             <div className="masterNameRow">
@@ -1066,10 +1177,12 @@ export default function App(){
           </div>
         </div>
 
-        {/* zone slaves */}
         <div className="slavesWrap">
           {listSlaves.length===0 ? (
-            <div className="smallText" style={{textAlign:"center",padding:"24px 0"}}>
+            <div
+              className="smallText"
+              style={{textAlign:"center",padding:"24px 0"}}
+            >
               Aucun SLAVE.
             </div>
           ) : (
@@ -1082,7 +1195,7 @@ export default function App(){
             ))
           )}
 
-          {/* tuile "ajouter un SLAVE" purement visuelle pour l'instant */}
+          {/* tuile "ajouter un SLAVE" (visuel pour l'instant) */}
           <div
             className="slaveCard"
             style={{
@@ -1090,27 +1203,34 @@ export default function App(){
               justifyContent:"center",
               cursor:"default"
             }}
-            title="Appuyer sur le bouton PAIR du MASTER pour associer un nouveau SLAVE"
+            title="Appuie sur PAIR du MASTER pour associer un nouveau SLAVE"
           >
-            <div style={{fontSize:"28px",lineHeight:"1",fontWeight:"500",marginBottom:"4px"}}>＋</div>
-            <div style={{fontSize:"12px",color:"var(--text-dim)",textAlign:"center"}}>
+            <div style={{
+              fontSize:"28px",
+              lineHeight:"1",
+              fontWeight:"500",
+              marginBottom:"4px"
+            }}>＋</div>
+            <div style={{
+              fontSize:"12px",
+              color:"var(--text-dim)",
+              textAlign:"center"
+            }}>
               Ajouter un SLAVE
             </div>
           </div>
         </div>
 
-        {/* actions globales master (pulse, on/off etc.) */}
-        <div
-          style={{
-            display:"flex",
-            flexWrap:"wrap",
-            rowGap:"8px",
-            columnGap:"8px",
-            alignItems:"center",
-            justifyContent:"flex-start",
-            fontSize:"13px"
-          }}
-        >
+        {/* actions globales du master */}
+        <div style={{
+          display:"flex",
+          flexWrap:"wrap",
+          rowGap:"8px",
+          columnGap:"8px",
+          alignItems:"center",
+          justifyContent:"flex-start",
+          fontSize:"13px"
+        }}>
           <button
             className="masterActionBtn"
             onClick={()=>sendCmd(m.id,null,"PULSE",{ms:500})}
@@ -1145,45 +1265,44 @@ export default function App(){
   }
 
   /* =================================
-     RENDER MAIN
+     RENDER PRINCIPAL
      ================================= */
 
-  // cas pas de config supabase
   if(!sb){
+    // pas de config env
     return (
       <>
         <style>{styles}</style>
-        <div className="app-bg"/>
-        <div
-          style={{
-            position:"relative",
-            zIndex:10,
-            padding:"40px",
-            maxWidth:"480px",
-            margin:"80px auto",
-            background:"rgba(255,255,255,0.7)",
-            border:"1px solid rgba(0,0,0,0.1)",
-            borderRadius:"16px",
-            backdropFilter:"blur(20px)",
-            fontFamily:"var(--font-family)"
-          }}
-        >
-          <h2 style={{marginTop:0}}>Configuration manquante</h2>
-          <p style={{fontSize:"14px",lineHeight:1.4,color:"var(--text-dim)"}}>
-            Défini VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY dans les secrets
-            GitHub Actions (ou en local dans <code>.env</code>) puis rebuild.
-          </p>
+        <div className="app-bg" />
+        <div className="topBar">
+          <div className="topBar-left">
+            <div style={{fontSize:"14px",fontWeight:600}}>REMOTE POWER</div>
+            <div className="topBar-sub">Config manquante</div>
+          </div>
+          <div className="topBar-right">
+            <span className="tbBtn" style={{opacity:.5,cursor:"default"}}>—</span>
+          </div>
         </div>
+
+        <main className="mainWrap">
+          <section
+            className="masterCard"
+            style={{textAlign:"center",fontSize:"14px",color:"var(--text-dim)"}}
+          >
+            Définis VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY dans les secrets,
+            rebuild, puis recharge la page.
+          </section>
+        </main>
       </>
     );
   }
 
-  // tant qu'on n'a pas fini de checker la session
   if(!authReady){
+    // on attend l'auth
     return (
       <>
         <style>{styles}</style>
-        <div className="app-bg"/>
+        <div className="app-bg" />
         <div className="topBar">
           <div className="topBar-left">
             <div style={{fontSize:"14px",fontWeight:600}}>REMOTE POWER</div>
@@ -1200,8 +1319,7 @@ export default function App(){
   return (
     <>
       <style>{styles}</style>
-      {/* fond pleine page */}
-      <div className="app-bg"/>
+      <div className="app-bg" />
 
       {/* barre du haut */}
       <div className="topBar">
@@ -1210,17 +1328,13 @@ export default function App(){
             REMOTE POWER
           </div>
           <div className="topBar-sub">
-            {user
-              ? <>Compte : {accountEmail}</>
-              : <>Non connecté</>
-            }
+            {user ? <>Compte : {accountEmail}</> : <>Non connecté</>}
           </div>
         </div>
 
         <div className="topBar-right">
           {user && (
             <>
-              {/* badge "online" global = si au moins un master live */}
               {masters.some(isMasterLive) ? (
                 <div className="badgeOnline"><span>●</span>Online</div>
               ) : (
@@ -1231,7 +1345,12 @@ export default function App(){
                 Rafraîchir
               </button>
 
-              <button className="tbBtn" onClick={handleLogout}>
+              {/* NOUVEAU : bouton pour générer le code d'appairage MASTER */}
+              <button className="tbBtn" onClick={openPairDialog}>
+                Ajouter un MASTER
+              </button>
+
+              <button className="tbBtn danger" onClick={handleLogout}>
                 Déconnexion
               </button>
             </>
@@ -1245,32 +1364,32 @@ export default function App(){
         </div>
       </div>
 
-      {/* contenu */}
+      {/* contenu principal */}
       <main className="mainWrap">
-        {/* masters list */}
+        {/* Liste des masters */}
         {user ? (
           masters.length===0 ? (
-            <div
+            <section
               className="masterCard"
               style={{textAlign:"center",fontSize:"14px",color:"var(--text-dim)"}}
             >
-              Aucun MASTER (ajoute un MASTER via l’appareil).
-            </div>
+              Aucun MASTER (utilise “Ajouter un MASTER” pour générer le code).
+            </section>
           ) : (
             masters.map(m => (
               <MasterCard key={m.id} m={m}/>
             ))
           )
         ) : (
-          <div
+          <section
             className="masterCard"
             style={{textAlign:"center",fontSize:"14px",color:"var(--text-dim)"}}
           >
             Connecte-toi pour voir tes appareils.
-          </div>
+          </section>
         )}
 
-        {/* journal */}
+        {/* Journal */}
         <section className="journalCard">
           <div className="journalTitle">Journal</div>
           <div ref={logRef} className="journalBox">
@@ -1278,6 +1397,36 @@ export default function App(){
           </div>
         </section>
       </main>
+
+      {/* MODALE PAIRING MASTER */}
+      {pair.open && (
+        <div className="pairOverlay" onClick={closePairDialog}>
+          <div
+            className="pairCard"
+            onClick={e=>e.stopPropagation()}
+          >
+            <div className="pairTitle">Appairer un MASTER</div>
+
+            <div className="pairRow">
+              <span className="pairLabel">Code :</span>
+              <span className="pairCodeBox">
+                {String(pair.code).padStart(6,"0")}
+              </span>
+            </div>
+
+            <div className="pairFooter">
+              Saisis ce code dans le portail Wi-Fi de l’ESP32 MASTER.<br/>
+              Expire dans {pairCountdownText}.
+            </div>
+
+            <div className="pairBtnRow">
+              <button className="pairBtn" onClick={closePairDialog}>
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
