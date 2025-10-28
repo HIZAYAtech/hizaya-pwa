@@ -1416,7 +1416,7 @@ html,body,#root{
   background:
     radial-gradient(circle at 20% 20%, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0) 60%),
     radial-gradient(circle at 80% 30%, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 70%),
-    url("https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1920&q=60");
+    url("https://blackstone.scene7.com/is/image/blackstone/alex-mNJ7c7-XCZQ-unsplash_editted?wid=1280&hei=853");
   background-size:cover;
   background-position:center;
   padding:24px 16px 80px;
