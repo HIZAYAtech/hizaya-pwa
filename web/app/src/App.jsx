@@ -1312,7 +1312,7 @@ export default function App() {
 /* =========================================================
    STYLES
 ========================================================= */
-const STYLES = `
+ const STYLES = `
 :root{
   --bg-page:#0d0f10;
   --glass-bg:rgba(255,255,255,0.08);
@@ -1328,9 +1328,9 @@ const STYLES = `
   --online-red:#f87171;
   --modal-bg:rgba(0,0,0,0.45);
 
-  /* ombres adoucies */
-  --shadow-card:0 16px 32px rgba(0,0,0,0.35);
-  --shadow-small:0 8px 16px rgba(0,0,0,0.4);
+  /* plus d'ombres */
+  --shadow-card:none;
+  --shadow-small:none;
 
   --transition-fast:0.15s ease;
 
@@ -1364,7 +1364,7 @@ html,body,#root{
   -webkit-backdrop-filter:blur(20px) saturate(140%);
   background:rgba(20,20,20,0.55);
   border-bottom:1px solid rgba(255,255,255,0.12);
-  box-shadow:0 12px 24px rgba(0,0,0,0.6);
+  box-shadow:var(--shadow-card);
   padding:12px 16px;
   color:#fff;
 }
@@ -1426,7 +1426,7 @@ html,body,#root{
   content:"";
   position:absolute;
   inset:0;
-  background:rgba(0,0,0,0.28); /* <-- avant 0.35, maintenant plus léger */
+  background:rgba(0,0,0,0.28);
 }
 .pageContent{
   position:relative;
@@ -1438,8 +1438,6 @@ html,body,#root{
   gap:24px;
   padding-bottom:96px;
   color:var(--text-main);
-
-  /* on garde l'alignement vertical global */
 }
 
 /* Sections : Groupes / Masters / Journal */
@@ -1449,7 +1447,7 @@ html,body,#root{
   background:var(--glass-bg);
   border:1px solid var(--glass-border);
   border-radius:16px;
-  box-shadow:var(--shadow-card);          /* ombre plus douce */
+  box-shadow:var(--shadow-card);
   backdrop-filter:blur(18px) saturate(140%);
   -webkit-backdrop-filter:blur(18px) saturate(140%);
   padding:16px;
@@ -1485,16 +1483,13 @@ html,body,#root{
 .groupCard{
   min-width:260px;
   flex:1 1 260px;
-
   background:rgba(255,255,255,0.07);
   border:1px solid rgba(255,255,255,0.16);
   border-radius:16px;
-
   padding:16px;
   color:var(--text-main);
   position:relative;
-
-  box-shadow:var(--shadow-card);          /* au lieu d’un énorme 0 20px 40px */
+  box-shadow:var(--shadow-card);
   backdrop-filter:blur(18px) saturate(140%);
   -webkit-backdrop-filter:blur(18px) saturate(140%);
 }
@@ -1547,8 +1542,7 @@ html,body,#root{
   padding:16px;
   margin-bottom:16px;
   color:var(--text-main);
-
-  box-shadow:var(--shadow-card);          /* plus doux */
+  box-shadow:var(--shadow-card);
   backdrop-filter:blur(18px) saturate(140%);
   -webkit-backdrop-filter:blur(18px) saturate(140%);
 }
@@ -1628,28 +1622,23 @@ html,body,#root{
   width:100%;
   max-width:1000px;
   display:grid;
-
-  /* cartes plus larges : 180 au lieu de 140 */
   grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
   gap:16px;
   justify-items:center;
 }
 
-/* Slave card (agrandie, ombre réduite) */
+/* Slave card */
 .slaveCard{
   position:relative;
   width:100%;
-  max-width:200px;    /* avant 180px */
-  min-width:160px;    /* avant 140px */
-
-  background:rgba(255,255,255,0.09); /* un poil plus clair => plus verre */
+  max-width:200px;
+  min-width:160px;
+  background:rgba(255,255,255,0.09);
   border:1px solid rgba(255,255,255,0.20);
   border-radius:20px;
-
-  box-shadow:var(--shadow-card);        /* avant 0 24px 48px ultra violent */
+  box-shadow:var(--shadow-card);
   backdrop-filter:blur(18px) saturate(140%);
   -webkit-backdrop-filter:blur(18px) saturate(140%);
-
   padding:18px 14px 14px;
   display:flex;
   flex-direction:column;
@@ -1657,8 +1646,6 @@ html,body,#root{
   text-align:center;
   color:var(--text-main);
 }
-
-/* bouton info en haut à droite */
 .infoChip{
   position:absolute;
   top:10px;
@@ -1681,13 +1668,11 @@ html,body,#root{
   background:var(--bubble-bg-hover);
   color:var(--text-main);
 }
-
-/* nom du slave */
 .slaveNameMain{
   font-size:16px;
   font-weight:600;
   color:var(--text-main);
-  margin-top:26px;    /* léger + pour pas coller le bouton i */
+  margin-top:26px;
   margin-bottom:6px;
   min-height:2.6em;
   display:flex;
@@ -1705,8 +1690,6 @@ html,body,#root{
   min-height:1.4em;
   letter-spacing:.02em;
 }
-
-/* barre d'action (progression) */
 .actionBarWrapper{
   width:100%;
   height:4px;
@@ -1749,7 +1732,6 @@ html,body,#root{
   padding:2px 4px;
   box-shadow:var(--shadow-small);
 }
-
 @keyframes pulseBar{
   0%{opacity:0.4;}
   50%{opacity:1;}
@@ -1759,8 +1741,6 @@ html,body,#root{
   0%{width:0%;}
   100%{width:100%;}
 }
-
-/* boutons ronds en bas */
 .slaveBtnsRow{
   display:flex;
   flex-wrap:nowrap;
@@ -1800,7 +1780,7 @@ html,body,#root{
   display:flex;
   align-items:center;
   justify-content:center;
-  margin-top:0; /* on remonte l'icône -> mieux centré */
+  margin-top:0;
 }
 
 /* Journal */
@@ -1817,7 +1797,7 @@ html,body,#root{
   color:var(--text-dim);
   white-space:pre-wrap;
   overflow:auto;
-  box-shadow:inset 0 0 16px rgba(0,0,0,0.6);
+  box-shadow:none;
 }
 
 /* Boutons "capsule" */
@@ -1845,7 +1825,6 @@ html,body,#root{
   transform:scale(.97);
 }
 
-/* petit bouton type chip */
 .chipBtn{
   appearance:none;
   background:var(--bubble-bg);
