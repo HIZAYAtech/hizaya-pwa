@@ -703,6 +703,9 @@ export default function App(){
   const [authReady,setAuthReady] = useState(false);
   const [user,setUser]           = useState(null);
 
+  // IMPORTANT: pour éviter de recharger à chaque refresh token
+  const bootDone = useRef(false);
+
   /* ---------- DATA ---------- */
   // masters
   const [devices,setDevices]                 = useState([]); // [{id,name,master_mac,last_seen}, ...]
@@ -763,33 +766,45 @@ export default function App(){
      AUTH BOOTSTRAP
      ========================================================= */
   useEffect(()=>{
-    // live listener supabase auth
+    // listener sur les events d'auth (SIGNED_IN, TOKEN_REFRESH, etc.)
     const sub = sb.auth.onAuthStateChange(async (_ev,session)=>{
       const u = session?.user||null;
       setUser(u);
+
       if(u){
-        await attachRealtime();
-        await loadAll(); // initial load
+        // on n'initialise qu'une seule fois tant qu'il reste loggé
+        if(!bootDone.current){
+          bootDone.current = true;
+          await attachRealtime();
+          await loadAll();
+        }
       }else{
+        // déconnexion → reset tout
+        bootDone.current = false;
         cleanupRealtime();
         setDevices([]);
         setNodesByMaster({});
         setGroups([]);
         setGroupMembers({});
       }
+
       setAuthReady(true);
     });
-    // initial check
+
+    // au tout premier rendu on vérifie s'il est déjà loggé
     (async()=>{
       const {data:{session}} = await sb.auth.getSession();
       const u = session?.user||null;
       setUser(u);
-      if(u){
+
+      if(u && !bootDone.current){
+        bootDone.current = true;
         await attachRealtime();
-        await loadAll(); // initial load
+        await loadAll();
       }
       setAuthReady(true);
     })();
+
     return ()=>{
       sub.data.subscription.unsubscribe();
       cleanupRealtime();
@@ -798,33 +813,28 @@ export default function App(){
   },[]);
 
   /* =========================================================
-     STATE PATCH HELPERS (pour éviter reload complet)
+     STATE PATCH HELPERS
      ========================================================= */
 
-  // patch device (last_seen etc.) sans loadAll
   function patchDeviceRowRT(newDev){
     setDevices(old=>old.map(d=>(
       d.id === newDev.id ? {...d, ...newDev} : d
     )));
   }
 
-  // insert device (nouveau master) -> on recharge tout (rare)
   async function insertDeviceRT(newDev){
     addLog("[rt] device INSERT");
-    await loadAll();            // ok rare
-    refreshCommands(newDev.id); // pour historique cmd de ce master
+    await loadAll();
+    refreshCommands(newDev.id);
   }
 
-  // delete device -> reload (rare)
   async function deleteDeviceRT(){
     addLog("[rt] device DELETE");
     await loadAll();
   }
 
-  // mise à jour d'un node (slave) pc_on / friendly_name sans reload
   function updateOneNodeRT(n){
-    // n = p.new de la table nodes
-    // 1) nodesByMaster
+    // nodesByMaster
     setNodesByMaster(prev=>{
       const arr = prev[n.master_id]||[];
       const newArr = arr.map(sl=>{
@@ -840,7 +850,7 @@ export default function App(){
       return {...prev, [n.master_id]:newArr};
     });
 
-    // 2) groupMembers
+    // groupMembers
     setGroupMembers(prev=>{
       const out={};
       for(const gid in prev){
@@ -859,11 +869,9 @@ export default function App(){
     });
   }
 
-  // insert d'un node -> on le rajoute dans nodesByMaster, pas besoin de reload total
   function insertOneNodeRT(n){
     setNodesByMaster(prev=>{
       const arr = prev[n.master_id] ? [...prev[n.master_id]] : [];
-      // éviter doublon si déjà présent
       if(!arr.find(sl=>sl.mac===n.slave_mac)){
         arr.push({
           master_id:n.master_id,
@@ -874,10 +882,8 @@ export default function App(){
       }
       return {...prev,[n.master_id]:arr};
     });
-    // pas besoin de toucher groupMembers ici (l'user décidera via l'éditeur de groupe)
   }
 
-  // delete d'un node -> on le retire localement et aussi des groupes
   function deleteOneNodeRT(oldN){
     setNodesByMaster(prev=>{
       const arr = prev[oldN.master_id]||[];
@@ -896,7 +902,7 @@ export default function App(){
   }
 
   /* =========================================================
-     REALTIME (maintenant SANS loadAll spam)
+     REALTIME
      ========================================================= */
   async function cleanupRealtime(){
     if(chDevices.current) sb.removeChannel(chDevices.current);
@@ -910,16 +916,14 @@ export default function App(){
   async function attachRealtime(){
     cleanupRealtime();
 
-    // ---- DEVICES ----
+    // DEVICES
     chDevices.current = sb.channel("rt:devices")
-      // nouvel appareil => reload complet une fois
       .on('postgres_changes',
         {event:'INSERT',schema:'public',table:'devices'},
         payload=>{
           insertDeviceRT(payload.new);
         }
       )
-      // update heartbeat (last_seen) => patch, pas reload
       .on('postgres_changes',
         {event:'UPDATE',schema:'public',table:'devices'},
         payload=>{
@@ -927,7 +931,6 @@ export default function App(){
           patchDeviceRowRT(payload.new);
         }
       )
-      // suppression master => reload complet une fois
       .on('postgres_changes',
         {event:'DELETE',schema:'public',table:'devices'},
         ()=>{
@@ -936,9 +939,8 @@ export default function App(){
       )
       .subscribe();
 
-    // ---- NODES ----
+    // NODES
     chNodes.current = sb.channel("rt:nodes")
-      // nouvel esclave ajouté au master
       .on('postgres_changes',
         {event:'INSERT',schema:'public',table:'nodes'},
         payload=>{
@@ -946,15 +948,12 @@ export default function App(){
           insertOneNodeRT(payload.new);
         }
       )
-      // update pc_on/friendly_name -> patch ciblé
       .on('postgres_changes',
         {event:'UPDATE',schema:'public',table:'nodes'},
         payload=>{
-          // c'est ça qui arrive toutes les 2s pour pc_on
           updateOneNodeRT(payload.new);
         }
       )
-      // suppression esclave -> patch remove
       .on('postgres_changes',
         {event:'DELETE',schema:'public',table:'nodes'},
         payload=>{
@@ -964,8 +963,7 @@ export default function App(){
       )
       .subscribe();
 
-    // ---- COMMANDS ----
-    // celui-là sert juste à maintenir l'historique cmd + finir les barres noires
+    // COMMANDS
     chCmds.current = sb.channel("rt:commands")
       .on('postgres_changes',
         {event:'INSERT',schema:'public',table:'commands'},
@@ -1008,20 +1006,19 @@ export default function App(){
      LOAD DATA INITIALE
      ========================================================= */
   async function loadAll(){
-    // 1. devices
+    // devices
     const {data:devs,error:ed}=await sb
       .from('devices')
       .select('id,name,master_mac,last_seen')
       .order('created_at',{ascending:false});
     if(ed){ addLog("Err devices: "+ed.message); return; }
 
-    // 2. nodes
+    // nodes
     const {data:nodes,error:en}=await sb
       .from('nodes')
       .select('master_id,slave_mac,friendly_name,pc_on');
     if(en){ addLog("Err nodes: "+en.message); return; }
 
-    // build nodesByMaster + flat list
     const nbm={};
     const flatSlaves=[];
     (nodes||[]).forEach(n=>{
@@ -1036,14 +1033,14 @@ export default function App(){
       flatSlaves.push(obj);
     });
 
-    // 3. groups
+    // groups
     const {data:grps,error:eg}=await sb
       .from('groups')
       .select('id,name')
       .order('created_at',{ascending:true});
     if(eg){ addLog("Err groups: "+eg.message); }
 
-    // 4. group_members
+    // group_members
     const {data:gmembers,error:em}=await sb
       .from('group_members')
       .select('group_id,master_id,slave_mac');
@@ -1072,7 +1069,7 @@ export default function App(){
     setGroups(grps||[]);
     setGroupMembers(gmap);
 
-    // 5. Précharger l'historique commandes des masters (une seule fois)
+    // précharger historique cmd par master si pas déjà fait
     for(const d of devs||[]){
       await refreshCommands(d.id);
     }
@@ -1081,15 +1078,11 @@ export default function App(){
   /* =========================================================
      COMMAND HISTORY HANDLING
      ========================================================= */
-
-  // recharge les 20 dernières commandes pour un master SEULEMENT
-  // si la liste est encore vide (sinon on ne touche plus → pas de flicker)
   async function refreshCommands(masterId){
     const ul = cmdLists.current.get(masterId);
     if(!ul) return;
-
     if(ul.children.length>0){
-      return; // déjà chargé → on ne vide pas, on ne re-remplit pas
+      return; // déjà chargé -> on n'efface pas
     }
 
     const {data, error} = await sb
@@ -1107,7 +1100,6 @@ export default function App(){
     (data||[]).forEach(c => upsertCmdRow(masterId,c));
   }
 
-  // insère/MAJ visuelle d'une commande pour un master
   function upsertCmdRow(masterId, c){
     const ul = cmdLists.current.get(masterId);
     if(!ul) return;
@@ -1126,9 +1118,8 @@ export default function App(){
   }
 
   /* =========================================================
-     COMMAND HELPERS (SLAVE / MASTER / GROUP)
+     COMMAND HELPERS
      ========================================================= */
-
   async function sendCmd(masterId, targetMac, action, payload={}){
     const {error} = await sb.from('commands').insert({
       master_id: masterId,
@@ -1146,23 +1137,20 @@ export default function App(){
   }
 
   function runSlaveAction(slave, action, payload){
-    // mettre la barre noire "busy"
     setSlaveActivity(sa=>({
       ...sa,
       [slave.mac]: {phase:"busy",msg:""},
     }));
     sendCmd(slave.master_id, slave.mac, action, payload);
-    // le passage en "done" et disparition se fait via realtime 'acked'
+    // passage en done (Succès) se fera via realtime "acked"
   }
 
   async function runGroupAction(groupId, action, payload){
     const members = groupMembers[groupId] || [];
-    // groupe busy
     setGroupActivity(ga=>({
       ...ga,
       [groupId]:{phase:"busy",okNames:[]}
     }));
-    // chaque slave busy
     members.forEach(m=>{
       setSlaveActivity(sa=>({
         ...sa,
@@ -1170,7 +1158,6 @@ export default function App(){
       }));
     });
 
-    // envoi parallèle
     const results = await Promise.all(members.map(m=>{
       return sendCmd(m.master_id,m.mac,action,payload).then(ok=>({
         ok,
@@ -1179,12 +1166,10 @@ export default function App(){
     }));
     const okNames = results.filter(r=>r.ok).map(r=>r.name);
 
-    // groupe done
     setGroupActivity(ga=>({
       ...ga,
       [groupId]:{phase:"done",okNames}
     }));
-    // esclaves done direct (et le realtime confirmera)
     members.forEach(m=>{
       setSlaveActivity(sa=>({
         ...sa,
@@ -1192,7 +1177,6 @@ export default function App(){
       }));
     });
 
-    // auto-clear après 3s
     setTimeout(()=>{
       setGroupActivity(ga=>{
         const cur=ga[groupId];
@@ -1263,7 +1247,7 @@ export default function App(){
     }
     addLog(`Renommé ${mac} → ${newName}`);
 
-    // patch local pour éviter reload global :
+    // patch local immédiat
     const patchObj = {
       master_id: masterId,
       slave_mac: mac,
@@ -1276,7 +1260,6 @@ export default function App(){
   }
 
   function getCurrentPcOn(masterId,mac){
-    // utilitaire pour garder la valeur pc_on actuelle
     const arr = nodesByMaster[masterId]||[];
     const f = arr.find(s=>s.mac===mac);
     return f ? !!f.pc_on : false;
@@ -1300,8 +1283,7 @@ export default function App(){
       return;
     }
     addLog("Groupe créé : "+nm);
-    // rechargement des groupes (événement rare)
-    await loadAll();
+    await loadAll(); // rare, donc ok
   }
 
   async function renameGroup(groupId){
@@ -1313,7 +1295,6 @@ export default function App(){
       return;
     }
     addLog("Groupe renommé "+groupId+" → "+nm);
-    // patch local rapide
     setGroups(gs=>gs.map(g=>g.id===groupId?{...g,name:nm}:g));
   }
 
@@ -1325,7 +1306,6 @@ export default function App(){
       return;
     }
     addLog("Groupe supprimé "+groupId);
-    // patch local
     setGroups(gs=>gs.filter(g=>g.id!==groupId));
     setGroupMembers(gm=>{
       const copy={...gm};
@@ -1342,7 +1322,6 @@ export default function App(){
   }
 
   async function saveGroupMembers(groupId, selectedKeys){
-    // selectedKeys: Set("masterId|mac")
     const current = groupMembers[groupId]||[];
     const curSet = new Set(current.map(m=>`${m.master_id}|${m.mac}`));
 
@@ -1377,16 +1356,11 @@ export default function App(){
     }
 
     addLog(`Membres groupe ${groupId} mis à jour`);
-
-    // on recharge UNIQUEMENT les membres de ce groupe
-    // et on recalcule localement sans tout reload
     await reloadSingleGroup(groupId);
-
     setEditGroupId(null);
   }
 
   async function reloadSingleGroup(groupId){
-    // re-fetch group_members pour ce groupe
     const {data:gmembers,error} = await sb
       .from('group_members')
       .select('group_id,master_id,slave_mac')
@@ -1395,10 +1369,8 @@ export default function App(){
       addLog("Err reloadSingleGroup: "+error.message);
       return;
     }
-    // on doit reconstruire les infos slaves pour ce groupeId
     const currentNodes = {...nodesByMaster};
     const newList = (gmembers||[]).map(m=>{
-      // on va retrouver ce slave dans nodesByMaster
       const arr = currentNodes[m.master_id]||[];
       const found = arr.find(s=>s.mac===m.slave_mac);
       if(found){
@@ -1490,7 +1462,6 @@ export default function App(){
      RENDER SUBCOMPONENTS
      ========================================================= */
 
-  /* --------------- SlaveCard --------------- */
   function SlaveCard({slave}){
     const mac    = slave.mac;
     const isInfo = !!openSlaveInfo[mac];
@@ -1593,7 +1564,6 @@ export default function App(){
     );
   }
 
-  /* --------------- MasterCard --------------- */
   function MasterCard({dev, slaves}){
     const live = isLive(dev);
 
@@ -1656,7 +1626,6 @@ export default function App(){
     );
   }
 
-  /* --------------- GroupCard --------------- */
   function GroupCard({group, members}){
     const gid = group.id;
     const st  = groupActivity[gid] || {phase:"idle",okNames:[]};
@@ -1753,7 +1722,6 @@ export default function App(){
     );
   }
 
-  /* --------------- GroupsSection --------------- */
   function GroupsSection(){
     return (
       <section className="glassCard groupsSectionCard">
@@ -1794,7 +1762,6 @@ export default function App(){
      MODALS
      ========================================================= */
 
-  /* --- Pair-code modal --- */
   function PairDialogModal(){
     if(!pairDialog.open) return null;
     const endMs = pairDialog.expires_at
@@ -1840,13 +1807,12 @@ export default function App(){
     );
   }
 
-  /* --- Group Members Editor modal --- */
   function GroupMembersEditor(){
     if(!editGroupId) return null;
     const gid = editGroupId;
     const grp = groups.find(g=>g.id===gid);
 
-    // liste de tous les slaves
+    // tous les slaves connus
     const allSlaves = useMemo(()=>{
       const acc=[];
       Object.values(nodesByMaster).forEach(arr=>{
@@ -1868,14 +1834,13 @@ export default function App(){
 
     const [localSel,setLocalSel] = useState(curSet);
 
-    // resync si on change de groupe
     useEffect(()=>{
       const newSet=new Set();
       (groupMembers[gid]||[]).forEach(m=>{
         newSet.add(`${m.master_id}|${m.mac}`);
       });
       setLocalSel(newSet);
-    },[gid]);
+    },[gid]); // <-- important: pas sur groupMembers pour pas écraser pendant que tu coches
 
     function toggleOne(masterId,mac){
       const key=`${masterId}|${mac}`;
@@ -1891,8 +1856,7 @@ export default function App(){
       <div className="modalBackdrop" onClick={closeEditGroupMembers}>
         <div className="modalCard" onClick={e=>e.stopPropagation()}>
           <div className="modalTitle">
-            Membres du groupe
-            {" "}
+            Membres du groupe{" "}
             <strong>{grp?.name||"?"}</strong>
           </div>
 
@@ -1946,7 +1910,6 @@ export default function App(){
     );
   }
 
-  /* --- Group "ON list" modal --- */
   function GroupOnListModal(){
     if(!listOnGroupId) return null;
     const gid = listOnGroupId;
@@ -1958,8 +1921,7 @@ export default function App(){
       <div className="modalBackdrop" onClick={closeListOn}>
         <div className="modalCard" onClick={e=>e.stopPropagation()}>
           <div className="modalTitle">
-            Machines allumées
-            {" "}
+            Machines allumées{" "}
             <strong>{grp?.name||"?"}</strong>
           </div>
 
@@ -2017,7 +1979,7 @@ export default function App(){
       <style>{STYLES}</style>
 
       <div className="pageBg">
-        {/* ---------- TOP BAR ---------- */}
+        {/* TOP BAR */}
         <div className="topbar">
           <div className="topbarTitle">REMOTE POWER</div>
 
@@ -2044,10 +2006,10 @@ export default function App(){
           </div>
         </div>
 
-        {/* ---------- CONTENT ---------- */}
+        {/* CONTENU */}
         <main className="contentWrap">
 
-          {/* SECTION GROUPES */}
+          {/* GROUPES */}
           {user && (
             <GroupsSection/>
           )}
@@ -2071,7 +2033,7 @@ export default function App(){
             </div>
           )}
 
-          {/* JOURNAL DEBUG */}
+          {/* JOURNAL */}
           <section className="glassCard" style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:"8px"}}>
             <div className="groupsTitle">Journal</div>
             <div className="logBox" ref={logRef}>
