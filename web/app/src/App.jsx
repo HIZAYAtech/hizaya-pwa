@@ -1,1358 +1,1191 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-/* =============================
-   CONFIG / SUPABASE
-   ============================= */
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPA_ANON    = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const sb = createClient(SUPABASE_URL, SUPA_ANON);
+/* =========================================================
+   CONFIG SUPABASE
+   ========================================================= */
+const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL;
+const SUPA_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const sb = createClient(SUPABASE_URL, SUPA_ANON_KEY);
 
-/* délais "online": si last_seen < 8s -> en ligne */
-const LIVE_TTL_MS   = 8000;
-/* pin par défaut pour action IO */
-const DEFAULT_IO_PIN = 26;
+/* =========================================================
+   CONSTANTES UI / LOGIQUE
+   ========================================================= */
+const MASTER_LIVE_TTL_MS = 8000; // master "online" si last_seen < 8s
+const BG_IMAGE_URL =
+  "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1600&q=60";
 
-/* =============================
-   STYLES GLOBAUX (glass UI clair)
-   ============================= */
-const STYLES = `
-*{box-sizing:border-box;-webkit-font-smoothing:antialiased}
-html,body,#root{min-height:100%}
-body{
-  margin:0;
-  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
-  color:#0f172a;
-  background:#f5f6fa;
+/* =========================================================
+   CSS GLOBALE
+   ========================================================= */
+const styles = `
+:root {
+  --glass-bg: rgba(255,255,255,0.12);
+  --glass-bg-strong: rgba(255,255,255,0.18);
+  --glass-stroke: rgba(255,255,255,0.3);
+  --text-main: rgba(0,0,0,0.85);
+  --text-dim: rgba(0,0,0,0.5);
+  --text-soft: rgba(0,0,0,0.35);
+  --accent-online: #16a34a;
+  --accent-offline: #ef4444;
+  --accent-primary: #2563eb;
+  --panel-bg: rgba(255,255,255,0.22);
+  --panel-stroke: rgba(255,255,255,0.4);
+
+  --card-radius-lg: 20px;
+  --card-radius-md: 16px;
+  --card-radius-sm: 12px;
+  --transition-fast: .16s ease;
 }
 
-/* -------- BACKGROUND FULL PAGE -------- */
-.pageBg{
-  min-height:100vh;
+* { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+               Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--text-main);
+}
+
+/* ==== FOND GLOBAL WITH IMAGE ==== */
+.appBg {
+  min-height: 100%;
+  background-color: #f5f6fa;
   background-image:
-    radial-gradient(circle at 20% 20%,rgba(255,255,255,0.6) 0%,rgba(255,255,255,0) 60%),
-    radial-gradient(circle at 80% 30%,rgba(255,255,255,0.4) 0%,rgba(255,255,255,0) 70%),
-    url("https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1600&q=60");
-  background-size:cover;
-  background-position:center;
-  background-attachment:fixed;
+    radial-gradient(circle at 20% 20%, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 60%),
+    radial-gradient(circle at 80% 30%, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 70%),
+    url("${BG_IMAGE_URL}");
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  padding-top: 64px; /* espace sous la barre du haut */
+}
+
+/* ==== BARRE TOP FIXE ==== */
+.topBar {
+  position: fixed;
+  top:0;
+  left:0;
+  right:0;
+  height:64px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 16px;
+  background: var(--panel-bg);
+  border-bottom: 1px solid var(--panel-stroke);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  z-index:1000;
+}
+.topLeft {
+  font-weight:600;
+  font-size:16px;
+  letter-spacing:-0.03em;
+  color:var(--text-main);
   display:flex;
   flex-direction:column;
-}
-
-/* -------- TOP BAR -------- */
-.topbar{
-  position:sticky;
-  top:0;left:0;right:0;
-  z-index:1000;
-  background:rgba(255,255,255,0.55);
-  backdrop-filter:blur(20px) saturate(180%);
-  -webkit-backdrop-filter:blur(20px) saturate(180%);
-  border-bottom:1px solid rgba(0,0,0,0.08);
-  display:flex;
-  flex-wrap:wrap;
-  justify-content:space-between;
-  align-items:center;
-  padding:12px 16px;
-  row-gap:8px;
-}
-.topbarTitle{
-  font-size:14px;
-  font-weight:600;
-  letter-spacing:-.03em;
-  color:#0f172a;
-}
-.topbarRightRow{
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-  align-items:center;
-}
-.tagUser{
-  font-size:12px;
-  color:#475569;
-  background:rgba(0,0,0,0.04);
-  border-radius:999px;
-  padding:4px 8px;
-  border:1px solid rgba(0,0,0,0.06);
-  max-width:180px;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-  overflow:hidden;
-}
-.primaryBtn{
-  border-radius:12px;
-  border:1px solid rgba(0,0,0,0.1);
-  background:rgba(0,0,0,0.07);
-  font-size:13px;
-  padding:8px 12px;
   line-height:1.2;
-  cursor:pointer;
-  color:#0f172a;
 }
-.primaryBtn:hover{background:rgba(0,0,0,0.12);}
-.dangerBtn{color:#b91c1c;}
-.smallLabel{
+.topLeft small {
+  font-size:11px;
+  font-weight:400;
+  color:var(--text-dim);
+}
+.topRight {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  font-size:13px;
+  color:var(--text-main);
+}
+.badgeOnline {
+  color:var(--accent-online);
+  font-weight:600;
   font-size:12px;
-  color:#475569;
-  line-height:1.4;
+}
+.badgeOffline {
+  color:var(--accent-offline);
+  font-weight:600;
+  font-size:12px;
+}
+.topUserMail {
+  font-size:12px;
+  color:var(--text-dim);
+}
+.topBtn {
+  appearance:none;
+  border:0;
+  border-radius:999px;
+  background:rgba(0,0,0,0.05);
+  color:var(--text-main);
+  font-size:12px;
+  line-height:1;
+  padding:8px 12px;
+  cursor:pointer;
+  transition:background var(--transition-fast);
+}
+.topBtn.primary {
+  background: var(--accent-primary);
+  color:#fff;
+}
+.topBtn:hover {
+  background:rgba(0,0,0,0.07);
+}
+.topBtn.primary:hover {
+  background:#1e4ed8;
 }
 
-/* -------- MAIN WRAPPER -------- */
-.contentWrap{
-  flex:1;
+/* ==== PAGE CONTENT WRAPPER ==== */
+.pageContent {
   max-width:1400px;
-  width:100%;
-  margin:24px auto 80px;
-  padding:0 16px;
+  margin:24px auto 60px auto;
+  padding:0 16px 40px 16px;
   display:flex;
   flex-direction:column;
   gap:24px;
 }
 
-/* -------- GENERIC GLASS CARD -------- */
-.glassCard{
-  background:rgba(255,255,255,0.22);
-  backdrop-filter:blur(20px) saturate(180%);
-  -webkit-backdrop-filter:blur(20px) saturate(180%);
-  border:1px solid rgba(0,0,0,0.08);
-  border-radius:24px;
-  box-shadow:0 30px 60px rgba(0,0,0,.15);
-  color:#0f172a;
+/* ==== SECTIONS TITLES ==== */
+.sectionBlock {
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.sectionHeader {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-end;
+  justify-content:space-between;
+  row-gap:8px;
+}
+.sectionTitle {
+  font-size:15px;
+  font-weight:600;
+  color:var(--text-main);
+  letter-spacing:-0.03em;
+  display:flex;
+  flex-direction:column;
+  line-height:1.25;
+}
+.sectionSubtitle {
+  font-size:12px;
+  font-weight:400;
+  color:var(--text-dim);
+}
+.sectionActions {
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  font-size:12px;
 }
 
-/* =============================
-   GROUPS SECTION
-   ============================= */
-.groupsSectionCard{
-  padding:16px 20px;
+/* ==== GLASS CARD ==== */
+.glassCard {
+  background: var(--glass-bg);
+  border:1px solid var(--glass-stroke);
+  border-radius: var(--card-radius-lg);
+  box-shadow:0 20px 60px rgba(0,0,0,0.25);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  padding:16px;
+  color:var(--text-main);
+}
+
+/* ==== GROUP LIST LAYOUT ==== */
+.groupsWrap {
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr));
+  gap:16px;
+}
+
+/* ==== EACH GROUP CARD ==== */
+.groupCard {
+  background: var(--glass-bg-strong);
+  border:1px solid var(--glass-stroke);
+  border-radius: var(--card-radius-md);
+  padding:16px;
+  min-height:180px;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  position:relative;
+}
+.groupTopRow {
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:8px;
+}
+.groupName {
+  font-size:15px;
+  font-weight:600;
+  color:var(--text-main);
+  letter-spacing:-0.03em;
+  line-height:1.3;
+}
+.groupMetaLine {
+  font-size:12px;
+  color:var(--text-dim);
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:4px;
+}
+.groupBtnsRow {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:8px;
+  margin-top:12px;
+}
+.smallBtn {
+  appearance:none;
+  border:0;
+  border-radius:999px;
+  background:rgba(0,0,0,0.05);
+  color:var(--text-main);
+  font-size:12px;
+  line-height:1;
+  padding:6px 10px;
+  cursor:pointer;
+  transition:background var(--transition-fast);
+}
+.smallBtn:hover {
+  background:rgba(0,0,0,0.07);
+}
+.subtleBtn {
+  background:transparent;
+  border:0;
+  color:var(--text-dim);
+  font-size:12px;
+  line-height:1;
+  padding:4px 6px;
+  cursor:pointer;
+}
+.subtleBtn:hover {
+  color:var(--text-main);
+}
+
+/* overflow list of "on" slaves button */
+.listOnBtn {
+  background:transparent;
+  border:0;
+  padding:0;
+  font-size:12px;
+  color:var(--accent-primary);
+  cursor:pointer;
+  text-decoration:underline;
+}
+.listOnBtn:hover { color:#1e4ed8; }
+
+/* ==== MASTER CARD ==== */
+.masterCardOuter {
+  background: var(--glass-bg);
+  border:1px solid var(--glass-stroke);
+  border-radius: var(--card-radius-lg);
+  box-shadow:0 20px 60px rgba(0,0,0,0.25);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  padding:16px;
+  color:var(--text-main);
+  min-height:260px;
   display:flex;
   flex-direction:column;
   gap:16px;
+  max-width:1100px;
+  margin:0 auto; /* centré dans la page */
 }
-.groupsHeaderRow{
+.masterHeadRow {
   display:flex;
   flex-wrap:wrap;
   justify-content:space-between;
   align-items:flex-start;
   row-gap:8px;
 }
-.groupsHeaderLeft{
+.masterHeadMain {
   display:flex;
   flex-direction:column;
-  gap:4px;
+  gap:6px;
 }
-.groupsTitle{
-  font-size:14px;
-  font-weight:600;
-  letter-spacing:-.03em;
-  color:#0f172a;
-}
-.groupsRow{
+.masterTitleRow {
   display:flex;
   flex-wrap:wrap;
+  align-items:center;
+  gap:10px;
+}
+.masterName {
+  font-size:15px;
+  font-weight:600;
+  color:var(--text-main);
+  letter-spacing:-0.03em;
+}
+.masterStatusOnline {
+  font-size:12px;
+  font-weight:600;
+  color:var(--accent-online);
+}
+.masterStatusOffline {
+  font-size:12px;
+  font-weight:600;
+  color:var(--accent-offline);
+}
+.masterMeta {
+  font-size:12px;
+  color:var(--text-dim);
+  line-height:1.4;
+}
+.masterBtns {
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  font-size:12px;
+}
+.masterActionBtn {
+  appearance:none;
+  border:0;
+  background:rgba(0,0,0,0.05);
+  color:var(--text-main);
+  border-radius:999px;
+  line-height:1;
+  padding:6px 10px;
+  cursor:pointer;
+  transition:background var(--transition-fast);
+}
+.masterActionBtn:hover {
+  background:rgba(0,0,0,0.07);
+}
+
+/* ==== SLAVES GRID ==== */
+.slavesGrid {
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center; /* <-- IMPORTANT: centred */
   gap:16px;
 }
 
-/* --- single group card --- */
-.groupCard{
+/* ==== SLAVE CARD ==== */
+.slaveCard {
   position:relative;
-  min-width:260px;
-  flex:1 1 260px;
-  background:rgba(255,255,255,0.4);
-  border:1px solid rgba(0,0,0,0.08);
-  border-radius:20px;
-  box-shadow:0 20px 40px rgba(0,0,0,.12);
-  padding:16px;
+  flex:0 1 180px;
+  max-width:200px;
+  min-width:140px;
+  min-height:220px;
+  background:rgba(255,255,255,0.22);
+  border:1px solid rgba(255,255,255,0.5);
+  box-shadow:0 24px 60px rgba(0,0,0,0.25);
+  border-radius:var(--card-radius-md);
+  backdrop-filter: blur(16px) saturate(1.45);
+  -webkit-backdrop-filter: blur(16px) saturate(1.45);
+  padding:12px 12px 48px 12px; /* place pour les boutons en bas */
   display:flex;
   flex-direction:column;
-  gap:12px;
-  color:#0f172a;
-}
-.groupHeaderTop{
-  display:flex;
-  justify-content:space-between;
-  align-items:flex-start;
-  flex-wrap:wrap;
-  gap:8px;
-}
-.groupNameBlock{
-  display:flex;
-  flex-direction:column;
-  min-width:0;
-}
-.groupName{
-  font-size:16px;
-  font-weight:600;
-  line-height:1.2;
-  color:#0f172a;
-  word-break:break-word;
-}
-.groupCount{
-  font-size:12px;
-  color:#475569;
-}
-.iconRow{
-  display:flex;
-  flex-wrap:wrap;
-  gap:6px;
+  justify-content:flex-start;
   align-items:center;
+  text-align:center;
+  color:var(--text-main);
 }
-.iconBtn{
-  border:0;
-  background:rgba(0,0,0,0.05);
+.slaveLineTop {
+  width:100%;
+  display:flex;
+  justify-content:flex-end;
+}
+.infoChip {
+  background:rgba(0,0,0,0.06);
+  color:var(--text-main);
   border-radius:999px;
-  width:32px;
-  height:32px;
-  font-size:13px;
+  font-size:11px;
   line-height:1;
-  display:flex;
-  align-items:center;
-  justify-content:center;
+  padding:4px 6px;
   cursor:pointer;
-  color:#0f172a;
 }
-.iconBtn:hover{background:rgba(0,0,0,0.08);}
-.iconBtn.danger{color:#b91c1c;}
-
-.progressWrapGroup{
+.infoChip:hover {
+  background:rgba(0,0,0,0.1);
+}
+.slaveNameBlock {
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  text-align:center;
+  margin-top:8px;
+  margin-bottom:12px;
+}
+.slaveNameBig {
+  font-size:16px;
+  line-height:1.2;
+  font-weight:600;
+  color:var(--text-main);
+  letter-spacing:-0.03em;
+}
+.pcStatus {
+  font-size:12px;
+  line-height:1.3;
+  font-weight:500;
+  color:var(--text-dim);
+  margin-top:4px;
+}
+.progressOuter {
+  width:100%;
   height:4px;
-  background:rgba(0,0,0,0.08);
   border-radius:999px;
+  background:rgba(0,0,0,0.08);
+  margin-top:8px;
   overflow:hidden;
 }
-.progressBarBusy{
+.progressInner {
   height:100%;
   background:#000;
-  width:100%;
+  width:0%;
+  transition: width .2s linear;
 }
-.resultList{
+
+/* BOTTOM BUTTON BAR INSIDE SLAVE CARD */
+.slaveBtnsRow {
+  position:absolute;
+  bottom:8px;
+  left:0;
+  right:0;
+  display:flex;
+  justify-content:center;
+  flex-wrap:wrap;
+  gap:10px;
+  padding:0 8px;
+}
+.circleBtn {
+  appearance:none;
+  border:0;
+  background:rgba(0,0,0,0.05);
+  color:var(--text-main);
+  width:42px;
+  height:42px;
+  min-width:42px;
+  min-height:42px;
+  border-radius:999px;
+  font-size:13px;
+  font-weight:500;
+  line-height:42px;
+  text-align:center;
+  cursor:pointer;
+  transition:background var(--transition-fast), color var(--transition-fast);
+}
+.circleBtn:hover {
+  background:rgba(0,0,0,0.09);
+}
+.circleBtn.moreBtn {
+  font-weight:600;
+  font-size:18px;
+  line-height:42px;
+}
+
+/* ==== JOURNAL GÉNÉRAL ==== */
+.journalBlock {
+  max-width:1100px;
+  margin:0 auto;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.journalTitle {
+  font-size:13px;
+  font-weight:600;
+  color:var(--text-main);
+  letter-spacing:-0.03em;
+}
+.journalBox {
+  min-height:120px;
+  max-height:180px;
+  overflow:auto;
+  background:rgba(255,255,255,0.4);
+  border:1px solid rgba(255,255,255,0.5);
+  border-radius:var(--card-radius-md);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  box-shadow:0 16px 40px rgba(0,0,0,0.2);
+  padding:12px;
   font-size:12px;
-  color:#0f172a;
   line-height:1.4;
+  color:var(--text-main);
   white-space:pre-wrap;
 }
 
-.groupActionsRow{
-  display:flex;
-  flex-wrap:wrap;
-  gap:10px;
-  align-items:center;
-}
-.btnCircle{
-  flex-shrink:0;
-  width:44px;
-  height:44px;
-  border-radius:999px;
-  background:rgba(0,0,0,0.04);
-  border:1px solid rgba(0,0,0,0.1);
-  color:#0f172a;
-  font-size:12px;
-  font-weight:500;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  cursor:pointer;
-  line-height:1;
-}
-.btnCircle.small{width:40px;height:40px;font-size:11px;}
-.btnCircle:hover{background:rgba(0,0,0,0.07);}
-
-.groupMoreWrap{position:relative;}
-.moreMenu{
-  position:absolute;
-  bottom:60px;
-  right:0;
-  background:rgba(255,255,255,0.9);
-  backdrop-filter:blur(16px) saturate(180%);
-  -webkit-backdrop-filter:blur(16px) saturate(180%);
-  border:1px solid rgba(0,0,0,0.08);
-  border-radius:16px;
-  box-shadow:0 20px 40px rgba(0,0,0,.2);
-  padding:8px;
-  display:flex;
-  flex-direction:column;
-  min-width:140px;
-  z-index:20;
-}
-.moreMenuBtn{
-  all:unset;
-  cursor:pointer;
-  font-size:13px;
-  padding:8px 10px;
-  border-radius:12px;
-  color:#0f172a;
-  line-height:1.2;
-}
-.moreMenuBtn.danger{color:#b91c1c;}
-.moreMenuBtn:hover{background:rgba(0,0,0,0.05);}
-
-
-/* =============================
-   MASTER CARD
-   ============================= */
-.masterCard{
-  position:relative;
-  padding:20px;
-  display:flex;
-  flex-direction:column;
-  gap:16px;
-}
-.masterHeadTop{
-  display:flex;
-  flex-wrap:wrap;
-  justify-content:space-between;
-  gap:12px;
-  align-items:flex-start;
-}
-.masterLeft{
-  display:flex;
-  flex-direction:column;
-  gap:6px;
-  min-width:0;
-}
-.masterRow1{
-  display:flex;
-  flex-wrap:wrap;
-  align-items:center;
-  gap:8px;
-  row-gap:6px;
-}
-.masterName{
-  font-weight:600;
-  font-size:15px;
-  line-height:1.2;
-  color:#0f172a;
-}
-.badgeOnline{
-  font-size:11px;
-  padding:2px 8px;
-  border-radius:999px;
-  font-weight:500;
-  border:1px solid rgba(0,0,0,0.08);
-  background:rgba(16,185,129,.12);
-  color:#065f46;
-}
-.badgeOffline{
-  font-size:11px;
-  padding:2px 8px;
-  border-radius:999px;
-  font-weight:500;
-  border:1px solid rgba(0,0,0,0.08);
-  background:rgba(254,202,202,.4);
-  color:#7f1d1d;
-}
-.masterMeta{
-  font-size:12px;
-  color:#475569;
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-  line-height:1.4;
-  align-items:center;
-  word-break:break-word;
-}
-.metaBtn{
-  font-size:12px;
-  cursor:pointer;
-  background:rgba(0,0,0,0.05);
-  border:0;
-  border-radius:999px;
-  padding:2px 6px;
-  line-height:1.2;
-  color:#0f172a;
-}
-.metaBtn:hover{background:rgba(0,0,0,0.08);}
-.masterActionsRow{
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-  align-items:center;
-}
-
-.slaveGridWrap{
-  width:100%;
-  display:flex;
-  justify-content:center;
-}
-.slaveGrid{
-  display:flex;
-  flex-wrap:wrap;
-  justify-content:center;
-  gap:16px;
-  width:100%;
-}
-
-/* =============================
-   SLAVE CARD
-   ============================= */
-.slaveCard{
-  position:relative;
-  flex:1 1 140px;
-  max-width:200px;
-  min-width:140px;
-  min-height:210px;
-  background:rgba(255,255,255,0.55);
-  border:1px solid rgba(0,0,0,0.08);
-  border-radius:20px;
-  box-shadow:0 16px 32px rgba(0,0,0,.12);
-  padding:16px;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  text-align:center;
-  color:#0f172a;
-}
-.slaveInfoBtn{
-  position:absolute;
-  top:12px;
-  right:12px;
-  width:24px;
-  height:24px;
-  border-radius:999px;
-  background:rgba(0,0,0,.05);
-  border:0;
-  font-size:12px;
-  line-height:1;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  cursor:pointer;
-  color:#0f172a;
-}
-.slaveInfoBtn:hover{background:rgba(0,0,0,.08);}
-
-.slaveName{
-  margin-top:24px;
-  font-size:16px;
-  font-weight:600;
-  line-height:1.2;
-  word-break:break-word;
-  max-width:100%;
-}
-.pcState{
-  margin-top:6px;
-  font-size:12px;
-  color:#475569;
-  line-height:1.2;
-}
-
-.progressWrapSlave{
-  margin-top:8px;
-  width:100%;
-  height:4px;
-  background:rgba(0,0,0,0.08);
-  border-radius:999px;
-  overflow:hidden;
-}
-.progressBarSlave{
-  height:100%;
-  background:#000;
-  width:100%;
-}
-.resultText{
-  margin-top:6px;
-  font-size:12px;
-  color:#0f172a;
-  line-height:1.4;
-}
-
-.slaveButtonsRow{
-  margin-top:auto;
-  display:flex;
-  gap:10px;
-  align-items:center;
-  justify-content:center;
-  flex-wrap:nowrap;
-  width:100%;
-}
-
-/* menu "..." du slave */
-.moreWrap{position:relative;}
-.moreMenu{
-  position:absolute;
-  bottom:60px;
-  right:0;
-  background:rgba(255,255,255,0.9);
-  backdrop-filter:blur(16px) saturate(180%);
-  -webkit-backdrop-filter:blur(16px) saturate(180%);
-  border:1px solid rgba(0,0,0,0.08);
-  border-radius:16px;
-  box-shadow:0 20px 40px rgba(0,0,0,.2);
-  padding:8px;
-  display:flex;
-  flex-direction:column;
-  min-width:140px;
-  z-index:20;
-}
-.moreMenuBtn{
-  all:unset;
-  cursor:pointer;
-  font-size:13px;
-  padding:8px 10px;
-  border-radius:12px;
-  color:#0f172a;
-  line-height:1.2;
-}
-.moreMenuBtn.danger{color:#b91c1c;}
-.moreMenuBtn:hover{background:rgba(0,0,0,0.05);}
-
-.btnCircle{
-  flex-shrink:0;
-  width:44px;
-  height:44px;
-  border-radius:999px;
-  background:rgba(0,0,0,0.04);
-  border:1px solid rgba(0,0,0,0.1);
-  color:#0f172a;
-  font-size:12px;
-  font-weight:500;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  cursor:pointer;
-  line-height:1;
-}
-.btnCircle.small{width:40px;height:40px;font-size:11px;}
-.btnCircle:hover{background:rgba(0,0,0,0.07);}
-
-/* infoSheet dans un slave */
-.infoSheet{
-  position:absolute;
-  inset:0;
-  background:rgba(255,255,255,0.95);
-  border-radius:20px;
-  padding:16px;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-  align-items:stretch;
-  justify-content:flex-start;
-  text-align:left;
-  box-shadow:0 20px 40px rgba(0,0,0,.3);
-  z-index:30;
-}
-.infoRowLabel{
-  font-size:12px;
-  color:#475569;
-  line-height:1.3;
-}
-.infoMac{
-  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-  font-size:12px;
-  color:#0f172a;
-  word-break:break-all;
-}
-.infoInput{
-  width:100%;
-  border-radius:12px;
-  border:1px solid rgba(0,0,0,0.15);
-  background:#fff;
-  padding:8px 10px;
-  font-size:14px;
-  color:#0f172a;
-}
-.infoActionsRow{
-  display:flex;
-  justify-content:space-between;
-  gap:8px;
-  flex-wrap:wrap;
-}
-.smallBtn{
-  flex:1;
-  border-radius:12px;
-  border:1px solid rgba(0,0,0,0.1);
-  background:rgba(0,0,0,0.03);
-  font-size:13px;
-  padding:8px 10px;
-  text-align:center;
-  cursor:pointer;
-  color:#0f172a;
-  line-height:1.2;
-}
-.smallBtn.danger{color:#b91c1c;}
-.smallBtn:hover{background:rgba(0,0,0,0.07);}
-
-/* -------------- CMD HISTORY / JOURNAL -------------- */
-.cmdSectionTitle{
-  font-size:12px;
-  color:#475569;
-  line-height:1.4;
-}
-.cmdList{
-  margin:0;
-  padding-left:18px;
-  max-height:100px;
-  overflow:auto;
-  font-size:12px;
-  color:#475569;
-  line-height:1.4;
-}
-.cmdList code{
-  background:rgba(0,0,0,0.05);
-  border-radius:6px;
-  padding:1px 4px;
-}
-
-/* -------------- MODALS (pair-code, éditer membres, liste ON) -------------- */
-.modalBackdrop{
+/* ==== MODALS (pair, membres groupe, liste ON, menu "...") ==== */
+.modalBackdrop {
   position:fixed;
   inset:0;
   background:rgba(0,0,0,0.4);
-  z-index:2000;
+  backdrop-filter:blur(4px);
+  -webkit-backdrop-filter:blur(4px);
   display:flex;
   align-items:center;
   justify-content:center;
   padding:16px;
+  z-index:2000;
 }
-.modalCard{
-  background:rgba(255,255,255,0.9);
-  backdrop-filter:blur(20px) saturate(180%);
-  -webkit-backdrop-filter:blur(20px) saturate(180%);
-  border-radius:20px;
-  border:1px solid rgba(0,0,0,0.08);
-  box-shadow:0 30px 60px rgba(0,0,0,.4);
+.modalCard {
+  background:#fff;
+  color:#000;
+  border-radius:16px;
+  max-width:360px;
   width:100%;
-  max-width:400px;
-  max-height:90vh;
+  max-height:80vh;
   overflow:auto;
-  padding:20px;
-  color:#0f172a;
+  box-shadow:0 40px 120px rgba(0,0,0,0.4);
+  padding:16px;
   display:flex;
   flex-direction:column;
   gap:16px;
-}
-.modalTitle{
-  font-size:16px;
-  font-weight:600;
-  line-height:1.2;
-}
-.scrollY{
-  max-height:40vh;
-  overflow:auto;
-  border:1px solid rgba(0,0,0,0.06);
-  border-radius:12px;
-  padding:12px;
-  background:rgba(255,255,255,0.4);
-}
-.checkboxRow{
-  display:flex;
-  align-items:center;
-  gap:8px;
   font-size:14px;
-  color:#0f172a;
+}
+.modalTitle {
+  font-weight:600;
+  font-size:15px;
+  color:#000;
   line-height:1.3;
-  margin-bottom:8px;
+  letter-spacing:-0.03em;
 }
-.checkboxRow input{width:16px;height:16px;}
-.smallNote{
-  font-size:12px;
-  color:#475569;
-  line-height:1.4;
-  word-break:break-word;
-}
-.rowEnd{
+.modalRow {
   display:flex;
-  justify-content:flex-end;
-  gap:8px;
   flex-wrap:wrap;
+  gap:8px;
+  align-items:center;
+  font-size:13px;
 }
-.rowBetween{
+.rowBetween {
   display:flex;
+  flex-wrap:wrap;
+  align-items:center;
   justify-content:space-between;
+  gap:12px;
+}
+.primaryBtn {
+  appearance:none;
+  border:0;
+  border-radius:999px;
+  background:#2563eb;
+  color:#fff;
+  font-size:13px;
+  font-weight:500;
+  line-height:1;
+  padding:8px 12px;
+  cursor:pointer;
+}
+.primaryBtn:hover {
+  background:#1e4ed8;
+}
+.smallNote {
+  font-size:12px;
+  color:#555;
+  line-height:1.4;
+}
+.checkboxRow {
+  display:flex;
   gap:8px;
-  flex-wrap:wrap;
   align-items:flex-start;
+  font-size:13px;
+  line-height:1.4;
+  border-bottom:1px solid #ececec;
+  padding:8px 0;
+}
+.checkboxRow input {
+  margin-top:3px;
+}
+.smallLabel {
+  font-size:11px;
+  line-height:1.3;
+  color:#666;
+}
+.scrollY {
+  max-height:200px;
+  overflow:auto;
+  border:1px solid #ddd;
+  border-radius:10px;
+  padding:8px;
+  background:#fafafa;
+  font-size:13px;
+  color:#000;
+  line-height:1.4;
+  box-shadow:inset 0 2px 4px rgba(0,0,0,0.06);
 }
 
-/* Journal global debug */
-.logBox{
-  white-space:pre-wrap;
-  font-size:12px;
-  line-height:1.4;
-  background:rgba(0,0,0,0.05);
-  border:1px solid rgba(0,0,0,0.08);
-  border-radius:16px;
-  padding:12px;
-  max-height:160px;
-  overflow:auto;
-  color:#0f172a;
+/* mini menu pour "..." slave actions avancées */
+.moreMenuList {
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  font-size:13px;
 }
+.moreMenuBtn {
+  appearance:none;
+  border:0;
+  background:#f2f2f2;
+  border-radius:10px;
+  line-height:1;
+  padding:10px 12px;
+  text-align:left;
+  cursor:pointer;
+  font-size:13px;
+  color:#000;
+}
+.moreMenuBtn.dangerous {
+  background:#fee2e2;
+  color:#991b1b;
+}
+
+/* pair code line */
+.pairCodeBox {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size:20px;
+  font-weight:600;
+  color:#000;
+  background:#f8fafc;
+  border:1px solid #cbd5e1;
+  border-radius:10px;
+  padding:8px 12px;
+  display:inline-block;
+  min-width:100px;
+  text-align:center;
+}
+
 `;
 
-/* =============================
+/* =========================================================
    HELPERS
-   ============================= */
-function isLive(device){
-  return device.last_seen && (Date.now() - new Date(device.last_seen)) < LIVE_TTL_MS;
+   ========================================================= */
+function fmtTS(s) {
+  if (!s) return "—";
+  const d = new Date(s);
+  return d.toLocaleString();
 }
-function fmtTS(s){
-  return s ? new Date(s).toLocaleString() : "—";
-}
-function shortNameFromMac(mac){
-  if(!mac) return "SLAVE";
-  return mac;
+function isMasterLive(dev) {
+  if (!dev.last_seen) return false;
+  const delta = Date.now() - new Date(dev.last_seen).getTime();
+  return delta < MASTER_LIVE_TTL_MS;
 }
 
 /* =========================================================
-   APP COMPONENT
+   COMPOSANT PRINCIPAL
    ========================================================= */
-export default function App(){
+export default function App() {
+  /* ---------- AUTH STATE ---------- */
+  const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
 
-  /* ---------- AUTH / USER ---------- */
-  const [authReady,setAuthReady] = useState(false);
-  const [user,setUser]           = useState(null);
+  /* ---------- DATA STATE ---------- */
+  const [devices, setDevices] = useState([]); // masters
+  // nodesByMaster[master_id] = [ { mac, nameShort, pc_on } , ... ]
+  const [nodesByMaster, setNodesByMaster] = useState({});
 
-  // IMPORTANT: pour éviter de recharger à chaque refresh token
-  const bootDone = useRef(false);
+  // groups list [{id,name},...]
+  const [groups, setGroups] = useState([]);
+  // groupMembers[group_id] = [ { master_id, mac } , ...]
+  const [groupMembers, setGroupMembers] = useState({});
 
-  /* ---------- DATA ---------- */
-  // masters
-  const [devices,setDevices]                 = useState([]); // [{id,name,master_mac,last_seen}, ...]
-  // { master_id: [ {master_id, mac, nameShort, pc_on}, ... ] }
-  const [nodesByMaster,setNodesByMaster]     = useState({});
-  // groups
-  const [groups,setGroups]                   = useState([]); // [{id,name}, ...]
-  // { group_id: [ {master_id, mac, nameShort, pc_on}, ... ] }
-  const [groupMembers,setGroupMembers]       = useState({});
+  /* ---------- CMD ACTIVITY PAR SLAVE ---------- */
+  // cmdActivity[slaveMac] = { phase:"idle"|"pending"|"acked"|"error", ts:number }
+  const [cmdActivity, setCmdActivity] = useState({});
 
-  /* ---------- CMD HISTORY + JOURNAL ---------- */
-  const cmdLists = useRef(new Map()); // masterId -> <ul>
-  const [lines,setLines] = useState([]);
+  /* ---------- LOG UI ---------- */
+  const [lines, setLines] = useState([]);
   const logRef = useRef(null);
-  function addLog(t){
-    setLines(ls=>[...ls,`${new Date().toLocaleTimeString()}  ${t}`]);
+  function addLog(txt) {
+    setLines((prev) => [
+      ...prev,
+      new Date().toLocaleTimeString() + "  " + txt,
+    ]);
   }
-  useEffect(()=>{ if(logRef.current){logRef.current.scrollTop=logRef.current.scrollHeight;} },[lines]);
+  useEffect(() => {
+    if (logRef.current) {
+      logRef.current.scrollTop = logRef.current.scrollHeight;
+    }
+  }, [lines]);
 
-  /* ---------- UI STATE / MODALS ---------- */
+  /* ---------- REALTIME CHANNEL REFS ---------- */
+  const chDevices = useRef(null);
+  const chNodes = useRef(null);
+  const chGroups = useRef(null);
+  const chCmds = useRef(null);
 
-  // Pairing MASTER dialog
-  const [pairDialog,setPairDialog] = useState({
-    open:false,
-    code:null,
-    expires_at:null,
+  /* ---------- MODALS / UI ---------- */
+  // Ajouter MASTER (pair-code)
+  const [pairInfo, setPairInfo] = useState({
+    open: false,
+    code: null,
+    expires_at: null,
   });
 
-  // Slave info sheet open?
-  const [openSlaveInfo,setOpenSlaveInfo] = useState({}); // mac -> bool
-  // Slave "..." popover open?
-  const [openSlaveMore,setOpenSlaveMore] = useState({}); // mac -> bool
-  // Edit friendly name local buffer
-  const [editNames,setEditNames] = useState({}); // mac -> string
+  // Slave action "..." menu
+  const [openSlaveMoreMac, setOpenSlaveMoreMac] = useState(null);
+  const [openSlaveMoreMaster, setOpenSlaveMoreMaster] = useState(null);
 
-  // Per-slave activity bar state
-  // { [mac]: {phase:'idle'|'busy'|'done'|'err', msg:''} }
-  const [slaveActivity,setSlaveActivity] = useState({});
+  // Affichage liste des slaves allumés d'un groupe
+  const [listOnGroupId, setListOnGroupId] = useState(null);
 
-  // GROUP side
-  const [openGroupMore,setOpenGroupMore] = useState({}); // groupId -> bool
-  // per-group activity (batch action)
-  // { [groupId]: {phase:'idle'|'busy'|'done', okNames:[] } }
-  const [groupActivity,setGroupActivity] = useState({});
+  // Édition membres d’un groupe
+  const [editGroupId, setEditGroupId] = useState(null);
 
-  // group members editor modal
-  const [editGroupId,setEditGroupId] = useState(null);
-
-  // show list of "ON" members for a group
-  const [listOnGroupId,setListOnGroupId] = useState(null);
-
-  /* ---------- Realtime channels ---------- */
-  const chDevices = useRef(null);
-  const chNodes   = useRef(null);
-  const chCmds    = useRef(null);
+  // Sélection temporaire des membres dans l'éditeur de groupe
+  // (Set de "master_id|mac") => vit au niveau App pour survivre aux rerenders
+  const [editMembersSel, setEditMembersSel] = useState(new Set());
 
   /* =========================================================
      AUTH BOOTSTRAP
      ========================================================= */
-  useEffect(()=>{
-    // listener sur les events d'auth (SIGNED_IN, TOKEN_REFRESH, etc.)
-    const sub = sb.auth.onAuthStateChange(async (_ev,session)=>{
-      const u = session?.user||null;
-      setUser(u);
-
-      if(u){
-        // on n'initialise qu'une seule fois tant qu'il reste loggé
-        if(!bootDone.current){
-          bootDone.current = true;
-          await attachRealtime();
-          await loadAll();
-        }
-      }else{
-        // déconnexion → reset tout
-        bootDone.current = false;
+  useEffect(() => {
+    // écoute des changements auth
+    const sub = sb.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+      setAuthReady(true);
+      if (session?.user) {
+        attachRealtime();
+        loadAllData();
+      } else {
         cleanupRealtime();
         setDevices([]);
         setNodesByMaster({});
         setGroups([]);
         setGroupMembers({});
       }
-
-      setAuthReady(true);
     });
 
-    // au tout premier rendu on vérifie s'il est déjà loggé
-    (async()=>{
-      const {data:{session}} = await sb.auth.getSession();
-      const u = session?.user||null;
-      setUser(u);
-
-      if(u && !bootDone.current){
-        bootDone.current = true;
-        await attachRealtime();
-        await loadAll();
-      }
+    // session initiale
+    (async () => {
+      const { data: { session } } = await sb.auth.getSession();
+      setUser(session?.user || null);
       setAuthReady(true);
+      if (session?.user) {
+        attachRealtime();
+        loadAllData();
+      }
     })();
 
-    return ()=>{
-      sub.data.subscription.unsubscribe();
-      cleanupRealtime();
+    return () => {
+      try {
+        sub.data.subscription.unsubscribe();
+      } catch {}
     };
-    // eslint-disable-next-line
-  },[]);
-
-  /* =========================================================
-     STATE PATCH HELPERS
-     ========================================================= */
-
-  function patchDeviceRowRT(newDev){
-    setDevices(old=>old.map(d=>(
-      d.id === newDev.id ? {...d, ...newDev} : d
-    )));
-  }
-
-  async function insertDeviceRT(newDev){
-    addLog("[rt] device INSERT");
-    await loadAll();
-    refreshCommands(newDev.id);
-  }
-
-  async function deleteDeviceRT(){
-    addLog("[rt] device DELETE");
-    await loadAll();
-  }
-
-  function updateOneNodeRT(n){
-    // nodesByMaster
-    setNodesByMaster(prev=>{
-      const arr = prev[n.master_id]||[];
-      const newArr = arr.map(sl=>{
-        if(sl.mac===n.slave_mac){
-          return {
-            ...sl,
-            nameShort: n.friendly_name || sl.nameShort,
-            pc_on: !!n.pc_on
-          };
-        }
-        return sl;
-      });
-      return {...prev, [n.master_id]:newArr};
-    });
-
-    // groupMembers
-    setGroupMembers(prev=>{
-      const out={};
-      for(const gid in prev){
-        out[gid] = prev[gid].map(m=>{
-          if(m.master_id===n.master_id && m.mac===n.slave_mac){
-            return {
-              ...m,
-              nameShort: n.friendly_name || m.nameShort,
-              pc_on: !!n.pc_on
-            };
-          }
-          return m;
-        });
-      }
-      return out;
-    });
-  }
-
-  function insertOneNodeRT(n){
-    setNodesByMaster(prev=>{
-      const arr = prev[n.master_id] ? [...prev[n.master_id]] : [];
-      if(!arr.find(sl=>sl.mac===n.slave_mac)){
-        arr.push({
-          master_id:n.master_id,
-          mac:n.slave_mac,
-          nameShort:n.friendly_name || shortNameFromMac(n.slave_mac),
-          pc_on:!!n.pc_on
-        });
-      }
-      return {...prev,[n.master_id]:arr};
-    });
-  }
-
-  function deleteOneNodeRT(oldN){
-    setNodesByMaster(prev=>{
-      const arr = prev[oldN.master_id]||[];
-      const newArr = arr.filter(sl=>sl.mac!==oldN.slave_mac);
-      return {...prev,[oldN.master_id]:newArr};
-    });
-    setGroupMembers(prev=>{
-      const out={};
-      for(const gid in prev){
-        out[gid] = prev[gid].filter(m=>!(
-          m.master_id===oldN.master_id && m.mac===oldN.slave_mac
-        ));
-      }
-      return out;
-    });
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* =========================================================
      REALTIME
      ========================================================= */
-  async function cleanupRealtime(){
-    if(chDevices.current) sb.removeChannel(chDevices.current);
-    if(chNodes.current)   sb.removeChannel(chNodes.current);
-    if(chCmds.current)    sb.removeChannel(chCmds.current);
-    chDevices.current = null;
-    chNodes.current   = null;
-    chCmds.current    = null;
+  function cleanupRealtime() {
+    if (chDevices.current) sb.removeChannel(chDevices.current);
+    if (chNodes.current)   sb.removeChannel(chNodes.current);
+    if (chGroups.current)  sb.removeChannel(chGroups.current);
+    if (chCmds.current)    sb.removeChannel(chCmds.current);
+    chDevices.current = chNodes.current = chGroups.current = chCmds.current = null;
   }
 
-  async function attachRealtime(){
+  function attachRealtime() {
     cleanupRealtime();
 
-    // DEVICES
+    // devices
     chDevices.current = sb.channel("rt:devices")
       .on('postgres_changes',
-        {event:'INSERT',schema:'public',table:'devices'},
-        payload=>{
-          insertDeviceRT(payload.new);
+        { event: 'INSERT', schema: 'public', table: 'devices' },
+        (p) => {
+          addLog(`+ device ${p.new.id}`);
+          setDevices((ds) => [p.new, ...ds]);
         }
       )
       .on('postgres_changes',
-        {event:'UPDATE',schema:'public',table:'devices'},
-        payload=>{
-          addLog("[rt] device UPDATE "+payload.new.id);
-          patchDeviceRowRT(payload.new);
+        { event: 'UPDATE', schema: 'public', table: 'devices' },
+        (p) => {
+          const d = p.new;
+          setDevices((ds) => ds.map(x => x.id === d.id ? { ...x, ...d } : x));
         }
       )
       .on('postgres_changes',
-        {event:'DELETE',schema:'public',table:'devices'},
-        ()=>{
-          deleteDeviceRT();
+        { event: 'DELETE', schema: 'public', table: 'devices' },
+        (p) => {
+          addLog(`- device ${p.old.id}`);
+          setDevices((ds) => ds.filter(x => x.id !== p.old.id));
         }
       )
       .subscribe();
-
-    // NODES
-    chNodes.current = sb.channel("rt:nodes")
-      .on('postgres_changes',
-        {event:'INSERT',schema:'public',table:'nodes'},
-        payload=>{
-          addLog("[rt] node INSERT "+payload.new.slave_mac);
-          insertOneNodeRT(payload.new);
-        }
-      )
-      .on('postgres_changes',
-        {event:'UPDATE',schema:'public',table:'nodes'},
-        payload=>{
-          updateOneNodeRT(payload.new);
-        }
-      )
-      .on('postgres_changes',
-        {event:'DELETE',schema:'public',table:'nodes'},
-        payload=>{
-          addLog("[rt] node DELETE "+payload.old.slave_mac);
-          deleteOneNodeRT(payload.old);
-        }
-      )
-      .subscribe();
-
-    // COMMANDS
-    chCmds.current = sb.channel("rt:commands")
-      .on('postgres_changes',
-        {event:'INSERT',schema:'public',table:'commands'},
-        payload=>{
-          upsertCmdRow(payload.new.master_id,payload.new);
-          addLog(`cmd + ${payload.new.action} (${payload.new.status}) → ${payload.new.master_id} ${payload.new.target_mac||""}`);
-        }
-      )
-      .on('postgres_changes',
-        {event:'UPDATE',schema:'public',table:'commands'},
-        payload=>{
-          upsertCmdRow(payload.new.master_id,payload.new);
-          addLog(`cmd ~ ${payload.new.action} (${payload.new.status}) → ${payload.new.master_id} ${payload.new.target_mac||""}`);
-
-          if(payload.new.target_mac && payload.new.status==="acked"){
-            const mac = payload.new.target_mac;
-            setSlaveActivity(sa=>{
-              return {
-                ...sa,
-                [mac]: {phase:"done", msg:"Succès"},
-              };
-            });
-            setTimeout(()=>{
-              setSlaveActivity(sa=>{
-                const cur = sa[mac];
-                if(!cur || cur.phase!=="done") return sa;
-                return {
-                  ...sa,
-                  [mac]: {phase:"idle", msg:""},
-                };
-              });
-            },3000);
-          }
-        }
-      )
-      .subscribe();
-  }
-
-  /* =========================================================
-     LOAD DATA INITIALE
-     ========================================================= */
-  async function loadAll(){
-    // devices
-    const {data:devs,error:ed}=await sb
-      .from('devices')
-      .select('id,name,master_mac,last_seen')
-      .order('created_at',{ascending:false});
-    if(ed){ addLog("Err devices: "+ed.message); return; }
 
     // nodes
-    const {data:nodes,error:en}=await sb
-      .from('nodes')
-      .select('master_id,slave_mac,friendly_name,pc_on');
-    if(en){ addLog("Err nodes: "+en.message); return; }
+    chNodes.current = sb.channel("rt:nodes")
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'nodes' },
+        (p) => {
+          addLog(`+ node ${p.new.slave_mac} → ${p.new.master_id}`);
+          reloadNodes(); // on recharge la liste des slaves + états
+        }
+      )
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'nodes' },
+        (p) => {
+          // ex: pc_on bouge
+          reloadNodes();
+        }
+      )
+      .on('postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'nodes' },
+        (p) => {
+          addLog(`- node ${p.old.slave_mac} ← ${p.old.master_id}`);
+          reloadNodes();
+        }
+      )
+      .subscribe();
 
-    const nbm={};
-    const flatSlaves=[];
-    (nodes||[]).forEach(n=>{
-      const obj={
-        master_id:n.master_id,
-        mac:n.slave_mac,
-        nameShort:n.friendly_name || shortNameFromMac(n.slave_mac),
-        pc_on:!!n.pc_on,
-      };
-      if(!nbm[n.master_id]) nbm[n.master_id]=[];
-      nbm[n.master_id].push(obj);
-      flatSlaves.push(obj);
-    });
+    // groups + group_members (on écoute 2 tables via un même channel)
+    chGroups.current = sb.channel("rt:groups-and-members")
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'groups' },
+        (_p) => {
+          reloadGroups();
+        }
+      )
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'group_members' },
+        (_p) => {
+          reloadGroups();
+        }
+      )
+      .subscribe();
 
-    // groups
-    const {data:grps,error:eg}=await sb
-      .from('groups')
-      .select('id,name')
-      .order('created_at',{ascending:true});
-    if(eg){ addLog("Err groups: "+eg.message); }
+    // commands (pour activité / ack etc.)
+    chCmds.current = sb.channel("rt:commands")
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'commands' },
+        (p) => {
+          handleCommandRealtime(p.new);
+        }
+      )
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'commands' },
+        (p) => {
+          handleCommandRealtime(p.new);
+        }
+      )
+      .subscribe();
+  }
 
-    // group_members
-    const {data:gmembers,error:em}=await sb
-      .from('group_members')
-      .select('group_id,master_id,slave_mac');
-    if(em){ addLog("Err group_members: "+em.message); }
-
-    const gmap={};
-    (grps||[]).forEach(g=>{gmap[g.id]=[];});
-    (gmembers||[]).forEach(m=>{
-      let match = flatSlaves.find(
-        s=>s.master_id===m.master_id && s.mac===m.slave_mac
-      );
-      if(!match){
-        match = {
-          master_id:m.master_id,
-          mac:m.slave_mac,
-          nameShort:m.slave_mac,
-          pc_on:false,
+  // on reçoit un event commande pour mettre à jour barre noire (acked / error...)
+  function handleCommandRealtime(cmdRow) {
+    // si commande vers un slave précis → on marque son activité
+    if (cmdRow.target_mac) {
+      setCmdActivity((map) => {
+        const next = { ...map };
+        // status peut être 'queued', 'sent', 'acked', 'error'
+        const phase = cmdRow.status || "queued";
+        next[cmdRow.target_mac] = {
+          phase,
+          ts: Date.now(),
         };
-      }
-      if(!gmap[m.group_id]) gmap[m.group_id]=[];
-      gmap[m.group_id].push(match);
-    });
-
-    setDevices(devs||[]);
-    setNodesByMaster(nbm);
-    setGroups(grps||[]);
-    setGroupMembers(gmap);
-
-    // précharger historique cmd par master si pas déjà fait
-    for(const d of devs||[]){
-      await refreshCommands(d.id);
+        return next;
+      });
     }
+    // log global
+    addLog(
+      `cmd ${cmdRow.action} (${cmdRow.status}) → ${
+        cmdRow.master_id
+      }${cmdRow.target_mac ? " ▶ " + cmdRow.target_mac : ""}`
+    );
   }
 
   /* =========================================================
-     COMMAND HISTORY HANDLING
+     LOAD DATA
      ========================================================= */
-  async function refreshCommands(masterId){
-    const ul = cmdLists.current.get(masterId);
-    if(!ul) return;
-    if(ul.children.length>0){
-      return; // déjà chargé -> on n'efface pas
-    }
+  async function loadAllData() {
+    await Promise.all([
+      reloadDevices(),
+      reloadNodes(),
+      reloadGroups(),
+    ]);
+  }
 
-    const {data, error} = await sb
-      .from('commands')
-      .select('id,action,target_mac,status,created_at')
-      .eq('master_id', masterId)
-      .order('created_at',{ascending:false})
-      .limit(20);
-
-    if(error){
-      addLog("Err cmds: "+error.message);
+  async function reloadDevices() {
+    const { data, error } = await sb
+      .from("devices")
+      .select("id,name,master_mac,last_seen,online")
+      .order("created_at", { ascending: false });
+    if (error) {
+      addLog("Err devices: " + error.message);
       return;
     }
-
-    (data||[]).forEach(c => upsertCmdRow(masterId,c));
+    setDevices(data || []);
   }
 
-  function upsertCmdRow(masterId, c){
-    const ul = cmdLists.current.get(masterId);
-    if(!ul) return;
-    const id = `cmd-${c.id}`;
-    const html = `<code>${c.status}</code> · ${c.action}${c.target_mac?' → '+c.target_mac:' (local)'} <span class="smallLabel">· ${fmtTS(c.created_at)}</span>`;
-    let li = ul.querySelector(`#${CSS.escape(id)}`);
-    if(!li){
-      li = document.createElement("li");
-      li.id = id;
-      li.innerHTML = html;
-      ul.prepend(li);
-      while(ul.children.length>20) ul.removeChild(ul.lastChild);
-    }else{
-      li.innerHTML=html;
+  async function reloadNodes() {
+    // On récupère le friendly_name et l'état pc_on
+    const { data, error } = await sb
+      .from("nodes")
+      .select("master_id,slave_mac,friendly_name,pc_on");
+    if (error) {
+      addLog("Err nodes: " + error.message);
+      return;
     }
+    const map = {};
+    (data || []).forEach((row) => {
+      const mid = row.master_id;
+      if (!map[mid]) map[mid] = [];
+      map[mid].push({
+        mac: row.slave_mac,
+        nameShort: row.friendly_name || row.slave_mac,
+        pc_on: !!row.pc_on,
+      });
+    });
+    setNodesByMaster(map);
+  }
+
+  async function reloadGroups() {
+    const { data: grps, error: eg } = await sb
+      .from("groups")
+      .select("id,name")
+      .order("created_at", { ascending: true });
+    if (eg) {
+      addLog("Err groups: " + eg.message);
+      return;
+    }
+    const { data: gm, error: em } = await sb
+      .from("group_members")
+      .select("group_id,master_id,slave_mac");
+    if (em) {
+      addLog("Err group_members: " + em.message);
+      return;
+    }
+    const memMap = {};
+    (gm || []).forEach((m) => {
+      if (!memMap[m.group_id]) memMap[m.group_id] = [];
+      memMap[m.group_id].push({
+        master_id: m.master_id,
+        mac: m.slave_mac,
+      });
+    });
+
+    setGroups(grps || []);
+    setGroupMembers(memMap);
+  }
+
+  // recharger un seul groupe après modif
+  async function reloadSingleGroup(groupId) {
+    // recharge tout pour rester simple
+    await reloadGroups();
   }
 
   /* =========================================================
-     COMMAND HELPERS
+     COMMANDES / ACTIONS BACKEND
      ========================================================= */
-  async function sendCmd(masterId, targetMac, action, payload={}){
-    const {error} = await sb.from('commands').insert({
+  async function sendCmd(masterId, targetMac, action, payload = {}) {
+    // on note l'activité du slave direct en phase "queued"
+    if (targetMac) {
+      setCmdActivity((map) => {
+        const next = { ...map };
+        next[targetMac] = { phase: "queued", ts: Date.now() };
+        return next;
+      });
+    }
+
+    const { error } = await sb.from("commands").insert({
       master_id: masterId,
       target_mac: targetMac || null,
       action,
-      payload
+      payload,
     });
-    if(error){
-      addLog("cmd err: "+error.message);
-      return false;
-    } else {
-      addLog(`[cmd] ${action} → ${masterId}${targetMac?" ▶ "+targetMac:""}`);
-      return true;
-    }
-  }
-
-  function runSlaveAction(slave, action, payload){
-    setSlaveActivity(sa=>({
-      ...sa,
-      [slave.mac]: {phase:"busy",msg:""},
-    }));
-    sendCmd(slave.master_id, slave.mac, action, payload);
-    // passage en done (Succès) se fera via realtime "acked"
-  }
-
-  async function runGroupAction(groupId, action, payload){
-    const members = groupMembers[groupId] || [];
-    setGroupActivity(ga=>({
-      ...ga,
-      [groupId]:{phase:"busy",okNames:[]}
-    }));
-    members.forEach(m=>{
-      setSlaveActivity(sa=>({
-        ...sa,
-        [m.mac]:{phase:"busy",msg:""}
-      }));
-    });
-
-    const results = await Promise.all(members.map(m=>{
-      return sendCmd(m.master_id,m.mac,action,payload).then(ok=>({
-        ok,
-        name:m.nameShort||m.mac
-      }));
-    }));
-    const okNames = results.filter(r=>r.ok).map(r=>r.name);
-
-    setGroupActivity(ga=>({
-      ...ga,
-      [groupId]:{phase:"done",okNames}
-    }));
-    members.forEach(m=>{
-      setSlaveActivity(sa=>({
-        ...sa,
-        [m.mac]:{phase:"done",msg:"Succès"}
-      }));
-    });
-
-    setTimeout(()=>{
-      setGroupActivity(ga=>{
-        const cur=ga[groupId];
-        if(!cur || cur.phase!=="done") return ga;
-        return {...ga,[groupId]:{phase:"idle",okNames:[]}};
-      });
-      members.forEach(m=>{
-        setSlaveActivity(sa=>{
-          const cur=sa[m.mac];
-          if(!cur || cur.phase!=="done") return sa;
-          return {...sa,[m.mac]:{phase:"idle",msg:""}};
+    if (error) {
+      addLog("cmd err: " + error.message);
+      // si erreur immédiate -> marquer error
+      if (targetMac) {
+        setCmdActivity((map) => {
+          const next = { ...map };
+          next[targetMac] = { phase: "error", ts: Date.now() };
+          return next;
         });
+      }
+      return;
+    }
+    addLog(
+      `[cmd] ${action} → ${masterId}${
+        targetMac ? " ▶ " + targetMac : ""
+      }`
+    );
+  }
+
+  async function renameMaster(masterId) {
+    const name = prompt("Nouveau nom du master ?", "");
+    if (!name) return;
+    const { error } = await sb
+      .from("devices")
+      .update({ name })
+      .eq("id", masterId);
+    if (error) alert(error.message);
+    else addLog(`Renommé ${masterId} → ${name}`);
+  }
+
+  async function deleteMaster(masterId) {
+    if (!confirm(`Supprimer ${masterId} ?`)) return;
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+      alert("Non connecté");
+      return;
+    }
+    const r = await fetch(
+      `${SUPABASE_URL}/functions/v1/release_and_delete`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: SUPA_ANON_KEY,
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ master_id: masterId }),
+      }
+    );
+    addLog(
+      r.ok
+        ? `MASTER supprimé : ${masterId}`
+        : `❌ Suppression : ${await r.text()}`
+    );
+  }
+
+  async function openPairDialog() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+      alert("Non connecté");
+      return;
+    }
+    try {
+      const r = await fetch(
+        `${SUPABASE_URL}/functions/v1/create_pair_code`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: SUPA_ANON_KEY,
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ ttl_minutes: 10 }),
+        }
+      );
+      if (!r.ok) {
+        alert(await r.text());
+        return;
+      }
+      const { code, expires_at } = await r.json();
+      setPairInfo({
+        open: true,
+        code,
+        expires_at,
       });
-    },3000);
+      addLog(`Pair-code ${code}`);
+    } catch (e) {
+      addLog("Erreur pair-code: " + e.message);
+    }
   }
 
-  /* =========================================================
-     MASTER MANAGEMENT
-     ========================================================= */
-  async function renameMaster(masterId){
-    const name = prompt("Nouveau nom du master ?","");
-    if(!name) return;
-    const {error} = await sb.from('devices').update({name}).eq('id',masterId);
-    if(error){ alert(error.message); }
-    else { addLog(`Renommé ${masterId} → ${name}`); }
+  function closePairDialog() {
+    setPairInfo({ open: false, code: null, expires_at: null });
   }
 
-  async function deleteMaster(masterId){
-    if(!confirm(`Supprimer ${masterId} ?`)) return;
-    const {data:{session}} = await sb.auth.getSession();
-    if(!session){ alert("Non connecté"); return; }
-    const r = await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`,{
-      method:"POST",
-      headers:{
-        "Content-Type":"application/json",
-        apikey:SUPA_ANON,
-        Authorization:`Bearer ${session.access_token}`
-      },
-      body:JSON.stringify({ master_id:masterId })
+  /* GROUP CRUD */
+  async function createGroup() {
+    const name = prompt("Nom du nouveau groupe ?", "Groupe");
+    if (!name) return;
+    const { error } = await sb.from("groups").insert({ name });
+    if (error) {
+      alert("Erreur création groupe: " + error.message);
+      return;
+    }
+    addLog(`Groupe "${name}" créé`);
+    reloadGroups();
+  }
+
+  async function renameGroup(id) {
+    const cur = groups.find((g) => g.id === id);
+    const name = prompt(
+      "Nouveau nom du groupe ?",
+      cur ? cur.name : "Groupe"
+    );
+    if (!name) return;
+    const { error } = await sb
+      .from("groups")
+      .update({ name })
+      .eq("id", id);
+    if (error) {
+      alert("Erreur renommage groupe: " + error.message);
+      return;
+    }
+    addLog(`Groupe ${id} renommé → ${name}`);
+    reloadGroups();
+  }
+
+  async function deleteGroup(id) {
+    if (!confirm("Supprimer ce groupe ?")) return;
+    const { error } = await sb.from("groups").delete().eq("id", id);
+    if (error) {
+      alert("Erreur suppression groupe: " + error.message);
+      return;
+    }
+    addLog(`Groupe ${id} supprimé`);
+    reloadGroups();
+  }
+
+  /* Gestion ouverture éditeur membres d'un groupe */
+  function openEditGroupMembers(id) {
+    const currentMembers = groupMembers[id] || [];
+    const initialSet = new Set();
+    currentMembers.forEach((m) => {
+      initialSet.add(`${m.master_id}|${m.mac}`);
     });
-    addLog(r.ok?`MASTER supprimé : ${masterId}`:`❌ Suppression : ${await r.text()}`);
-  }
-
-  /* =========================================================
-     SLAVE INFO / RENAME
-     ========================================================= */
-  function toggleSlaveInfo(mac){
-    setOpenSlaveInfo(m=>({...m,[mac]:!m[mac]}));
-  }
-  function toggleSlaveMore(mac){
-    setOpenSlaveMore(m=>({...m,[mac]:!m[mac]}));
-  }
-
-  function onEditNameChange(mac,val){
-    setEditNames(n=>({...n,[mac]:val}));
-  }
-  async function submitSlaveRename(masterId,mac){
-    const newName = editNames[mac]?.trim();
-    if(!newName) return;
-    const {error} = await sb
-      .from('nodes')
-      .update({friendly_name:newName})
-      .eq('master_id',masterId)
-      .eq('slave_mac',mac);
-    if(error){
-      alert(error.message);
-      return;
-    }
-    addLog(`Renommé ${mac} → ${newName}`);
-
-    // patch local immédiat
-    const patchObj = {
-      master_id: masterId,
-      slave_mac: mac,
-      friendly_name: newName,
-      pc_on: getCurrentPcOn(masterId,mac)
-    };
-    updateOneNodeRT(patchObj);
-
-    setOpenSlaveInfo(m=>({...m,[mac]:false}));
-  }
-
-  function getCurrentPcOn(masterId,mac){
-    const arr = nodesByMaster[masterId]||[];
-    const f = arr.find(s=>s.mac===mac);
-    return f ? !!f.pc_on : false;
-  }
-
-  /* =========================================================
-     GROUPS MANAGEMENT
-     ========================================================= */
-  function toggleGroupMore(groupId){
-    setOpenGroupMore(m=>({...m,[groupId]:!m[groupId]}));
-  }
-
-  async function createGroup(){
-    const nm = prompt("Nom du groupe ?");
-    if(!nm) return;
-    const uid = user?.id;
-    if(!uid){ alert("Non connecté"); return; }
-    const {error} = await sb.from('groups').insert({name:nm,owner_uid:uid});
-    if(error){
-      alert("Erreur création groupe: "+error.message);
-      return;
-    }
-    addLog("Groupe créé : "+nm);
-    await loadAll(); // rare, donc ok
-  }
-
-  async function renameGroup(groupId){
-    const nm = prompt("Nouveau nom du groupe ?");
-    if(!nm) return;
-    const {error} = await sb.from('groups').update({name:nm}).eq('id',groupId);
-    if(error){
-      alert("Erreur rename: "+error.message);
-      return;
-    }
-    addLog("Groupe renommé "+groupId+" → "+nm);
-    setGroups(gs=>gs.map(g=>g.id===groupId?{...g,name:nm}:g));
-  }
-
-  async function deleteGroup(groupId){
-    if(!confirm("Supprimer ce groupe ?")) return;
-    const {error} = await sb.from('groups').delete().eq('id',groupId);
-    if(error){
-      alert("Erreur suppression groupe: "+error.message);
-      return;
-    }
-    addLog("Groupe supprimé "+groupId);
-    setGroups(gs=>gs.filter(g=>g.id!==groupId));
-    setGroupMembers(gm=>{
-      const copy={...gm};
-      delete copy[groupId];
-      return copy;
-    });
-  }
-
-  function openEditGroupMembers(id){
+    setEditMembersSel(initialSet);
     setEditGroupId(id);
   }
-  function closeEditGroupMembers(){
+
+  function closeEditGroupMembers() {
     setEditGroupId(null);
   }
 
-  async function saveGroupMembers(groupId, selectedKeys){
-    const current = groupMembers[groupId]||[];
-    const curSet = new Set(current.map(m=>`${m.master_id}|${m.mac}`));
+  async function saveGroupMembers(groupId) {
+    const selectedKeys = editMembersSel;
+    const current = groupMembers[groupId] || [];
+    const curSet = new Set(
+      current.map((m) => `${m.master_id}|${m.mac}`)
+    );
 
     const toAdd = [];
-    selectedKeys.forEach(k=>{
-      if(!curSet.has(k)){
-        const [mid,mac] = k.split("|");
-        toAdd.push({group_id:groupId, master_id:mid, slave_mac:mac});
+    selectedKeys.forEach((k) => {
+      if (!curSet.has(k)) {
+        const [mid, mac] = k.split("|");
+        toAdd.push({
+          group_id: groupId,
+          master_id: mid,
+          slave_mac: mac,
+        });
       }
     });
 
     const toRemove = [];
-    curSet.forEach(k=>{
-      if(!selectedKeys.has(k)){
-        const [mid,mac] = k.split("|");
-        toRemove.push({master_id:mid, slave_mac:mac});
+    curSet.forEach((k) => {
+      if (!selectedKeys.has(k)) {
+        const [mid, mac] = k.split("|");
+        toRemove.push({ master_id: mid, slave_mac: mac });
       }
     });
 
-    if(toAdd.length){
-      const {error} = await sb.from('group_members').insert(toAdd);
-      if(error){ alert("Erreur insert membres: "+error.message); }
+    if (toAdd.length) {
+      const { error } = await sb
+        .from("group_members")
+        .insert(toAdd);
+      if (error) {
+        alert("Erreur insert membres: " + error.message);
+      }
     }
-    for(const rem of toRemove){
-      const {error} = await sb
-        .from('group_members')
+
+    for (const rem of toRemove) {
+      const { error } = await sb
+        .from("group_members")
         .delete()
-        .eq('group_id',groupId)
-        .eq('master_id',rem.master_id)
-        .eq('slave_mac',rem.slave_mac);
-      if(error){ alert("Erreur delete membre: "+error.message); }
+        .eq("group_id", groupId)
+        .eq("master_id", rem.master_id)
+        .eq("slave_mac", rem.slave_mac);
+      if (error) {
+        alert("Erreur delete membre: " + error.message);
+      }
     }
 
     addLog(`Membres groupe ${groupId} mis à jour`);
@@ -1360,525 +1193,609 @@ export default function App(){
     setEditGroupId(null);
   }
 
-  async function reloadSingleGroup(groupId){
-    const {data:gmembers,error} = await sb
-      .from('group_members')
-      .select('group_id,master_id,slave_mac')
-      .eq('group_id',groupId);
-    if(error){
-      addLog("Err reloadSingleGroup: "+error.message);
-      return;
-    }
-    const currentNodes = {...nodesByMaster};
-    const newList = (gmembers||[]).map(m=>{
-      const arr = currentNodes[m.master_id]||[];
-      const found = arr.find(s=>s.mac===m.slave_mac);
-      if(found){
-        return {
-          master_id:m.master_id,
-          mac:m.slave_mac,
-          nameShort:found.nameShort||found.mac,
-          pc_on:!!found.pc_on
-        };
-      }
-      return {
-        master_id:m.master_id,
-        mac:m.slave_mac,
-        nameShort:m.slave_mac,
-        pc_on:false
-      };
-    });
-
-    setGroupMembers(prev=>({
-      ...prev,
-      [groupId]:newList
-    }));
+  /* ouvrir / fermer le mini-menu "..." d'un slave */
+  function openSlaveMore(masterId, mac) {
+    setOpenSlaveMoreMac(mac);
+    setOpenSlaveMoreMaster(masterId);
+  }
+  function closeSlaveMore() {
+    setOpenSlaveMoreMac(null);
+    setOpenSlaveMoreMaster(null);
   }
 
-  function openListOn(groupId){
-    setListOnGroupId(groupId);
+  /* ouvrir / fermer la liste "X/X allumés" */
+  function openListOnGroup(id) {
+    setListOnGroupId(id);
   }
-  function closeListOn(){
+  function closeListOnGroup() {
     setListOnGroupId(null);
   }
 
   /* =========================================================
-     PAIR MASTER DIALOG
+     RENDU GROUP CARD
      ========================================================= */
-  async function openPairDialog(){
-    const {data:{session}}=await sb.auth.getSession();
-    if(!session){ alert("Non connecté"); return; }
-    try{
-      const r = await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`,{
-        method:"POST",
-        headers:{
-          "Content-Type":"application/json",
-          apikey:SUPA_ANON,
-          Authorization:`Bearer ${session.access_token}`
-        },
-        body:JSON.stringify({ ttl_minutes:10 })
-      });
-      if(!r.ok){
-        alert(await r.text());
-        return;
-      }
-      const {code,expires_at} = await r.json();
-      setPairDialog({
-        open:true,
-        code,
-        expires_at
-      });
-      addLog(`Pair-code ${code}`);
-    }catch(e){
-      addLog("Erreur pair-code: "+e);
-    }
-  }
-  function closePairDialog(){
-    setPairDialog({open:false,code:null,expires_at:null});
-  }
-
-  /* =========================================================
-     LOGIN LOGOUT
-     ========================================================= */
-  async function signInGoogle(){
-    const {data,error} = await sb.auth.signInWithOAuth({
-      provider:"google",
-      options:{
-        redirectTo:location.href,
-        queryParams:{prompt:"select_account"},
+  function GroupCard({ g }) {
+    // membres du groupe
+    const members = groupMembers[g.id] || [];
+    // on croise avec nodesByMaster pour savoir qui est "on"
+    let onCount = 0;
+    let totalCount = members.length;
+    const onList = [];
+    members.forEach((m) => {
+      const arr = nodesByMaster[m.master_id] || [];
+      const found = arr.find((sl) => sl.mac === m.mac);
+      if (found && found.pc_on) {
+        onCount++;
+        onList.push(found.nameShort || found.mac);
       }
     });
-    if(error){
-      alert(error.message);
-    }else if(data?.url){
-      location.href=data.url;
-    }
-  }
-  async function signOut(){
-    await sb.auth.signOut();
-  }
-
-  /* =========================================================
-     RENDER SUBCOMPONENTS
-     ========================================================= */
-
-  function SlaveCard({slave}){
-    const mac    = slave.mac;
-    const isInfo = !!openSlaveInfo[mac];
-    const isMore = !!openSlaveMore[mac];
-    const act    = slaveActivity[mac] || {phase:"idle",msg:""};
-
-    const showBar = act.phase==="busy";
-    const showDoneMsg = (act.phase==="done" && act.msg);
-
-    return (
-      <div className="slaveCard">
-        <button className="slaveInfoBtn" onClick={()=>toggleSlaveInfo(mac)}>i</button>
-
-        <div className="slaveName">{slave.nameShort||shortNameFromMac(mac)}</div>
-        <div className="pcState">
-          {slave.pc_on ? "Ordinateur allumé" : "Ordinateur éteint"}
-        </div>
-
-        {showBar && (
-          <div className="progressWrapSlave">
-            <div className="progressBarSlave"/>
-          </div>
-        )}
-
-        {!showBar && showDoneMsg && (
-          <div className="resultText">{act.msg}</div>
-        )}
-
-        <div className="slaveButtonsRow">
-          <button
-            className="btnCircle small"
-            title="IO"
-            onClick={()=>runSlaveAction(
-              slave,
-              "SLV_IO",
-              {pin:DEFAULT_IO_PIN,mode:"OUT",value:1}
-            )}
-          >IO</button>
-
-          <button
-            className="btnCircle small"
-            title="RESET"
-            onClick={()=>runSlaveAction(slave,"SLV_RESET",{})}
-          >RST</button>
-
-          <div className="moreWrap">
-            <button
-              className="btnCircle small"
-              title="Plus…"
-              onClick={()=>toggleSlaveMore(mac)}
-            >⋯</button>
-
-            {isMore && (
-              <div className="moreMenu">
-                <button
-                  className="moreMenuBtn danger"
-                  onClick={()=>{
-                    runSlaveAction(slave,"SLV_FORCE_OFF",{});
-                    toggleSlaveMore(mac);
-                  }}
-                >Hard OFF</button>
-                <button
-                  className="moreMenuBtn danger"
-                  onClick={()=>{
-                    runSlaveAction(slave,"SLV_HARD_RESET",{ms:3000});
-                    toggleSlaveMore(mac);
-                  }}
-                >Hard RESET</button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {isInfo && (
-          <div className="infoSheet">
-            <div className="infoRowLabel">Nom du slave</div>
-            <input
-              className="infoInput"
-              value={editNames[mac] ?? slave.nameShort ?? ""}
-              onChange={e=>onEditNameChange(mac,e.target.value)}
-              placeholder="Nom lisible"
-            />
-
-            <div className="infoRowLabel">Adresse MAC</div>
-            <div className="infoMac">{mac}</div>
-
-            <div className="infoActionsRow">
-              <button
-                className="smallBtn"
-                onClick={()=>submitSlaveRename(slave.master_id,mac)}
-              >Enregistrer</button>
-              <button
-                className="smallBtn"
-                onClick={()=>toggleSlaveInfo(mac)}
-              >Fermer</button>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  function MasterCard({dev, slaves}){
-    const live = isLive(dev);
-
-    return (
-      <section className="glassCard masterCard">
-        <div className="masterHeadTop">
-          <div className="masterLeft">
-            <div className="masterRow1">
-              <div className="masterName">{dev.name||"MASTER"}</div>
-              <span className={live?"badgeOnline":"badgeOffline"}>
-                {live?"EN LIGNE":"HORS LIGNE"}
-              </span>
-            </div>
-
-            <div className="masterMeta">
-              <div>Dernier contact : {fmtTS(dev.last_seen)||"jamais"}</div>
-              <div className="smallLabel">ID : <code>{dev.id}</code></div>
-              <div className="smallLabel">MAC : <code>{dev.master_mac||"—"}</code></div>
-            </div>
-
-            <div className="masterActionsRow">
-              <button className="metaBtn" onClick={()=>renameMaster(dev.id)}>Renommer</button>
-              <button className="metaBtn dangerBtn" onClick={()=>deleteMaster(dev.id)}>Supprimer</button>
-              <button
-                className="metaBtn"
-                onClick={()=>sendCmd(dev.id,null,"PULSE",{ms:500})}
-              >Pulse</button>
-              <button
-                className="metaBtn"
-                onClick={()=>sendCmd(dev.id,null,"POWER_ON",{})}
-              >Power ON</button>
-              <button
-                className="metaBtn"
-                onClick={()=>sendCmd(dev.id,null,"POWER_OFF",{})}
-              >Power OFF</button>
-              <button
-                className="metaBtn"
-                onClick={()=>sendCmd(dev.id,null,"RESET",{})}
-              >Reset</button>
-            </div>
-          </div>
-        </div>
-
-        <div className="slaveGridWrap">
-          <div className="slaveGrid">
-            {slaves.map(sl=>(
-              <SlaveCard key={sl.mac} slave={sl}/>
-            ))}
-          </div>
-        </div>
-
-        <div style={{marginTop:12}}>
-          <div className="cmdSectionTitle">Commandes (20 dernières)</div>
-          <ul
-            className="cmdList"
-            ref={el=>{ if(el) cmdLists.current.set(dev.id,el); }}
-          />
-        </div>
-      </section>
-    );
-  }
-
-  function GroupCard({group, members}){
-    const gid = group.id;
-    const st  = groupActivity[gid] || {phase:"idle",okNames:[]};
-
-    const onCount = members.filter(m=>m.pc_on).length;
-    const total   = members.length;
-    const showBar = (st.phase==="busy");
-    const showDone= (st.phase==="done");
 
     return (
       <div className="groupCard">
-        <div className="groupHeaderTop">
-          <div className="groupNameBlock">
-            <div className="groupName">{group.name||"GROUPE"}</div>
-            <div className="groupCount">{onCount}/{total} allumé</div>
-          </div>
-
-          <div className="iconRow">
-            <button className="iconBtn" title="Membres"
-              onClick={()=>openEditGroupMembers(gid)}>👥</button>
-
-            <button className="iconBtn" title="Voir ON"
-              onClick={()=>openListOn(gid)}>👁</button>
-
-            <button className="iconBtn" title="Renommer"
-              onClick={()=>renameGroup(gid)}>✎</button>
-
-            <button className="iconBtn danger" title="Supprimer"
-              onClick={()=>deleteGroup(gid)}>🗑</button>
-          </div>
-        </div>
-
-        {showBar && (
-          <div className="progressWrapGroup">
-            <div className="progressBarBusy"></div>
-          </div>
-        )}
-
-        {showDone && (
-          <div className="resultList">
-            Succès:
-            {" "}
-            {st.okNames.length
-              ? st.okNames.join(", ")
-              : "aucun ?" }
-          </div>
-        )}
-
-        <div className="groupActionsRow">
-          <button
-            className="btnCircle small"
-            title="IO"
-            onClick={()=>runGroupAction(
-              gid,
-              "SLV_IO",
-              {pin:DEFAULT_IO_PIN,mode:"OUT",value:1}
-            )}
-          >IO</button>
-
-          <button
-            className="btnCircle small"
-            title="RESET"
-            onClick={()=>runGroupAction(gid,"SLV_RESET",{})}
-          >RST</button>
-
-          <div className="groupMoreWrap">
-            <button
-              className="btnCircle small"
-              title="Plus…"
-              onClick={()=>toggleGroupMore(gid)}
-            >⋯</button>
-
-            {openGroupMore[gid] && (
-              <div className="moreMenu">
-                <button
-                  className="moreMenuBtn danger"
-                  onClick={()=>{
-                    runGroupAction(gid,"SLV_FORCE_OFF",{});
-                    toggleGroupMore(gid);
-                  }}
-                >Hard OFF (tous)</button>
-                <button
-                  className="moreMenuBtn danger"
-                  onClick={()=>{
-                    runGroupAction(gid,"SLV_HARD_RESET",{ms:3000});
-                    toggleGroupMore(gid);
-                  }}
-                >Hard RESET (tous)</button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  function GroupsSection(){
-    return (
-      <section className="glassCard groupsSectionCard">
-        <div className="groupsHeaderRow">
-          <div className="groupsHeaderLeft">
-            <div className="groupsTitle">Groupes</div>
-            <div className="smallLabel">
-              Déclenche plusieurs machines en même temps.
+        <div className="groupTopRow">
+          <div>
+            <div className="groupName">{g.name || "Groupe"}</div>
+            <div className="groupMetaLine">
+              <span>
+                {onCount}/{totalCount} allumé(s)
+              </span>
+              <button
+                className="listOnBtn"
+                onClick={() => openListOnGroup(g.id)}
+                disabled={!totalCount}
+              >
+                liste
+              </button>
             </div>
           </div>
 
-          <div className="topbarRightRow">
-            <button className="primaryBtn" onClick={createGroup}>
-              Nouveau groupe
+          <div style={{ textAlign: "right" }}>
+            <button
+              className="subtleBtn"
+              onClick={() => renameGroup(g.id)}
+            >
+              Renommer
+            </button>
+            <button
+              className="subtleBtn"
+              onClick={() => deleteGroup(g.id)}
+            >
+              Supprimer
+            </button>
+            <button
+              className="subtleBtn"
+              onClick={() => openEditGroupMembers(g.id)}
+            >
+              Membres
             </button>
           </div>
         </div>
 
-        <div className="groupsRow">
-          {groups.map(g=>(
-            <GroupCard
-              key={g.id}
-              group={g}
-              members={groupMembers[g.id]||[]}
+        <div className="groupBtnsRow">
+          {/* Boutons d'actions groupées :
+             -> envoi de commandes broadcast vers tous les slaves du groupe */}
+          <button
+            className="smallBtn"
+            onClick={() => {
+              members.forEach((m) =>
+                sendCmd(m.master_id, m.mac, "SLV_IO", {
+                  pin: 26,
+                  mode: "OUT",
+                  value: 1,
+                })
+              );
+            }}
+          >
+            IO ON
+          </button>
+
+          <button
+            className="smallBtn"
+            onClick={() => {
+              members.forEach((m) =>
+                sendCmd(m.master_id, m.mac, "SLV_RESET", {})
+              );
+            }}
+          >
+            RESET
+          </button>
+
+          <button
+            className="smallBtn"
+            onClick={() => {
+              members.forEach((m) =>
+                sendCmd(m.master_id, m.mac, "SLV_IO", {
+                  pin: 26,
+                  mode: "OUT",
+                  value: 0,
+                })
+              );
+            }}
+          >
+            OFF
+          </button>
+
+          <button
+            className="smallBtn"
+            onClick={() => {
+              members.forEach((m) =>
+                sendCmd(m.master_id, m.mac, "SLV_FORCE_OFF", {})
+              );
+            }}
+          >
+            HARD OFF
+          </button>
+
+          <button
+            className="smallBtn"
+            onClick={() => {
+              members.forEach((m) =>
+                sendCmd(m.master_id, m.mac, "SLV_HARD_RESET", {
+                  ms: 3000,
+                })
+              );
+            }}
+          >
+            HARD RESET
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* =========================================================
+     RENDU SLAVE CARD
+     ========================================================= */
+  function SlaveCard({ masterId, slave }) {
+    const mac = slave.mac;
+    const isOn = !!slave.pc_on;
+
+    // activité commande (barre noire)
+    const activity = cmdActivity[mac];
+    let barWidth = "0%";
+    if (activity) {
+      if (activity.phase === "queued") barWidth = "33%";
+      else if (activity.phase === "sent") barWidth = "66%";
+      else if (activity.phase === "acked") barWidth = "100%";
+      else if (activity.phase === "error") barWidth = "100%";
+    }
+
+    return (
+      <div className="slaveCard">
+        {/* coin haut droite : bouton "i" */}
+        <div className="slaveLineTop">
+          <div
+            className="infoChip"
+            title={`${mac}\nMaster ${masterId}`}
+          >
+            i
+          </div>
+        </div>
+
+        {/* Nom du slave + statut machine */}
+        <div className="slaveNameBlock">
+          <div className="slaveNameBig">{slave.nameShort}</div>
+          <div className="pcStatus">
+            {isOn ? "Ordinateur allumé" : "Ordinateur éteint"}
+          </div>
+
+          {/* barre de progression noire */}
+          <div className="progressOuter">
+            <div
+              className="progressInner"
+              style={{
+                width: barWidth,
+                background:
+                  activity && activity.phase === "error"
+                    ? "#ef4444"
+                    : "#000",
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Boutons en bas */}
+        <div className="slaveBtnsRow">
+          {/* IO */}
+          <button
+            className="circleBtn"
+            onClick={() => {
+              sendCmd(masterId, mac, "SLV_IO", {
+                pin: 26,
+                mode: "OUT",
+                value: 1,
+              });
+            }}
+            title="IO / Power pulse"
+          >
+            ⏻
+          </button>
+
+          {/* RESET */}
+          <button
+            className="circleBtn"
+            onClick={() => {
+              sendCmd(masterId, mac, "SLV_RESET", {});
+            }}
+            title="RESET soft"
+          >
+            ↺
+          </button>
+
+          {/* "..." menu avancé */}
+          <button
+            className="circleBtn moreBtn"
+            onClick={() => openSlaveMore(masterId, mac)}
+            title="Options avancées"
+          >
+            …
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* =========================================================
+     RENDU MASTER CARD
+     ========================================================= */
+  function MasterCard({ d }) {
+    const live = isMasterLive(d);
+    const slavesArr = nodesByMaster[d.id] || [];
+
+    return (
+      <section className="masterCardOuter">
+        <div className="masterHeadRow">
+          <div className="masterHeadMain">
+            <div className="masterTitleRow">
+              <div className="masterName">
+                {d.name || d.id || "MASTER"}
+              </div>
+              <div
+                className={
+                  live
+                    ? "masterStatusOnline"
+                    : "masterStatusOffline"
+                }
+              >
+                {live ? "EN LIGNE" : "HORS LIGNE"}
+              </div>
+            </div>
+
+            <div className="masterMeta">
+              ID : <strong>{d.id}</strong> <br />
+              MAC : <strong>{d.master_mac || "—"}</strong> <br />
+              Dernier contact :{" "}
+              {d.last_seen ? fmtTS(d.last_seen) : "jamais"}
+            </div>
+          </div>
+
+          <div className="masterBtns">
+            <button
+              className="masterActionBtn"
+              onClick={() => renameMaster(d.id)}
+            >
+              Renommer
+            </button>
+            <button
+              className="masterActionBtn"
+              onClick={() => deleteMaster(d.id)}
+            >
+              Supprimer
+            </button>
+            <button
+              className="masterActionBtn"
+              onClick={() => sendCmd(d.id, null, "PULSE", { ms: 500 })}
+            >
+              Pulse 500ms
+            </button>
+            <button
+              className="masterActionBtn"
+              onClick={() => sendCmd(d.id, null, "POWER_ON", {})}
+            >
+              Power ON
+            </button>
+            <button
+              className="masterActionBtn"
+              onClick={() => sendCmd(d.id, null, "POWER_OFF", {})}
+            >
+              Power OFF
+            </button>
+            <button
+              className="masterActionBtn"
+              onClick={() => sendCmd(d.id, null, "RESET", {})}
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+
+        {/* slaves */}
+        <div className="slavesGrid">
+          {slavesArr.map((sl) => (
+            <SlaveCard
+              key={sl.mac}
+              masterId={d.id}
+              slave={sl}
             />
           ))}
-          {!groups.length && (
-            <div className="smallLabel">
-              Aucun groupe pour l’instant.
-            </div>
-          )}
         </div>
       </section>
     );
   }
 
   /* =========================================================
-     MODALS
+     MODAL: AJOUT MASTER (PAIR CODE)
      ========================================================= */
-
-  function PairDialogModal(){
-    if(!pairDialog.open) return null;
-    const endMs = pairDialog.expires_at
-      ? new Date(pairDialog.expires_at).getTime()
+  function PairDialog() {
+    if (!pairInfo.open) return null;
+    const endMS = pairInfo.expires_at
+      ? new Date(pairInfo.expires_at).getTime()
       : 0;
-    const remainingSec = Math.max(0, Math.floor((endMs-Date.now())/1000));
-    const mm = Math.floor(remainingSec/60);
-    const ss = String(remainingSec%60).padStart(2,"0");
+    const ttlSec = Math.max(
+      0,
+      Math.floor((endMS - Date.now()) / 1000)
+    );
+    const mm = Math.floor(ttlSec / 60);
+    const ss = String(ttlSec % 60).padStart(2, "0");
 
     return (
-      <div className="modalBackdrop" onClick={closePairDialog}>
-        <div className="modalCard" onClick={e=>e.stopPropagation()}>
+      <div
+        className="modalBackdrop"
+        onClick={closePairDialog}
+      >
+        <div
+          className="modalCard"
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="modalTitle">Appairer un MASTER</div>
-
-          <div className="smallLabel">
+          <div>
             Code :
-            {" "}
-            <code style={{
-              fontWeight:600,
-              fontSize:"16px",
-              padding:"2px 6px",
-              borderRadius:"8px",
-              background:"rgba(0,0,0,0.05)"
-            }}>
-              {String(pairDialog.code||"").padStart(6,"0")}
-            </code>
+            <div className="pairCodeBox">
+              {String(pairInfo.code || "").padStart(6, "0")}
+            </div>
+            <div className="smallNote">
+              expire dans {mm}:{ss}
+            </div>
           </div>
-
-          <div className="smallLabel">
-            Expire dans {mm}:{ss}
-          </div>
-
           <div className="smallNote">
-            Saisis ce code dans le portail Wi-Fi du MASTER
-            (mode config). Une fois validé, il apparaîtra ici.
+            Ouvre le portail Wi-Fi de l’ESP32 MASTER et saisis
+            ce code.
           </div>
-
-          <div className="rowEnd">
-            <button className="primaryBtn" onClick={closePairDialog}>Fermer</button>
+          <div className="rowBetween">
+            <button
+              className="primaryBtn"
+              onClick={closePairDialog}
+            >
+              Fermer
+            </button>
           </div>
         </div>
       </div>
     );
   }
 
-  function GroupMembersEditor(){
-    if(!editGroupId) return null;
-    const gid = editGroupId;
-    const grp = groups.find(g=>g.id===gid);
+  /* =========================================================
+     MODAL: MORE MENU POUR SLAVE ("...")
+     ========================================================= */
+  function SlaveMoreMenu() {
+    if (!openSlaveMoreMac || !openSlaveMoreMaster) return null;
+    const mac = openSlaveMoreMac;
+    const mid = openSlaveMoreMaster;
 
-    // tous les slaves connus
-    const allSlaves = useMemo(()=>{
-      const acc=[];
-      Object.values(nodesByMaster).forEach(arr=>{
-        arr.forEach(sl=>{
-          acc.push(sl);
+    return (
+      <div
+        className="modalBackdrop"
+        onClick={closeSlaveMore}
+      >
+        <div
+          className="modalCard"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="modalTitle">
+            Options avancées
+          </div>
+          <div className="smallNote">
+            {mac} <br />
+            Master {mid}
+          </div>
+          <div className="moreMenuList">
+            <button
+              className="moreMenuBtn"
+              onClick={() => {
+                sendCmd(mid, mac, "SLV_IO", {
+                  pin: 26,
+                  mode: "OUT",
+                  value: 0,
+                });
+                closeSlaveMore();
+              }}
+            >
+              FORCER OFF (IO=0)
+            </button>
+
+            <button
+              className="moreMenuBtn"
+              onClick={() => {
+                sendCmd(mid, mac, "SLV_RESET", {});
+                closeSlaveMore();
+              }}
+            >
+              RESET SOFT
+            </button>
+
+            <button
+              className="moreMenuBtn dangerous"
+              onClick={() => {
+                sendCmd(mid, mac, "SLV_FORCE_OFF", {});
+                closeSlaveMore();
+              }}
+            >
+              HARD OFF
+            </button>
+
+            <button
+              className="moreMenuBtn dangerous"
+              onClick={() => {
+                sendCmd(mid, mac, "SLV_HARD_RESET", {
+                  ms: 3000,
+                });
+                closeSlaveMore();
+              }}
+            >
+              HARD RESET
+            </button>
+          </div>
+
+          <div className="rowBetween">
+            <button
+              className="primaryBtn"
+              onClick={closeSlaveMore}
+            >
+              Fermer
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* =========================================================
+     MODAL: LISTE DES SLAVES ALLUMÉS POUR UN GROUPE
+     ========================================================= */
+  function OnListModal() {
+    if (!listOnGroupId) return null;
+    const gid = listOnGroupId;
+    const group = groups.find((g) => g.id === gid);
+    const members = groupMembers[gid] || [];
+
+    // prépare la liste ON
+    const onItems = [];
+    members.forEach((m) => {
+      const arr = nodesByMaster[m.master_id] || [];
+      const found = arr.find((sl) => sl.mac === m.mac);
+      if (found && found.pc_on) {
+        onItems.push(found.nameShort || found.mac);
+      }
+    });
+
+    return (
+      <div
+        className="modalBackdrop"
+        onClick={closeListOnGroup}
+      >
+        <div
+          className="modalCard"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="modalTitle">
+            Allumés – {group ? group.name : "?"}
+          </div>
+          <div className="scrollY">
+            {onItems.length === 0 ? (
+              <div className="smallNote">
+                Aucun esclave détecté comme allumé.
+              </div>
+            ) : (
+              onItems.map((label, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    fontSize: "13px",
+                    lineHeight: "1.4",
+                    padding: "4px 0",
+                    borderBottom: "1px solid #e5e7eb",
+                    color: "#000",
+                  }}
+                >
+                  {label}
+                </div>
+              ))
+            )}
+          </div>
+          <div className="rowBetween">
+            <button
+              className="primaryBtn"
+              onClick={closeListOnGroup}
+            >
+              Fermer
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* =========================================================
+     MODAL: EDITION MEMBRES GROUPE
+     (checkboxes avec état PERSISTANT)
+     ========================================================= */
+  function GroupMembersEditor() {
+    if (!editGroupId) return null;
+    const gid = editGroupId;
+    const grp = groups.find((g) => g.id === gid);
+
+    // tous les slaves connus (tous masters confondus)
+    const allSlaves = useMemo(() => {
+      const acc = [];
+      Object.entries(nodesByMaster).forEach(([mid, arr]) => {
+        arr.forEach((sl) => {
+          acc.push({
+            master_id: mid,
+            mac: sl.mac,
+            nameShort: sl.nameShort || sl.mac,
+          });
         });
       });
       return acc;
-    },[nodesByMaster]);
+    }, [nodesByMaster]);
 
-    // membres actuels -> set "masterId|mac"
-    const curSet = useMemo(()=>{
-      const set=new Set();
-      (groupMembers[gid]||[]).forEach(m=>{
-        set.add(`${m.master_id}|${m.mac}`);
-      });
-      return set;
-    },[gid,groupMembers]);
-
-    const [localSel,setLocalSel] = useState(curSet);
-
-    useEffect(()=>{
-      const newSet=new Set();
-      (groupMembers[gid]||[]).forEach(m=>{
-        newSet.add(`${m.master_id}|${m.mac}`);
-      });
-      setLocalSel(newSet);
-    },[gid]); // <-- important: pas sur groupMembers pour pas écraser pendant que tu coches
-
-    function toggleOne(masterId,mac){
-      const key=`${masterId}|${mac}`;
-      setLocalSel(sel=>{
-        const n=new Set(sel);
-        if(n.has(key)) n.delete(key);
+    function toggleOne(masterId, mac) {
+      const key = `${masterId}|${mac}`;
+      setEditMembersSel((sel) => {
+        const n = new Set(sel);
+        if (n.has(key)) n.delete(key);
         else n.add(key);
         return n;
       });
     }
 
     return (
-      <div className="modalBackdrop" onClick={closeEditGroupMembers}>
-        <div className="modalCard" onClick={e=>e.stopPropagation()}>
+      <div
+        className="modalBackdrop"
+        onClick={closeEditGroupMembers}
+      >
+        <div
+          className="modalCard"
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="modalTitle">
             Membres du groupe{" "}
-            <strong>{grp?.name||"?"}</strong>
+            <strong>{grp ? grp.name : "?"}</strong>
           </div>
 
           <div className="scrollY">
-            {allSlaves.length===0 && (
+            {allSlaves.length === 0 && (
               <div className="smallNote">
                 Aucun slave détecté.
               </div>
             )}
-            {allSlaves.map(sl=>{
-              const key=`${sl.master_id}|${sl.mac}`;
+            {allSlaves.map((sl) => {
+              const key = `${sl.master_id}|${sl.mac}`;
               return (
                 <label key={key} className="checkboxRow">
                   <input
                     type="checkbox"
-                    checked={localSel.has(key)}
-                    onChange={()=>toggleOne(sl.master_id,sl.mac)}
+                    checked={editMembersSel.has(key)}
+                    onChange={() =>
+                      toggleOne(sl.master_id, sl.mac)
+                    }
                   />
                   <span>
-                    <strong>{sl.nameShort||sl.mac}</strong><br/>
+                    <strong>{sl.nameShort}</strong>
+                    <br />
                     <span className="smallLabel">
-                      {sl.mac} • Master {sl.master_id.slice(0,8)}
+                      {sl.mac} • Master{" "}
+                      {sl.master_id.slice(0, 8)}
                     </span>
                   </span>
                 </label>
@@ -1889,7 +1806,7 @@ export default function App(){
           <div className="rowBetween">
             <button
               className="primaryBtn"
-              onClick={()=>saveGroupMembers(gid, localSel)}
+              onClick={() => saveGroupMembers(gid)}
             >
               Enregistrer
             </button>
@@ -1902,50 +1819,8 @@ export default function App(){
           </div>
 
           <div className="smallNote">
-            Astuce : tu peux mettre dans un même groupe
-            des slaves issus de masters différents.
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  function GroupOnListModal(){
-    if(!listOnGroupId) return null;
-    const gid = listOnGroupId;
-    const grp = groups.find(g=>g.id===gid);
-    const members = groupMembers[gid]||[];
-    const onMembers = members.filter(m=>m.pc_on);
-
-    return (
-      <div className="modalBackdrop" onClick={closeListOn}>
-        <div className="modalCard" onClick={e=>e.stopPropagation()}>
-          <div className="modalTitle">
-            Machines allumées{" "}
-            <strong>{grp?.name||"?"}</strong>
-          </div>
-
-          <div className="scrollY">
-            {onMembers.length===0 ? (
-              <div className="smallNote">
-                Aucune machine allumée dans ce groupe.
-              </div>
-            ):(
-              onMembers.map(m=>(
-                <div key={m.master_id+"|"+m.mac} className="smallNote">
-                  <strong>{m.nameShort||m.mac}</strong><br/>
-                  <span className="smallLabel">
-                    {m.mac} • Master {m.master_id.slice(0,8)}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="rowEnd">
-            <button className="primaryBtn" onClick={closeListOn}>
-              Fermer
-            </button>
+            Astuce : un groupe peut contenir
+            des slaves de masters différents.
           </div>
         </div>
       </div>
@@ -1953,100 +1828,201 @@ export default function App(){
   }
 
   /* =========================================================
-     MAIN RENDER
+     HEADER TOP BAR (REMOTE POWER + actions globales)
      ========================================================= */
-  if(!authReady){
+  function TopBar() {
+    // On va afficher l'état global "online/offline" ?
+    // Ici on calcule si au moins un master est live.
+    const anyLive = devices.some((d) => isMasterLive(d));
+
     return (
-      <>
-        <style>{STYLES}</style>
-        <div className="pageBg">
-          <div className="topbar">
-            <div className="topbarTitle">REMOTE POWER</div>
-            <div className="topbarRightRow">
-              <div className="smallLabel">Chargement…</div>
-            </div>
-          </div>
-          <div className="contentWrap">
-            <div className="smallLabel">Initialisation…</div>
-          </div>
+      <div className="topBar">
+        <div className="topLeft">
+          <span>REMOTE POWER</span>
+          <small>
+            {anyLive ? (
+              <span className="badgeOnline">Actif</span>
+            ) : (
+              <span className="badgeOffline">Inactif</span>
+            )}{" "}
+            • tableau de contrôle
+          </small>
         </div>
-      </>
+
+        <div className="topRight">
+          <span className="topUserMail">
+            {authReady
+              ? user?.email || "non connecté"
+              : "…auth..."}
+          </span>
+
+          {!user ? (
+            <button
+              className="topBtn primary"
+              onClick={async () => {
+                const { data, error } =
+                  await sb.auth.signInWithOAuth({
+                    provider: "google",
+                    options: {
+                      redirectTo: location.href,
+                      queryParams: {
+                        prompt: "select_account",
+                      },
+                      skipBrowserRedirect: true,
+                    },
+                  });
+                if (error) alert(error.message);
+                else if (data?.url) location.href = data.url;
+              }}
+            >
+              Connexion Google
+            </button>
+          ) : (
+            <button
+              className="topBtn"
+              onClick={() => {
+                sb.auth.signOut();
+              }}
+            >
+              Déconnexion
+            </button>
+          )}
+
+          <button
+            className="topBtn"
+            onClick={openPairDialog}
+          >
+            + MASTER
+          </button>
+
+          <button
+            className="topBtn"
+            onClick={createGroup}
+          >
+            + Groupe
+          </button>
+
+          <button
+            className="topBtn"
+            onClick={loadAllData}
+          >
+            Rafraîchir
+          </button>
+        </div>
+      </div>
     );
   }
 
-  return (
-    <>
-      <style>{STYLES}</style>
+  /* =========================================================
+     SECTION GROUPES
+     ========================================================= */
+  function GroupsSection() {
+    return (
+      <section className="sectionBlock">
+        <div className="sectionHeader">
+          <div className="sectionTitle">
+            <span>Groupes</span>
+            <span className="sectionSubtitle">
+              Contrôler plusieurs machines en même temps
+            </span>
+          </div>
+          {/* actions de section si besoin */}
+        </div>
 
-      <div className="pageBg">
-        {/* TOP BAR */}
-        <div className="topbar">
-          <div className="topbarTitle">REMOTE POWER</div>
-
-          <div className="topbarRightRow">
-            <div className="tagUser">
-              {user?.email || "non connecté"}
+        <div className="groupsWrap">
+          {groups.length === 0 ? (
+            <div className="glassCard">
+              <div
+                style={{
+                  fontSize: "13px",
+                  color: "var(--text-dim)",
+                }}
+              >
+                Aucun groupe. Clique sur “+ Groupe” pour
+                en créer un.
+              </div>
             </div>
+          ) : (
+            groups.map((g) => <GroupCard key={g.id} g={g} />)
+          )}
+        </div>
+      </section>
+    );
+  }
 
-            {!user ? (
-              <button className="primaryBtn" onClick={signInGoogle}>
-                Connexion Google
-              </button>
-            ) : (
-              <>
-                <button className="primaryBtn" onClick={signOut}>
-                  Déconnexion
-                </button>
-
-                <button className="primaryBtn" onClick={openPairDialog}>
-                  Ajouter un MASTER
-                </button>
-              </>
-            )}
+  /* =========================================================
+     SECTION MASTERS
+     ========================================================= */
+  function MastersSection() {
+    return (
+      <section className="sectionBlock">
+        <div className="sectionHeader">
+          <div className="sectionTitle">
+            <span>Masters</span>
+            <span className="sectionSubtitle">
+              Chaque master pilote ses slaves
+            </span>
           </div>
         </div>
 
-        {/* CONTENU */}
-        <main className="contentWrap">
-
-          {/* GROUPES */}
-          {user && (
-            <GroupsSection/>
-          )}
-
-          {/* MASTERS */}
-          {devices.map(dev=>{
-            const slaves = nodesByMaster[dev.id]||[];
-            return (
-              <MasterCard
-                key={dev.id}
-                dev={dev}
-                slaves={slaves}
-              />
-            );
-          })}
-
-          {!devices.length && (
-            <div className="smallLabel">
-              Aucun MASTER pour l’instant.
-              Ajoute-en un avec “Ajouter un MASTER”.
+        <div
+          style={{
+            display: "grid",
+            gap: "20px",
+          }}
+        >
+          {devices.length === 0 ? (
+            <div className="glassCard">
+              <div
+                style={{
+                  fontSize: "13px",
+                  color: "var(--text-dim)",
+                }}
+              >
+                Aucun master pour l’instant.
+                Ajoute-en un avec “+ MASTER”.
+              </div>
             </div>
+          ) : (
+            devices.map((d) => (
+              <MasterCard key={d.id} d={d} />
+            ))
           )}
+        </div>
+      </section>
+    );
+  }
 
-          {/* JOURNAL */}
-          <section className="glassCard" style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:"8px"}}>
-            <div className="groupsTitle">Journal</div>
-            <div className="logBox" ref={logRef}>
+  /* =========================================================
+     RENDU PRINCIPAL
+     ========================================================= */
+  return (
+    <>
+      <style>{styles}</style>
+
+      {/* BARRE FIXE HAUT */}
+      <TopBar />
+
+      {/* MODALS */}
+      <PairDialog />
+      <SlaveMoreMenu />
+      <OnListModal />
+      <GroupMembersEditor />
+
+      {/* CONTENU PAGE */}
+      <div className="appBg">
+        <div className="pageContent">
+          <GroupsSection />
+          <MastersSection />
+
+          {/* Journal global */}
+          <div className="journalBlock">
+            <div className="journalTitle">Journal</div>
+            <div className="journalBox" ref={logRef}>
               {lines.join("\n")}
             </div>
-          </section>
-
-        </main>
-
-        {/* MODALS */}
-        <PairDialogModal/>
-        <GroupMembersEditor/>
-        <GroupOnListModal/>
+          </div>
+        </div>
       </div>
     </>
   );
