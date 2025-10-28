@@ -363,7 +363,6 @@ body{
   color:#0f172a;
 }
 .metaBtn:hover{background:rgba(0,0,0,0.08);}
-
 .masterActionsRow{
   display:flex;
   flex-wrap:wrap;
@@ -423,7 +422,7 @@ body{
 }
 .slaveInfoBtn:hover{background:rgba(0,0,0,.08);}
 .slaveName{
-  margin-top:24px; /* on a descendu pour pas chevaucher le "i" */
+  margin-top:24px;
   font-size:16px;
   font-weight:600;
   line-height:1.2;
@@ -672,7 +671,6 @@ function fmtTS(s){
 }
 function shortNameFromMac(mac){
   if(!mac) return "SLAVE";
-  // juste pour fallback
   return mac;
 }
 
@@ -825,7 +823,6 @@ export default function App(){
       {event:'INSERT',schema:'public',table:'commands'},
       payload=>{
         upsertCmdRow(payload.new.master_id,payload.new);
-        // no ack yet, just log
         addLog(`cmd + ${payload.new.action} (${payload.new.status}) → ${payload.new.master_id} ${payload.new.target_mac||""}`);
       }
     )
@@ -846,7 +843,6 @@ export default function App(){
           // cacher après 3s
           setTimeout(()=>{
             setSlaveActivity(sa=>{
-              // si quelqu'un a relancé qqch entre temps, on n'écrase pas "busy"
               const cur = sa[mac];
               if(!cur || cur.phase!=="done"){
                 return sa;
@@ -931,27 +927,39 @@ export default function App(){
     setGroups(grps||[]);
     setGroupMembers(gmap);
 
-    // 5. refresh cmd lists for each master
+    // 5. refresh cmd lists for each master (remplir seulement si vide)
     for(const d of devs||[]){
       await refreshCommands(d.id);
     }
   }
 
-  /* load / refresh last 20 commands for one master and render into cmdLists ref */
+  /* load / refresh last 20 commands for one master and render into cmdLists ref
+     FIX ANTI-FLICKER:
+     - on ne vide / rerend QUE si la liste était vide.
+     - sinon on laisse le realtime ajouter progressivement.
+  */
   async function refreshCommands(masterId){
     const ul = cmdLists.current.get(masterId);
     if(!ul) return;
+
+    // si déjà des lignes → on ne touche pas (évite le clignotement)
+    if(ul.children.length > 0){
+      return;
+    }
+
     const {data, error} = await sb
       .from('commands')
       .select('id,action,target_mac,status,created_at')
       .eq('master_id', masterId)
       .order('created_at',{ascending:false})
       .limit(20);
+
     if(error){
       addLog("Err cmds: "+error.message);
       return;
     }
-    ul.innerHTML="";
+
+    // liste vide → on la peuple une première fois
     (data||[]).forEach(c => upsertCmdRow(masterId,c));
   }
 
@@ -1039,7 +1047,7 @@ export default function App(){
       ...ga,
       [groupId]:{phase:"done", okNames}
     }));
-    // on "done" les slaves tout de suite; le realtime 'acked' fera pareil, c'est pas grave
+    // on "done" les slaves tout de suite; le realtime 'acked' fera pareil
     members.forEach(m=>{
       setSlaveActivity(sa=>({
         ...sa,
@@ -1117,7 +1125,6 @@ export default function App(){
       return;
     }
     addLog(`Renommé ${mac} → ${newName}`);
-    // referesh global data to reflect rename
     loadAll();
     setOpenSlaveInfo(m=>({...m,[mac]:false}));
   }
@@ -1167,7 +1174,7 @@ export default function App(){
     loadAll();
   }
 
-  /* ----- Editeur membres de groupe ----- */
+  // éditeur membres
   function openEditGroupMembers(id){
     setEditGroupId(id);
   }
@@ -1175,13 +1182,12 @@ export default function App(){
     setEditGroupId(null);
   }
 
-  // Sauvegarde membres cochés
   async function saveGroupMembers(groupId, selectedKeys){
     // selectedKeys: Set("masterId|mac")
     const current = groupMembers[groupId]||[];
     const curSet = new Set(current.map(m=>`${m.master_id}|${m.mac}`));
 
-    // -> inserts pour ceux qui sont dans selectedKeys mais pas dans curSet
+    // -> inserts
     const toAdd = [];
     selectedKeys.forEach(k=>{
       if(!curSet.has(k)){
@@ -1190,7 +1196,7 @@ export default function App(){
       }
     });
 
-    // -> deletes pour ceux qui sont dans curSet mais pas dans selectedKeys
+    // -> deletes
     const toRemove = [];
     curSet.forEach(k=>{
       if(!selectedKeys.has(k)){
@@ -1218,7 +1224,6 @@ export default function App(){
     setEditGroupId(null);
   }
 
-  /* ----- Liste ON pour un groupe ----- */
   function openListOn(groupId){
     setListOnGroupId(groupId);
   }
@@ -1275,7 +1280,6 @@ export default function App(){
     if(error){
       alert(error.message);
     }else if(data?.url){
-      // redirige Google
       location.href=data.url;
     }
   }
@@ -1295,7 +1299,6 @@ export default function App(){
     const act    = slaveActivity[mac] || {phase:"idle",msg:""};
 
     const showBar = act.phase==="busy";
-    // après ack on passe par phase done+msg Succès, barre disparait
     const showDoneMsg = (act.phase==="done" && act.msg);
 
     return (
