@@ -53,7 +53,7 @@ function CircleBtn({ children, onClick, disabled, extraClass }) {
       disabled={disabled}
       onClick={onClick}
     >
-      {children}
+      <span className="circleBtnInner">{children}</span>
     </button>
   );
 }
@@ -64,7 +64,7 @@ function CircleBtn({ children, onClick, disabled, extraClass }) {
    - "idle": rien → barre cachée
    - "queue": en attente → petite anim pulsée
    - "send": envoi → anim de remplissage
-   - "acked": succès → plein + ✓
+   - "acked": succès → plein + ✓ puis disparaît
 ----------------------------------------- */
 function ActionBar({ phase }) {
   if (!phase || phase === "idle") return null;
@@ -83,11 +83,7 @@ function ActionBar({ phase }) {
             : "")
         }
       />
-      {isAck && (
-        <div className="actionBarAck">
-          ✓
-        </div>
-      )}
+      {isAck && <div className="actionBarAck">✓</div>}
     </div>
   );
 }
@@ -136,11 +132,7 @@ function SlaveInfoModal({
   }, [currentName, slaveMac, open]);
 
   return (
-    <ModalShell
-      open={open}
-      onClose={onClose}
-      title="Détails du Slave"
-    >
+    <ModalShell open={open} onClose={onClose} title="Détails du Slave">
       <div className="modalSection">
         <label className="modalLabel">Nom du slave</label>
         <input
@@ -171,9 +163,7 @@ function SlaveInfoModal({
         </div>
         <div className="modalInfoRow">
           <span className="modalInfoKey">PC :</span>
-          <span className="modalInfoVal">
-            {pcOn ? "allumé" : "éteint"}
-          </span>
+          <span className="modalInfoVal">{pcOn ? "allumé" : "éteint"}</span>
         </div>
       </div>
     </ModalShell>
@@ -185,19 +175,13 @@ function SlaveInfoModal({
 ========================================================= */
 function GroupOnListModal({ open, onClose, members }) {
   return (
-    <ModalShell
-      open={open}
-      onClose={onClose}
-      title="Machines allumées"
-    >
+    <ModalShell open={open} onClose={onClose} title="Machines allumées">
       {(!members || !members.length) && (
         <div className="modalEmpty">Aucune machine allumée</div>
       )}
       {(members || []).map((m) => (
         <div key={m.mac} className="modalInfoRow">
-          <span className="modalInfoKey">
-            {m.friendly_name || m.mac}
-          </span>
+          <span className="modalInfoKey">{m.friendly_name || m.mac}</span>
           <span className="modalInfoVal">
             {m.pc_on ? "Allumé" : "Éteint"}
           </span>
@@ -209,7 +193,6 @@ function GroupOnListModal({ open, onClose, members }) {
 
 /* =========================================================
    MODALE "Éditer les membres d'un groupe"
-   - coche/décoche les slaves
 ========================================================= */
 function GroupMembersModal({
   open,
@@ -234,12 +217,8 @@ function GroupMembersModal({
               checked={!!checkedMap[sl.mac]}
               onChange={() => onToggleMac(sl.mac)}
             />
-            <span className="checkName">
-              {sl.friendly_name || sl.mac}
-            </span>
-            <span className="checkState">
-              {sl.pc_on ? "allumé" : "éteint"}
-            </span>
+            <span className="checkName">{sl.friendly_name || sl.mac}</span>
+            <span className="checkState">{sl.pc_on ? "allumé" : "éteint"}</span>
           </label>
         ))}
       </div>
@@ -268,7 +247,7 @@ function SlaveCard({
 }) {
   return (
     <div className="slaveCard">
-      {/* petit bouton info en haut à droite */}
+      {/* bouton info en haut à droite */}
       <div
         className="infoChip"
         onClick={onInfoClick}
@@ -278,9 +257,7 @@ function SlaveCard({
       </div>
 
       {/* nom du slave en gros */}
-      <div className="slaveNameMain">
-        {friendlyName || mac}
-      </div>
+      <div className="slaveNameMain">{friendlyName || mac}</div>
 
       {/* état PC */}
       <div className="slaveSub">
@@ -298,11 +275,7 @@ function SlaveCard({
         <CircleBtn onClick={onReset} disabled={false}>
           ↺
         </CircleBtn>
-        <CircleBtn
-          extraClass="moreBtn"
-          onClick={onMore}
-          disabled={false}
-        >
+        <CircleBtn extraClass="moreBtn" onClick={onMore} disabled={false}>
           ⋯
         </CircleBtn>
       </div>
@@ -333,9 +306,7 @@ function MasterCard({
       <div className="masterTopRow">
         <div className="masterTitleLeft">
           <div className="masterNameLine">
-            <span className="masterCardTitle">
-              {device.name || device.id}
-            </span>
+            <span className="masterCardTitle">{device.name || device.id}</span>
             <span
               className={
                 "onlineBadge " + (live ? "onlineYes" : "onlineNo")
@@ -375,9 +346,7 @@ function MasterCard({
           </SubtleButton>
           <SubtleButton
             onClick={() =>
-              onSendMasterCmd(device.id, null, "PULSE", {
-                ms: 500,
-              })
+              onSendMasterCmd(device.id, null, "PULSE", { ms: 500 })
             }
           >
             Pulse 500ms
@@ -397,9 +366,7 @@ function MasterCard({
             Power OFF
           </SubtleButton>
           <SubtleButton
-            onClick={() =>
-              onSendMasterCmd(device.id, null, "RESET", {})
-            }
+            onClick={() => onSendMasterCmd(device.id, null, "RESET", {})}
           >
             Reset
           </SubtleButton>
@@ -544,7 +511,7 @@ export default function App() {
   useEffect(() => {
     // écoute auth
     const { data: sub } = sb.auth.onAuthStateChange(
-      async (event, session) => {
+      async (_event, session) => {
         setUser(session?.user || null);
         setAuthReady(true);
         if (session?.user) {
@@ -588,7 +555,8 @@ export default function App() {
     if (chNodes.current) sb.removeChannel(chNodes.current);
     if (chCmds.current) sb.removeChannel(chCmds.current);
     if (chGroups.current) sb.removeChannel(chGroups.current);
-    chDevices.current = chNodes.current = chCmds.current = chGroups.current = null;
+    chDevices.current = chNodes.current = chCmds.current = chGroups.current =
+      null;
   }
 
   function attachRealtime() {
@@ -615,7 +583,7 @@ export default function App() {
         () => {
           addLog("[RT] nodes changed");
           refetchNodesOnly();
-          refetchGroupsOnly(); // car groupes utilisent infos des slaves
+          refetchGroupsOnly(); // groupes utilisent slaves
         }
       )
       .subscribe();
@@ -860,9 +828,7 @@ export default function App() {
       }
     } else {
       addLog(
-        `[cmd] ${action} → ${masterId}${
-          targetMac ? " ▶ " + targetMac : ""
-        }`
+        `[cmd] ${action} → ${masterId}${targetMac ? " ▶ " + targetMac : ""}`
       );
       if (targetMac) {
         setSlavePhases((old) => ({
@@ -1106,18 +1072,14 @@ export default function App() {
   const currentGroupForOnList = useMemo(() => {
     if (!groupOnListOpen.open) return null;
     return (
-      groupsData.find(
-        (g) => g.id === groupOnListOpen.groupId
-      ) || null
+      groupsData.find((g) => g.id === groupOnListOpen.groupId) || null
     );
   }, [groupOnListOpen, groupsData]);
 
   const currentGroupForMembers = useMemo(() => {
     if (!groupMembersOpen.open) return null;
     return (
-      groupsData.find(
-        (g) => g.id === groupMembersOpen.groupId
-      ) || null
+      groupsData.find((g) => g.id === groupMembersOpen.groupId) || null
     );
   }, [groupMembersOpen, groupsData]);
 
@@ -1181,15 +1143,11 @@ export default function App() {
       <div className="mastersSection">
         <div className="sectionTitleRow">
           <div className="sectionTitle">Masters</div>
-          <div className="sectionSub">
-            Chaque master pilote ses slaves
-          </div>
+          <div className="sectionSub">Chaque master pilote ses slaves</div>
         </div>
 
         {!devices.length ? (
-          <div className="noGroupsNote smallText">
-            Aucun master
-          </div>
+          <div className="noGroupsNote smallText">Aucun master</div>
         ) : (
           devices.map((dev) => (
             <MasterCard
@@ -1278,9 +1236,7 @@ export default function App() {
               <div className="appName">REMOTE POWER</div>
               <div className="appStatus">Actif</div>
             </div>
-            <div className="appSubtitle smallText">
-              tableau de contrôle
-            </div>
+            <div className="appSubtitle smallText">tableau de contrôle</div>
           </div>
 
           <div className="rightBlock">
@@ -1289,18 +1245,10 @@ export default function App() {
             </div>
             {isLogged ? (
               <>
-                <SubtleButton onClick={handleLogout}>
-                  Déconnexion
-                </SubtleButton>
-                <SubtleButton onClick={askAddMaster}>
-                  + MASTER
-                </SubtleButton>
-                <SubtleButton onClick={askAddGroup}>
-                  + Groupe
-                </SubtleButton>
-                <SubtleButton onClick={fullReload}>
-                  Rafraîchir
-                </SubtleButton>
+                <SubtleButton onClick={handleLogout}>Déconnexion</SubtleButton>
+                <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
+                <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
+                <SubtleButton onClick={fullReload}>Rafraîchir</SubtleButton>
               </>
             ) : (
               <SubtleButton onClick={handleLogin}>
@@ -1373,9 +1321,9 @@ const STYLES = `
   --text-main:#fff;
   --text-dim:rgba(255,255,255,0.7);
   --text-soft:rgba(255,255,255,0.5);
-  --bubble-bg:rgba(0,0,0,0.05);
-  --bubble-bg-hover:rgba(0,0,0,0.09);
-  --bubble-border:rgba(0,0,0,0);
+  --bubble-bg:rgba(255,255,255,0.06);
+  --bubble-bg-hover:rgba(255,255,255,0.12);
+  --bubble-border:rgba(255,255,255,0.22);
   --online-green:#4ade80;
   --online-red:#f87171;
   --modal-bg:rgba(0,0,0,0.45);
@@ -1392,7 +1340,12 @@ html,body,#root{
   padding:0;
   background:var(--bg-page);
   color:var(--text-main);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif;
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Ubuntu,sans-serif;
+}
+
+.smallText{
+  font-size:12px;
+  color:var(--text-soft);
 }
 
 /* HEADER sticky */
@@ -1402,8 +1355,8 @@ html,body,#root{
   left:0;
   right:0;
   z-index:2000;
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  backdrop-filter:blur(20px) saturate(140%);
+  -webkit-backdrop-filter:blur(20px) saturate(140%);
   background:rgba(20,20,20,0.55);
   border-bottom:1px solid rgba(255,255,255,0.12);
   box-shadow:0 20px 50px rgba(0,0,0,0.8);
@@ -1419,6 +1372,11 @@ html,body,#root{
   margin:0 auto;
   row-gap:8px;
 }
+.leftBlock{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
 .appTitleRow{
   display:flex;
   align-items:baseline;
@@ -1428,6 +1386,7 @@ html,body,#root{
   font-weight:600;
   font-size:16px;
   color:var(--text-main);
+  letter-spacing:.03em;
 }
 .appStatus{
   font-size:12px;
@@ -1451,7 +1410,7 @@ html,body,#root{
   font-size:12px;
 }
 
-/* BG image plein écran */
+/* BG full-screen */
 .pageBg{
   min-height:100vh;
   background:
@@ -1485,8 +1444,585 @@ html,body,#root{
 .groupsSection,
 .mastersSection,
 .journalSection{
-  background:rgba(255,255,255,0.08);
-  border:1px solid rgba(255,255,255,0.2);
-  border-radius:12px;
+  background:var(--glass-bg);
+  border:1px solid var(--glass-border);
+  border-radius:16px;
   box-shadow:var(--shadow-card);
-  backdrop-filter:blur(20px) s
+  backdrop-filter:blur(20px) saturate(140%);
+  -webkit-backdrop-filter:blur(20px) saturate(140%);
+  padding:16px;
+  color:var(--text-main);
+}
+
+/* Titres de section */
+.sectionTitleRow{
+  display:flex;
+  flex-direction:column;
+  margin-bottom:12px;
+}
+.sectionTitle{
+  color:var(--text-main);
+  font-weight:600;
+  font-size:14px;
+}
+.sectionSub{
+  color:var(--text-soft);
+  font-size:12px;
+}
+.noGroupsNote{
+  color:var(--text-soft);
+  font-size:12px;
+}
+
+/* GROUPS */
+.groupListWrap{
+  display:flex;
+  flex-wrap:wrap;
+  gap:16px;
+}
+.groupCard{
+  min-width:260px;
+  flex:1 1 260px;
+  background:rgba(255,255,255,0.07);
+  border:1px solid rgba(255,255,255,0.18);
+  border-radius:16px;
+  padding:16px;
+  color:var(--text-main);
+  position:relative;
+  box-shadow:0 20px 40px rgba(0,0,0,0.7);
+  backdrop-filter:blur(18px) saturate(140%);
+  -webkit-backdrop-filter:blur(18px) saturate(140%);
+}
+.groupHeadRow{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:12px;
+}
+.groupMainInfo{
+  flex:1;
+  min-width:150px;
+}
+.groupNameLine{
+  font-size:15px;
+  font-weight:600;
+  color:var(--text-main);
+}
+.groupSubLine{
+  font-size:12px;
+  color:var(--text-dim);
+  margin-top:4px;
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+}
+.groupMiniActions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  justify-content:flex-end;
+}
+.groupCmdRow{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  font-size:12px;
+}
+
+/* Masters */
+.mastersSection > .sectionTitleRow + .noGroupsNote{
+  margin-bottom:8px;
+}
+.masterCard{
+  background:rgba(255,255,255,0.07);
+  border:1px solid rgba(255,255,255,0.18);
+  border-radius:16px;
+  padding:16px;
+  margin-bottom:16px;
+  color:var(--text-main);
+  box-shadow:0 20px 40px rgba(0,0,0,0.7);
+  backdrop-filter:blur(18px) saturate(140%);
+  -webkit-backdrop-filter:blur(18px) saturate(140%);
+}
+.masterTopRow{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:16px;
+}
+.masterTitleLeft{
+  min-width:200px;
+  flex:1;
+}
+.masterNameLine{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:8px;
+  margin-bottom:6px;
+}
+.masterCardTitle{
+  font-size:15px;
+  font-weight:600;
+  color:var(--text-main);
+}
+.onlineBadge{
+  font-size:11px;
+  font-weight:500;
+  border-radius:9999px;
+  padding:2px 8px;
+  line-height:1.2;
+  border:1px solid rgba(255,255,255,0.22);
+}
+.onlineYes{
+  color:var(--online-green);
+  background:rgba(16,185,129,0.12);
+  border-color:rgba(16,185,129,0.4);
+}
+.onlineNo{
+  color:var(--online-red);
+  background:rgba(239,68,68,0.12);
+  border-color:rgba(239,68,68,0.4);
+}
+.masterMeta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  font-size:12px;
+  line-height:1.3;
+  color:var(--text-soft);
+}
+.kv .k{
+  color:var(--text-soft);
+  font-weight:500;
+  font-size:12px;
+}
+.kv .v{
+  color:var(--text-main);
+  font-size:12px;
+}
+.masterActionsRow{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  justify-content:flex-end;
+  align-items:flex-start;
+}
+.slavesWrap{
+  display:flex;
+  justify-content:center; /* centre tout le grid visuellement */
+}
+.slavesGrid{
+  width:100%;
+  max-width:1000px;
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+  gap:16px;
+  justify-items:center;
+}
+
+/* Slave card */
+.slaveCard{
+  position:relative;
+  width:100%;
+  max-width:180px;
+  min-width:140px;
+  background:rgba(255,255,255,0.08);
+  border:1px solid rgba(255,255,255,0.22);
+  border-radius:20px;
+  box-shadow:0 24px 48px rgba(0,0,0,0.8);
+  backdrop-filter:blur(18px) saturate(140%);
+  -webkit-backdrop-filter:blur(18px) saturate(140%);
+  padding:16px 12px 12px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  text-align:center;
+  color:var(--text-main);
+}
+
+/* le bouton info "i" */
+.infoChip{
+  position:absolute;
+  top:10px;
+  right:10px;
+  width:20px;
+  height:20px;
+  font-size:12px;
+  line-height:20px;
+  border-radius:9999px;
+  background:var(--bubble-bg);
+  color:var(--text-dim);
+  border:1px solid var(--bubble-border);
+  text-align:center;
+  cursor:pointer;
+  user-select:none;
+  transition:all var(--transition-fast);
+}
+.infoChip:hover{
+  background:var(--bubble-bg-hover);
+  color:var(--text-main);
+}
+
+/* nom du slave */
+.slaveNameMain{
+  font-size:16px;
+  font-weight:600;
+  color:var(--text-main);
+  margin-top:24px; /* pour éviter l'overlap avec le "i" */
+  margin-bottom:4px;
+  min-height:2.6em;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  text-align:center;
+  line-height:1.2;
+}
+.slaveSub{
+  font-size:12px;
+  line-height:1.3;
+  color:var(--text-soft);
+  margin-bottom:8px;
+  min-height:1.4em;
+}
+
+/* barre d'action visuelle */
+.actionBarWrapper{
+  width:100%;
+  height:4px;
+  border-radius:999px;
+  background:rgba(0,0,0,0.4);
+  border:1px solid rgba(255,255,255,0.15);
+  position:relative;
+  overflow:hidden;
+  margin-bottom:12px;
+}
+.actionBarFill{
+  position:absolute;
+  top:0;
+  left:0;
+  bottom:0;
+  background:#000;
+}
+.queueAnim{
+  width:30%;
+  animation:pulseBar 1.2s infinite;
+}
+.sendAnim{
+  width:100%;
+  animation:fillBar 1s forwards;
+}
+.ackedFill{
+  width:100%;
+  background:#000;
+}
+.actionBarAck{
+  position:absolute;
+  right:6px;
+  top:-18px;
+  font-size:10px;
+  font-weight:600;
+  color:#000;
+  background:#fff;
+  border-radius:6px;
+  padding:2px 4px;
+  box-shadow:0 8px 16px rgba(0,0,0,0.8);
+}
+
+@keyframes pulseBar{
+  0%{opacity:0.4;}
+  50%{opacity:1;}
+  100%{opacity:0.4;}
+}
+@keyframes fillBar{
+  0%{width:0%;}
+  100%{width:100%;}
+}
+
+/* boutons ronds en bas */
+.slaveBtnsRow{
+  display:flex;
+  flex-wrap:nowrap;
+  align-items:flex-end;
+  justify-content:center;
+  gap:12px;
+  margin-top:auto;
+}
+.circleBtn{
+  width:44px;
+  height:44px;
+  border-radius:9999px;
+  background:var(--bubble-bg);
+  border:1px solid var(--bubble-border);
+  box-shadow:0 12px 24px rgba(0,0,0,0.8);
+  color:var(--text-main);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  transition:all var(--transition-fast);
+  padding:0;
+}
+.circleBtn:hover{
+  background:var(--bubble-bg-hover);
+}
+.circleBtnInner{
+  font-size:16px;
+  line-height:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  margin-top:1px; /* micro-ajust pour centrage visuel */
+}
+.moreBtn{
+  font-weight:500;
+  font-size:18px;
+  line-height:1;
+}
+
+/* Journal */
+.journalSection .logBox{
+  width:100%;
+  min-height:120px;
+  max-height:200px;
+  background:rgba(0,0,0,0.5);
+  border:1px solid rgba(255,255,255,0.15);
+  border-radius:12px;
+  padding:12px;
+  font-size:12px;
+  line-height:1.4;
+  color:var(--text-dim);
+  white-space:pre-wrap;
+  overflow:auto;
+  box-shadow:inset 0 0 20px rgba(0,0,0,0.6);
+}
+
+/* Boutons "capsule" */
+.subtleBtn{
+  appearance:none;
+  background:var(--bubble-bg);
+  border:1px solid var(--bubble-border);
+  border-radius:9999px;
+  font-size:12px;
+  line-height:1.2;
+  color:var(--text-main);
+  cursor:pointer;
+  padding:6px 10px;
+  min-height:28px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:0 12px 24px rgba(0,0,0,0.8);
+  transition:all var(--transition-fast);
+}
+.subtleBtn:hover{
+  background:var(--bubble-bg-hover);
+}
+
+/* Chip style petit bouton dans groupe */
+.chipBtn{
+  appearance:none;
+  background:var(--bubble-bg);
+  border:1px solid var(--bubble-border);
+  border-radius:9999px;
+  font-size:11px;
+  line-height:1.2;
+  color:var(--text-main);
+  cursor:pointer;
+  padding:4px 8px;
+  box-shadow:0 10px 20px rgba(0,0,0,0.8);
+  transition:all var(--transition-fast);
+}
+.chipBtn:hover{
+  background:var(--bubble-bg-hover);
+}
+
+/* MODALES */
+.modalOverlay{
+  position:fixed;
+  inset:0;
+  background:var(--modal-bg);
+  backdrop-filter:blur(4px);
+  -webkit-backdrop-filter:blur(4px);
+  z-index:3000;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:16px;
+}
+.modalCard{
+  width:100%;
+  max-width:360px;
+  background:rgba(20,20,20,0.8);
+  border:1px solid rgba(255,255,255,0.18);
+  border-radius:16px;
+  box-shadow:0 30px 60px rgba(0,0,0,0.8);
+  color:var(--text-main);
+  backdrop-filter:blur(18px) saturate(140%);
+  -webkit-backdrop-filter:blur(18px) saturate(140%);
+  display:flex;
+  flex-direction:column;
+  padding:16px;
+}
+.modalHeader{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  margin-bottom:12px;
+}
+.modalTitle{
+  font-size:14px;
+  font-weight:600;
+  color:var(--text-main);
+}
+.smallCloseBtn{
+  appearance:none;
+  background:var(--bubble-bg);
+  border:1px solid var(--bubble-border);
+  border-radius:8px;
+  color:var(--text-main);
+  cursor:pointer;
+  line-height:1;
+  font-size:12px;
+  padding:4px 6px;
+  min-width:28px;
+  text-align:center;
+  box-shadow:0 12px 24px rgba(0,0,0,0.8);
+}
+.smallCloseBtn:hover{
+  background:var(--bubble-bg-hover);
+}
+.modalBody{
+  font-size:13px;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  color:var(--text-main);
+}
+.modalSection{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.modalLabel{
+  font-size:12px;
+  color:var(--text-soft);
+}
+.modalInput{
+  width:100%;
+  background:rgba(0,0,0,0.6);
+  border:1px solid rgba(255,255,255,0.2);
+  color:var(--text-main);
+  font-size:13px;
+  border-radius:8px;
+  padding:8px;
+  outline:none;
+}
+.modalInput:focus{
+  border-color:rgba(255,255,255,0.4);
+}
+.modalInfoRow{
+  display:flex;
+  justify-content:space-between;
+  font-size:13px;
+  line-height:1.4;
+  color:var(--text-main);
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.15);
+  border-radius:8px;
+  padding:6px 8px;
+}
+.modalInfoKey{
+  color:var(--text-soft);
+  margin-right:8px;
+}
+.modalInfoVal{
+  color:var(--text-main);
+  font-weight:500;
+  text-align:right;
+  word-break:break-all;
+}
+.modalEmpty{
+  font-size:12px;
+  color:var(--text-soft);
+  text-align:center;
+  padding:12px;
+}
+.checkRow{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  font-size:13px;
+  line-height:1.4;
+  padding:6px 8px;
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.15);
+  border-radius:8px;
+  color:var(--text-main);
+  margin-bottom:6px;
+}
+.checkName{
+  flex:1;
+  margin-left:6px;
+  color:var(--text-main);
+  font-weight:500;
+}
+.checkState{
+  color:var(--text-soft);
+  font-size:12px;
+}
+
+/* Scrollbars (un peu propres sur desktop) */
+.logBox::-webkit-scrollbar,
+.modalBody::-webkit-scrollbar,
+.pageContent::-webkit-scrollbar{
+  width:6px;
+  height:6px;
+}
+.logBox::-webkit-scrollbar-track,
+.modalBody::-webkit-scrollbar-track,
+.pageContent::-webkit-scrollbar-track{
+  background:rgba(255,255,255,0.05);
+  border-radius:999px;
+}
+.logBox::-webkit-scrollbar-thumb,
+.modalBody::-webkit-scrollbar-thumb,
+.pageContent::-webkit-scrollbar-thumb{
+  background:rgba(255,255,255,0.2);
+  border-radius:999px;
+}
+
+/* responsive petits écrans */
+@media(max-width:600px){
+  .topHeaderInner{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+  .rightBlock{
+    width:100%;
+    justify-content:flex-start;
+    flex-wrap:wrap;
+  }
+  .groupCard{
+    flex:1 1 100%;
+    min-width:0;
+  }
+  .slavesGrid{
+    grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+    gap:12px;
+  }
+  .slaveCard{
+    max-width:160px;
+  }
+  .circleBtn{
+    width:40px;
+    height:40px;
+  }
+  .circleBtnInner{
+    font-size:15px;
+  }
+}
+`;
