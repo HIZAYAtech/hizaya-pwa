@@ -9,14 +9,14 @@ const SUPA_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const sb = createClient(SUPABASE_URL, SUPA_ANON_KEY);
 
 /* =========================================================
-   CONSTANTES UI / LOGIQUE
+   CONSTANTES
    ========================================================= */
 const MASTER_LIVE_TTL_MS = 8000; // master "online" si last_seen < 8s
 const BG_IMAGE_URL =
   "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1600&q=60";
 
 /* =========================================================
-   CSS GLOBALE
+   CSS GLOBAL
    ========================================================= */
 const styles = `
 :root {
@@ -38,7 +38,10 @@ const styles = `
   --transition-fast: .16s ease;
 }
 
-* { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+* {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+}
 
 html, body, #root {
   margin: 0;
@@ -49,7 +52,7 @@ html, body, #root {
   color: var(--text-main);
 }
 
-/* ==== FOND GLOBAL ==== */
+/* ======= Fond global ======= */
 .appBg {
   min-height: 100%;
   background-color: #f5f6fa;
@@ -60,11 +63,11 @@ html, body, #root {
   background-size: cover;
   background-position: center;
   background-attachment: fixed;
-  padding-top: 80px; /* espace sous la barre du haut */
+  padding-top: 80px;   /* dégagement sous la barre top */
   padding-bottom: 60px;
 }
 
-/* ==== BARRE TOP FIXE ==== */
+/* ======= Top bar ======= */
 .topBar {
   position: fixed;
   top:0;
@@ -95,14 +98,6 @@ html, body, #root {
   font-weight:400;
   color:var(--text-dim);
 }
-.topRight {
-  display:flex;
-  align-items:center;
-  flex-wrap:wrap;
-  gap:10px;
-  font-size:13px;
-  color:var(--text-main);
-}
 .badgeOnline {
   color:var(--accent-online);
   font-weight:600;
@@ -112,6 +107,14 @@ html, body, #root {
   color:var(--accent-offline);
   font-weight:600;
   font-size:12px;
+}
+.topRight {
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:10px;
+  font-size:13px;
+  color:var(--text-main);
 }
 .topUserMail {
   font-size:12px;
@@ -140,9 +143,9 @@ html, body, #root {
   background:#1e4ed8;
 }
 
-/* ==== WRAPPER DE PAGE ==== */
+/* ======= Wrapper de page ======= */
 .pageContent {
-  max-width:1400px;
+  max-width:1100px;      /* <-- largeur unique */
   margin:0 auto;
   padding:0 16px;
   display:flex;
@@ -150,9 +153,7 @@ html, body, #root {
   gap:24px;
 }
 
-/* =========================================================
-   PANNEAUX (Groupes / Masters / Journal)
-   ========================================================= */
+/* ======= Panneau commun (Groupes, Masters, Journal) ======= */
 .panelOuter {
   background: var(--glass-bg);
   border:1px solid var(--glass-stroke);
@@ -162,14 +163,15 @@ html, body, #root {
   -webkit-backdrop-filter: blur(20px) saturate(1.3);
   padding:16px;
   color:var(--text-main);
-  max-width:1100px;
-  margin:0 auto;
+
+  /* on force full width du container parent */
+  width:100%;
   display:flex;
   flex-direction:column;
   gap:16px;
 }
 
-/* Header interne du panneau */
+/* header interne du panneau */
 .panelHeader {
   display:flex;
   flex-wrap:wrap;
@@ -192,16 +194,12 @@ html, body, #root {
   color:var(--text-dim);
 }
 
-/* =========================================================
-   GROUPES
-   ========================================================= */
+/* ======= CARTES GROUPES ======= */
 .groupsListRow {
   display:flex;
   flex-wrap:wrap;
   gap:16px;
 }
-
-/* Carte d'un groupe */
 .groupCard {
   background: var(--glass-bg-strong);
   border:1px solid var(--glass-stroke);
@@ -244,21 +242,6 @@ html, body, #root {
   gap:8px;
   margin-top:12px;
 }
-.smallBtn {
-  appearance:none;
-  border:0;
-  border-radius:999px;
-  background:rgba(0,0,0,0.05);
-  color:var(--text-main);
-  font-size:12px;
-  line-height:1;
-  padding:6px 10px;
-  cursor:pointer;
-  transition:background var(--transition-fast);
-}
-.smallBtn:hover {
-  background:rgba(0,0,0,0.07);
-}
 .subtleBtn {
   background:transparent;
   border:0;
@@ -282,19 +265,27 @@ html, body, #root {
 }
 .listOnBtn:hover { color:#1e4ed8; }
 
-/* =========================================================
-   MASTER CARD + SLAVES
-   ========================================================= */
-.masterCardOuter {
-  background: var(--glass-bg);
-  border:1px solid var(--glass-stroke);
-  border-radius: var(--card-radius-lg);
-  box-shadow:0 20px 60px rgba(0,0,0,0.25);
-  backdrop-filter: blur(20px) saturate(1.3);
-  -webkit-backdrop-filter: blur(20px) saturate(1.3);
-  padding:16px;
+.smallBtn {
+  appearance:none;
+  border:0;
+  border-radius:999px;
+  background:rgba(0,0,0,0.05);
   color:var(--text-main);
-  min-height:260px;
+  font-size:12px;
+  line-height:1;
+  padding:6px 10px;
+  cursor:pointer;
+  transition:background var(--transition-fast);
+}
+.smallBtn:hover {
+  background:rgba(0,0,0,0.07);
+}
+
+/* ======= MASTER + SLAVES ======= */
+.masterCardOuter {
+  background: transparent; /* le panneauOuter fait déjà le glass */
+  border-radius: var(--card-radius-lg);
+  color:var(--text-main);
   display:flex;
   flex-direction:column;
   gap:16px;
@@ -359,7 +350,7 @@ html, body, #root {
   background:rgba(0,0,0,0.07);
 }
 
-/* ==== Slaves grid */
+/* Slaves grid */
 .slavesGrid {
   display:flex;
   flex-wrap:wrap;
@@ -374,12 +365,14 @@ html, body, #root {
   max-width:200px;
   min-width:140px;
   min-height:220px;
+
   background:rgba(255,255,255,0.22);
   border:1px solid rgba(255,255,255,0.5);
   box-shadow:0 24px 60px rgba(0,0,0,0.25);
   border-radius:var(--card-radius-md);
   backdrop-filter: blur(16px) saturate(1.45);
   -webkit-backdrop-filter: blur(16px) saturate(1.45);
+
   padding:12px 12px 48px 12px; /* place pour les boutons en bas */
   display:flex;
   flex-direction:column;
@@ -425,10 +418,10 @@ html, body, #root {
   line-height:1.3;
   font-weight:500;
   color:var(--text-dim);
-  margin-top:4px;
+  margin-top:6px; /* <-- on descend un peu plus le label pour éviter le chip i */
 }
 
-/* barre de progression noire */
+/* Progression commande */
 .progressOuter {
   width:100%;
   height:4px;
@@ -444,7 +437,7 @@ html, body, #root {
   transition: width .2s linear;
 }
 
-/* BOTTOM BUTTON BAR INSIDE SLAVE CARD */
+/* Boutons bas de carte */
 .slaveBtnsRow {
   position:absolute;
   bottom:8px;
@@ -482,24 +475,7 @@ html, body, #root {
   line-height:42px;
 }
 
-/* =========================================================
-   JOURNAL
-   ========================================================= */
-.journalPanelOuter {
-  background: var(--glass-bg);
-  border:1px solid var(--glass-stroke);
-  border-radius: var(--card-radius-lg);
-  box-shadow:0 20px 60px rgba(0,0,0,0.25);
-  backdrop-filter: blur(20px) saturate(1.3);
-  -webkit-backdrop-filter: blur(20px) saturate(1.3);
-  padding:16px;
-  color:var(--text-main);
-  max-width:1100px;
-  margin:0 auto;
-  display:flex;
-  flex-direction:column;
-  gap:12px;
-}
+/* ======= Journal ======= */
 .journalTitle {
   font-size:13px;
   font-weight:600;
@@ -510,11 +486,13 @@ html, body, #root {
   min-height:120px;
   max-height:180px;
   overflow:auto;
+
   background:rgba(255,255,255,0.4);
   border:1px solid rgba(255,255,255,0.5);
   border-radius:var(--card-radius-md);
   backdrop-filter: blur(12px) saturate(1.4);
   -webkit-backdrop-filter: blur(12px) saturate(1.4);
+
   box-shadow:0 16px 40px rgba(0,0,0,0.2);
   padding:12px;
   font-size:12px;
@@ -523,9 +501,7 @@ html, body, #root {
   white-space:pre-wrap;
 }
 
-/* =========================================================
-   MODALS
-   ========================================================= */
+/* ======= Modals ======= */
 .modalBackdrop {
   position:fixed;
   inset:0;
@@ -683,18 +659,14 @@ export default function App() {
 
   /* ---------- DATA ---------- */
   const [devices, setDevices] = useState([]);
-  // nodesByMaster[master_id] = [ { mac, nameShort, pc_on }, ... ]
   const [nodesByMaster, setNodesByMaster] = useState({});
-  // groups + membres
   const [groups, setGroups] = useState([]);
-  // groupMembers[group_id] = [ { master_id, mac }, ... ]
   const [groupMembers, setGroupMembers] = useState({});
 
-  /* activité cmd par slaveMac */
-  // cmdActivity[mac] = { phase:"queued"/"sent"/"acked"/"error", ts:number }
+  // activité de commande par slave
   const [cmdActivity, setCmdActivity] = useState({});
 
-  /* logs UI */
+  // logs
   const [lines, setLines] = useState([]);
   const logRef = useRef(null);
   function addLog(txt) {
@@ -712,24 +684,14 @@ export default function App() {
   const chGroups  = useRef(null);
   const chCmds    = useRef(null);
 
-  /* MODALS / UI STATE */
-  // pair master
-  const [pairInfo, setPairInfo] = useState({
-    open:false,
-    code:null,
-    expires_at:null
-  });
-
-  // slave "..." menu
+  /* UI state */
+  const [pairInfo, setPairInfo] = useState({open:false,code:null,expires_at:null});
   const [openSlaveMoreMac, setOpenSlaveMoreMac] = useState(null);
   const [openSlaveMoreMaster, setOpenSlaveMoreMaster] = useState(null);
 
-  // liste ON d'un groupe
   const [listOnGroupId, setListOnGroupId] = useState(null);
 
-  // édition membres groupe
   const [editGroupId, setEditGroupId] = useState(null);
-  // persistance des cases cochées pendant édition
   const [editMembersSel, setEditMembersSel] = useState(new Set());
 
   /* ---------- AUTH BOOTSTRAP ---------- */
@@ -871,7 +833,6 @@ export default function App() {
       reloadGroups(),
     ]);
   }
-
   async function reloadDevices(){
     const {data,error}=await sb
       .from("devices")
@@ -880,7 +841,6 @@ export default function App() {
     if(error){ addLog("Err devices: "+error.message); return; }
     setDevices(data||[]);
   }
-
   async function reloadNodes(){
     const {data,error}=await sb
       .from("nodes")
@@ -897,7 +857,6 @@ export default function App() {
     });
     setNodesByMaster(map);
   }
-
   async function reloadGroups(){
     const {data:grps,error:eg}=await sb
       .from("groups")
@@ -922,7 +881,6 @@ export default function App() {
     setGroups(grps||[]);
     setGroupMembers(memMap);
   }
-
   async function reloadSingleGroup(groupId){
     await reloadGroups();
   }
@@ -954,6 +912,7 @@ export default function App() {
       }
       return;
     }
+
     addLog(`[cmd] ${action} → ${masterId}${targetMac?" ▶ "+targetMac:""}`);
   }
 
@@ -964,7 +923,6 @@ export default function App() {
     if(error) alert(error.message);
     else addLog(`Renommé ${mid} → ${name}`);
   }
-
   async function deleteMaster(mid){
     if(!confirm(`Supprimer ${mid} ?`)) return;
     const {data:{session}}=await sb.auth.getSession();
@@ -987,7 +945,6 @@ export default function App() {
         :`❌ Suppression : ${await r.text()}`
     );
   }
-
   async function openPairDialog(){
     const {data:{session}}=await sb.auth.getSession();
     if(!session){alert("Non connecté");return;}
@@ -1025,7 +982,6 @@ export default function App() {
     addLog(`Groupe "${name}" créé`);
     reloadGroups();
   }
-
   async function renameGroup(id){
     const cur=groups.find(g=>g.id===id);
     const name=prompt("Nouveau nom du groupe ?",cur?cur.name:"Groupe");
@@ -1035,7 +991,6 @@ export default function App() {
     addLog(`Groupe ${id} renommé → ${name}`);
     reloadGroups();
   }
-
   async function deleteGroup(id){
     if(!confirm("Supprimer ce groupe ?")) return;
     const {error}=await sb.from("groups").delete().eq("id",id);
@@ -1056,7 +1011,6 @@ export default function App() {
   function closeEditGroupMembers(){
     setEditGroupId(null);
   }
-
   async function saveGroupMembers(groupId){
     const selectedKeys=editMembersSel;
     const current=groupMembers[groupId]||[];
@@ -1082,7 +1036,6 @@ export default function App() {
       const {error}=await sb.from("group_members").insert(toAdd);
       if(error) alert("Erreur insert membres: "+error.message);
     }
-
     for(const rem of toRemove){
       const {error}=await sb.from("group_members")
         .delete()
@@ -1097,7 +1050,7 @@ export default function App() {
     setEditGroupId(null);
   }
 
-  /* ---------- SLAVE MORE ( … menu ) ---------- */
+  /* ---------- SLAVE MORE MENU ---------- */
   function openSlaveMore(masterId,mac){
     setOpenSlaveMoreMac(mac);
     setOpenSlaveMoreMaster(masterId);
@@ -1116,15 +1069,13 @@ export default function App() {
   }
 
   /* =========================================================
-     UI SUBCOMPONENTS
+     SUBCOMP: GroupCard
      ========================================================= */
-
   function GroupCard({ g }){
     const members = groupMembers[g.id] || [];
 
     let onCount=0;
     let totalCount=members.length;
-    // pour bouton "liste"
     members.forEach(m=>{
       const arr=nodesByMaster[m.master_id]||[];
       const found=arr.find(sl=>sl.mac===m.mac);
@@ -1204,10 +1155,14 @@ export default function App() {
     );
   }
 
+  /* =========================================================
+     SUBCOMP: SlaveCard
+     ========================================================= */
   function SlaveCard({ masterId, slave }){
     const mac   = slave.mac;
     const isOn  = !!slave.pc_on;
     const act   = cmdActivity[mac];
+
     let barWidth="0%";
     if(act){
       if(act.phase==="queued") barWidth="33%";
@@ -1277,13 +1232,15 @@ export default function App() {
     );
   }
 
+  /* =========================================================
+     SUBCOMP: MasterCard
+     ========================================================= */
   function MasterCard({ d }){
     const live=isMasterLive(d);
     const slavesArr=nodesByMaster[d.id]||[];
 
     return (
       <div className="masterCardOuter">
-        {/* header master */}
         <div className="masterHeadRow">
           <div className="masterHeadMain">
             <div className="masterTitleRow">
@@ -1309,7 +1266,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* slaves */}
         <div className="slavesGrid">
           {slavesArr.map(sl=>(
             <SlaveCard key={sl.mac} masterId={d.id} slave={sl}/>
@@ -1322,7 +1278,6 @@ export default function App() {
   /* =========================================================
      MODALS
      ========================================================= */
-
   function PairDialog(){
     if(!pairInfo.open) return null;
     const endMS = pairInfo.expires_at ? new Date(pairInfo.expires_at).getTime() : 0;
@@ -1605,7 +1560,7 @@ export default function App() {
   }
 
   /* =========================================================
-     PANNEAU GROUPES
+     PANNEAUX PAGE
      ========================================================= */
   function GroupsPanel(){
     return (
@@ -1634,9 +1589,6 @@ export default function App() {
     );
   }
 
-  /* =========================================================
-     PANNEAU MASTERS
-     ========================================================= */
   function MastersPanel(){
     return (
       <section className="panelOuter">
@@ -1665,13 +1617,18 @@ export default function App() {
     );
   }
 
-  /* =========================================================
-     PANNEAU JOURNAL
-     ========================================================= */
   function JournalPanel(){
     return (
-      <section className="journalPanelOuter">
-        <div className="journalTitle">Journal</div>
+      <section className="panelOuter">
+        <div className="panelHeader" style={{marginBottom:"-8px"}}>
+          <div className="panelTitle">
+            <span>Journal</span>
+            <span className="panelSubtitle">
+              Événements en direct
+            </span>
+          </div>
+        </div>
+
         <div className="journalBox" ref={logRef}>
           {lines.join("\n")}
         </div>
@@ -1680,7 +1637,7 @@ export default function App() {
   }
 
   /* =========================================================
-     RENDU FINAL
+     RENDER
      ========================================================= */
   return (
     <>
@@ -1694,7 +1651,6 @@ export default function App() {
       <OnListModal/>
       <GroupMembersEditor/>
 
-      {/* Contenu */}
       <div className="appBg">
         <div className="pageContent">
           <GroupsPanel/>
