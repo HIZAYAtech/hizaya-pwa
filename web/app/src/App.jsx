@@ -69,21 +69,29 @@ function CircleBtn({ children, onClick, disabled, extraClass }) {
 function ActionBar({ phase }) {
   if (!phase || phase === "idle") return null;
   const isAck = phase === "acked";
+
   return (
-    <div className="actionBarWrapper">
-      <div
-        className={
-          "actionBarFill " +
-          (phase === "queue"
-            ? "queueAnim"
-            : phase === "send"
-            ? "sendAnim"
-            : isAck
-            ? "ackedFill"
-            : "")
-        }
-      />
-      {isAck && <div className="actionBarAck">✓</div>}
+    <div className="actionBarBlock">
+      {/* texte au-dessus */}
+      {isAck && (
+        <div className="actionStatusText">succès</div>
+      )}
+
+      {/* barre elle-même */}
+      <div className="actionBarWrapper">
+        <div
+          className={
+            "actionBarFill " +
+            (phase === "queue"
+              ? "queueAnim"
+              : phase === "send"
+              ? "sendAnim"
+              : isAck
+              ? "ackedFill"
+              : "")
+          }
+        />
+      </div>
     </div>
   );
 }
