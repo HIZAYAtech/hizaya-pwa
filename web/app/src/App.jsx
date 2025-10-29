@@ -977,15 +977,13 @@ function attachRealtime() {
   }
 
   // renommer le compte (affichage header côté UI uniquement pour l'instant)
-  function renameAccountLabel() {
-    const newLabel = window.prompt(
-      "Nom du compte ?",
-      accountName || (user?.email || "")
-    );
-    if (!newLabel) return;
-    setAccountName(newLabel);
-    addLog(`Compte nommé : ${newLabel}`);
-  }
+// renommer le compte (affichage header uniquement côté UI pour l'instant)
+function renameAccountLabel() {
+  const newLabel = window.prompt("Nom du compte ?", accountName || (user?.email || ""));
+  if (!newLabel) return;
+  setAccountName(newLabel);
+  addLog(`Compte nommé : ${newLabel}`);
+}
 
   // Logout / Login
   function handleLogout() {
@@ -1256,39 +1254,34 @@ const allSlavesFlat = useMemo(() => {
     <>
       <style>{STYLES}</style>
 
-      {/* HEADER STICKY */}
-      <header className="topHeader">
-        <div className="topHeaderInner">
-          <div className="leftBlock">
-            <div className="appTitleRow">
-              <div className="appName">HIZAYA SWITCH</div>
-              <div className="appStatus">Actif</div>
-            </div>
-            <div className="appSubtitle smallText">tableau de contrôle</div>
-          </div>
+<header className="topHeader">
+  <div className="topHeaderInner">
+    <div className="leftBlock">
+      <div className="appTitleRow">
+        <div className="appName">HIZAYA SWITCH</div>
+        <div className="appStatus">Actif</div>
+      </div>
+      <div className="appSubtitle smallText">tableau de contrôle</div>
+    </div>
 
-          <div className="rightBlock">
-            <div className="userMail smallText">
-              {isLogged ? (accountName || user.email) : "non connecté"}
-            </div>
-            {isLogged ? (
-              <>
-                <SubtleButton onClick={renameAccountLabel}>
-                  Renommer compte
-                </SubtleButton>
-                <SubtleButton onClick={handleLogout}>Déconnexion</SubtleButton>
-                <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
-                <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
-                <SubtleButton onClick={fullReload}>Rafraîchir</SubtleButton>
-              </>
-            ) : (
-              <SubtleButton onClick={handleLogin}>
-                Connexion Google
-              </SubtleButton>
-            )}
-          </div>
-        </div>
-      </header>
+    <div className="rightBlock">
+      <div className="userMail smallText">
+        {isLogged ? (accountName || user.email) : "non connecté"}
+      </div>
+      {isLogged ? (
+        <>
+          <SubtleButton onClick={renameAccountLabel}>Renommer compte</SubtleButton>
+          <SubtleButton onClick={handleLogout}>Déconnexion</SubtleButton>
+          <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
+          <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
+          <SubtleButton onClick={fullReload}>Rafraîchir</SubtleButton>
+        </>
+      ) : (
+        <SubtleButton onClick={handleLogin}>Connexion Google</SubtleButton>
+      )}
+    </div>
+  </div>
+</header>
 
       {/* CONTENU PAGE (fond photo + cartes alignées) */}
       <div className="pageBg">
