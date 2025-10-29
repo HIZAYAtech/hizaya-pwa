@@ -17,6 +17,11 @@ const DEFAULT_IO_PIN = 26;
 /* -----------------------------------------
    helpers formatage / status
 ----------------------------------------- */
+function isSessionValid(sess) {
+  // sess peut être undefined/null
+  // On dit "valide" si on a un access_token string non vide
+  return !!sess?.access_token;
+}
 function fmtTS(s) {
   if (!s) return "—";
   const d = new Date(s);
@@ -508,41 +513,45 @@ export default function App() {
   const [editMembersChecked, setEditMembersChecked] = useState({}); // { mac: true }
 
   /* ------------- AUTH FLOW ---------------- */
-  useEffect(() => {
-    // écoute auth
-    const { data: sub } = sb.auth.onAuthStateChange(
-      async (_event, session) => {
-        setUser(session?.user || null);
-        setAuthReady(true);
-        if (session?.user) {
-          await fullReload();
-          attachRealtime();
-        } else {
-          cleanupRealtime();
-          setDevices([]);
-          setNodesByMaster({});
-          setGroupsData([]);
-        }
-      }
-    );
-
-    // init
-    (async () => {
-      const { data } = await sb.auth.getSession();
-      setUser(data.session?.user || null);
+useEffect(() => {
+  // écoute des changements de session (login/logout/refresh token)
+  const { data: sub } = sb.auth.onAuthStateChange(
+    async (_event, session) => {
+      const valid = isSessionValid(session);
+      setUser(valid ? session.user : null);
       setAuthReady(true);
-      if (data.session?.user) {
+
+      if (valid) {
         await fullReload();
         attachRealtime();
+      } else {
+        cleanupRealtime();
+        setDevices([]);
+        setNodesByMaster({});
+        setGroupsData([]);
       }
-    })();
+    }
+  );
 
-    return () => {
-      sub?.subscription?.unsubscribe();
-      cleanupRealtime();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // init au premier rendu
+  (async () => {
+    const { data } = await sb.auth.getSession();
+    const valid = isSessionValid(data.session);
+    setUser(valid ? data.session.user : null);
+    setAuthReady(true);
+
+    if (valid) {
+      await fullReload();
+      attachRealtime();
+    }
+  })();
+
+  return () => {
+    sub?.subscription?.unsubscribe();
+    cleanupRealtime();
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   /* ---------- REALTIME ---------- */
   const chDevices = useRef(null);
