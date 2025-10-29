@@ -1028,36 +1028,53 @@ export default function App() {
     }));
   }
 
-  async function saveGroupMembers() {
-    const gid = groupMembersOpen.groupId;
-    if (!gid) return;
-    // clear membres
-    const { error: delErr } = await sb
+async function saveGroupMembers() {
+  const gid = groupMembersOpen.groupId;
+  if (!gid) return;
+
+  // 1. construire un index { MAC -> master_id }
+  const macToMaster = {};
+  for (const s of allSlavesFlat) {
+    macToMaster[s.mac] = s.master_id;
+  }
+
+  // 2. on supprime les anciens membres du groupe
+  const { error: delErr } = await sb
+    .from("group_members")
+    .delete()
+    .eq("group_id", gid);
+
+  if (delErr) {
+    window.alert("Erreur clear membres: " + delErr.message);
+    return;
+  }
+
+  // 3. on prépare les nouvelles lignes avec master_id obligatoire
+  const rows = Object.entries(editMembersChecked)
+    .filter(([_, ok]) => ok) // seulement les cases cochées
+    .map(([mac]) => ({
+      group_id: gid,
+      slave_mac: mac,
+      master_id: macToMaster[mac] || null, // IMPORTANT
+    }))
+    .filter(r => r.master_id); // on enlève ceux sans master_id par sécurité
+
+  // 4. INSERT
+  if (rows.length > 0) {
+    const { error: insErr } = await sb
       .from("group_members")
-      .delete()
-      .eq("group_id", gid);
-    if (delErr) {
-      window.alert("Erreur clear membres: " + delErr.message);
+      .insert(rows);
+
+    if (insErr) {
+      window.alert("Erreur insert membres: " + insErr.message);
       return;
     }
-    // reinsert cochés
-    const rows = Object.entries(editMembersChecked)
-      .filter(([_, ok]) => ok)
-      .map(([mac]) => ({
-        group_id: gid,
-        slave_mac: mac,
-      }));
-    if (rows.length > 0) {
-      const { error: insErr } = await sb.from("group_members").insert(rows);
-      if (insErr) {
-        window.alert("Erreur insert membres: " + insErr.message);
-        return;
-      }
-    }
-    addLog(`Membres groupe ${gid} mis à jour.`);
-    closeGroupMembersModal();
-    await refetchGroupsOnly();
   }
+
+  addLog(`Membres groupe ${gid} mis à jour.`);
+  closeGroupMembersModal();
+  await refetchGroupsOnly();
+}
 
   // infos courantes pour les modales
   const currentSlaveInfo = useMemo(() => {
@@ -1082,19 +1099,20 @@ export default function App() {
   }, [groupMembersOpen, groupsData]);
 
   // tous les slaves (pour modale membres)
-  const allSlavesFlat = useMemo(() => {
-    const arr = [];
-    for (const mid of Object.keys(nodesByMaster)) {
-      for (const sl of nodesByMaster[mid]) {
-        arr.push({
-          mac: sl.mac,
-          friendly_name: sl.friendly_name,
-          pc_on: sl.pc_on,
-        });
-      }
+const allSlavesFlat = useMemo(() => {
+  const arr = [];
+  for (const mid of Object.keys(nodesByMaster)) {
+    for (const sl of nodesByMaster[mid]) {
+      arr.push({
+        mac: sl.mac,
+        master_id: mid, // << on garde le master_id ici
+        friendly_name: sl.friendly_name,
+        pc_on: sl.pc_on,
+      });
     }
-    return arr;
-  }, [nodesByMaster]);
+  }
+  return arr;
+}, [nodesByMaster]);
 
   /* ---------- Sections UI ---------- */
   function renderGroupsSection() {
