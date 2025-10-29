@@ -1331,7 +1331,9 @@ const STYLES = `
   color-scheme:dark;
   -webkit-font-smoothing:antialiased;
 }
-*{box-sizing:border-box;}
+*{
+  box-sizing:border-box;
+}
 html,body,#root{
   margin:0;
   padding:0;
@@ -1345,7 +1347,7 @@ html,body,#root{
   color:var(--text-soft);
 }
 
-/* HEADER sticky */
+/* HEADER sticky tout en haut */
 .topHeader{
   position:sticky;
   top:0;
@@ -1361,13 +1363,14 @@ html,body,#root{
   color:#fff;
 }
 .topHeaderInner{
-  display:flex;
-  justify-content:space-between;
-  align-items:flex-start;
-  flex-wrap:wrap;
   max-width:1200px;
   margin:0 auto;
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:space-between;
+  align-items:flex-start;
   row-gap:8px;
+  column-gap:12px;
 }
 .appTitleRow{
   display:flex;
@@ -1388,6 +1391,7 @@ html,body,#root{
 .appSubtitle{
   color:var(--text-soft);
   font-size:12px;
+  margin-top:2px;
 }
 .rightBlock{
   display:flex;
@@ -1398,11 +1402,12 @@ html,body,#root{
 }
 .userMail{
   color:var(--text-dim);
-  margin-right:4px;
   font-size:12px;
+  margin-right:4px;
+  white-space:nowrap;
 }
 
-/* BG full-screen */
+/* FOND PAGE (gradient + image plein écran) */
 .pageBg{
   min-height:100vh;
   background:
@@ -1432,7 +1437,7 @@ html,body,#root{
   color:var(--text-main);
 }
 
-/* Sections : Groupes / Masters / Journal */
+/* SECTIONS (Groupes, Masters, Journal) */
 .groupsSection,
 .mastersSection,
 .journalSection{
@@ -1456,6 +1461,7 @@ html,body,#root{
   color:var(--text-main);
   font-weight:600;
   font-size:14px;
+  letter-spacing:.02em;
 }
 .sectionSub{
   color:var(--text-soft);
@@ -1466,7 +1472,7 @@ html,body,#root{
   font-size:12px;
 }
 
-/* GROUPS */
+/* GROUPES */
 .groupListWrap{
   display:flex;
   flex-wrap:wrap;
@@ -1509,6 +1515,7 @@ html,body,#root{
   display:flex;
   flex-wrap:wrap;
   align-items:center;
+  gap:6px;
 }
 .groupMiniActions{
   display:flex;
@@ -1523,10 +1530,7 @@ html,body,#root{
   font-size:12px;
 }
 
-/* Masters */
-.mastersSection > .sectionTitleRow + .noGroupsNote{
-  margin-bottom:8px;
-}
+/* MASTERS */
 .masterCard{
   background:rgba(255,255,255,0.07);
   border:1px solid rgba(255,255,255,0.16);
@@ -1605,7 +1609,7 @@ html,body,#root{
   align-items:flex-start;
 }
 
-/* grille de slaves centrée */
+/* grille de slaves centrée dans la carte master */
 .slavesWrap{
   display:flex;
   justify-content:center;
@@ -1619,7 +1623,7 @@ html,body,#root{
   justify-items:center;
 }
 
-/* Slave card */
+/* SLAVE CARD */
 .slaveCard{
   position:relative;
   width:100%;
@@ -1682,6 +1686,25 @@ html,body,#root{
   min-height:1.4em;
   letter-spacing:.02em;
 }
+
+/* === BARRE D'ACTION + MESSAGE SUCCÈS === */
+.actionBarBlock{
+  width:100%;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  margin-bottom:12px;
+}
+.actionStatusText{
+  font-size:11px;
+  font-weight:600;
+  line-height:1.2;
+  color:#fff;
+  background:#000;
+  border-radius:6px;
+  padding:2px 6px;
+  margin-bottom:6px;
+}
 .actionBarWrapper{
   width:100%;
   height:4px;
@@ -1690,7 +1713,6 @@ html,body,#root{
   border:1px solid rgba(255,255,255,0.12);
   position:relative;
   overflow:hidden;
-  margin-bottom:12px;
   box-shadow:var(--shadow-small);
 }
 .actionBarFill{
@@ -1700,6 +1722,7 @@ html,body,#root{
   bottom:0;
   background:#000;
 }
+/* phases visualisées */
 .queueAnim{
   width:30%;
   animation:pulseBar 1.2s infinite;
@@ -1712,18 +1735,6 @@ html,body,#root{
   width:100%;
   background:#000;
 }
-.actionBarAck{
-  position:absolute;
-  right:6px;
-  top:-18px;
-  font-size:10px;
-  font-weight:600;
-  color:#000;
-  background:#fff;
-  border-radius:6px;
-  padding:2px 4px;
-  box-shadow:var(--shadow-small);
-}
 @keyframes pulseBar{
   0%{opacity:0.4;}
   50%{opacity:1;}
@@ -1733,6 +1744,8 @@ html,body,#root{
   0%{width:0%;}
   100%{width:100%;}
 }
+
+/* Boutons ronds d'action sur le slave */
 .slaveBtnsRow{
   display:flex;
   flex-wrap:nowrap;
@@ -1755,6 +1768,8 @@ html,body,#root{
   cursor:pointer;
   transition:all var(--transition-fast);
   padding:0;
+  font-size:16px;
+  line-height:1;
 }
 .circleBtn:hover{
   background:var(--bubble-bg-hover);
@@ -1765,33 +1780,8 @@ html,body,#root{
 .circleBtn.moreBtn{
   font-weight:500;
 }
-.circleBtnInner{
-  font-size:16px;
-  line-height:1;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  margin-top:0;
-}
 
-/* Journal */
-.journalSection .logBox{
-  width:100%;
-  min-height:120px;
-  max-height:200px;
-  background:rgba(0,0,0,0.45);
-  border:1px solid rgba(255,255,255,0.15);
-  border-radius:12px;
-  padding:12px;
-  font-size:12px;
-  line-height:1.4;
-  color:var(--text-dim);
-  white-space:pre-wrap;
-  overflow:auto;
-  box-shadow:none;
-}
-
-/* Boutons "capsule" */
+/* BOUTONS CAPSULE (header / actions master / actions groupe) */
 .subtleBtn{
   appearance:none;
   background:var(--bubble-bg);
@@ -1816,6 +1806,7 @@ html,body,#root{
   transform:scale(.97);
 }
 
+/* petit bouton style capsule compact */
 .chipBtn{
   appearance:none;
   background:var(--bubble-bg);
@@ -1834,6 +1825,24 @@ html,body,#root{
 }
 .chipBtn:active{
   transform:scale(.97);
+}
+
+/* JOURNAL */
+.journalSection .logBox{
+  width:100%;
+  min-height:120px;
+  max-height:200px;
+  background:rgba(0,0,0,0.45);
+  border:1px solid rgba(255,255,255,0.15);
+  border-radius:12px;
+  padding:12px;
+  font-size:12px;
+  line-height:1.4;
+  color:var(--text-dim);
+  white-space:pre-wrap;
+  overflow:auto;
+  box-shadow:none;
+  font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 /* MODALES */
@@ -1887,6 +1896,7 @@ html,body,#root{
   min-width:28px;
   text-align:center;
   box-shadow:var(--shadow-small);
+  transition:all var(--transition-fast);
 }
 .smallCloseBtn:hover{
   background:var(--bubble-bg-hover);
@@ -1975,7 +1985,7 @@ html,body,#root{
   font-size:12px;
 }
 
-/* Scrollbars */
+/* SCROLLBARS custom */
 .logBox::-webkit-scrollbar,
 .modalBody::-webkit-scrollbar,
 .pageContent::-webkit-scrollbar{
@@ -1995,7 +2005,7 @@ html,body,#root{
   border-radius:999px;
 }
 
-/* responsive petits écrans */
+/* RESPONSIVE */
 @media(max-width:600px){
   .topHeaderInner{
     flex-direction:column;
@@ -2021,8 +2031,6 @@ html,body,#root{
   .circleBtn{
     width:42px;
     height:42px;
-  }
-  .circleBtnInner{
     font-size:15px;
   }
 }
