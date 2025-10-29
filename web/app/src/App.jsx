@@ -17,11 +17,6 @@ const DEFAULT_IO_PIN = 26;
 /* -----------------------------------------
    helpers formatage / status
 ----------------------------------------- */
-function isSessionValid(sess) {
-  // sess peut être undefined/null
-  // On dit "valide" si on a un access_token string non vide
-  return !!sess?.access_token;
-}
 function fmtTS(s) {
   if (!s) return "—";
   const d = new Date(s);
@@ -58,7 +53,7 @@ function CircleBtn({ children, onClick, disabled, extraClass }) {
       disabled={disabled}
       onClick={onClick}
     >
-      <span className="circleBtnInner">{children}</span>
+      {children}
     </button>
   );
 }
@@ -69,7 +64,7 @@ function CircleBtn({ children, onClick, disabled, extraClass }) {
    - "idle": rien → barre cachée
    - "queue": en attente → petite anim pulsée
    - "send": envoi → anim de remplissage
-   - "acked": succès → plein + ✓ puis disparaît
+   - "acked": succès → plein + ✓
 ----------------------------------------- */
 function ActionBar({ phase }) {
   if (!phase || phase === "idle") return null;
@@ -187,9 +182,7 @@ function GroupOnListModal({ open, onClose, members }) {
       {(members || []).map((m) => (
         <div key={m.mac} className="modalInfoRow">
           <span className="modalInfoKey">{m.friendly_name || m.mac}</span>
-          <span className="modalInfoVal">
-            {m.pc_on ? "Allumé" : "Éteint"}
-          </span>
+          <span className="modalInfoVal">{m.pc_on ? "Allumé" : "Éteint"}</span>
         </div>
       ))}
     </ModalShell>
@@ -222,8 +215,12 @@ function GroupMembersModal({
               checked={!!checkedMap[sl.mac]}
               onChange={() => onToggleMac(sl.mac)}
             />
-            <span className="checkName">{sl.friendly_name || sl.mac}</span>
-            <span className="checkState">{sl.pc_on ? "allumé" : "éteint"}</span>
+            <span className="checkName">
+              {sl.friendly_name || sl.mac}
+            </span>
+            <span className="checkState">
+              {sl.pc_on ? "allumé" : "éteint"}
+            </span>
           </label>
         ))}
       </div>
@@ -269,10 +266,10 @@ function SlaveCard({
         {pcOn ? "Ordinateur allumé" : "Ordinateur éteint"}
       </div>
 
-      {/* barre d'action (progression) */}
+      {/* barre d'action */}
       <ActionBar phase={actionBarPhase} />
 
-      {/* boutons ronds bas de carte */}
+      {/* boutons ronds */}
       <div className="slaveBtnsRow">
         <CircleBtn onClick={onIO} disabled={false}>
           ⏻
@@ -357,16 +354,12 @@ function MasterCard({
             Pulse 500ms
           </SubtleButton>
           <SubtleButton
-            onClick={() =>
-              onSendMasterCmd(device.id, null, "POWER_ON", {})
-            }
+            onClick={() => onSendMasterCmd(device.id, null, "POWER_ON", {})}
           >
             Power ON
           </SubtleButton>
           <SubtleButton
-            onClick={() =>
-              onSendMasterCmd(device.id, null, "POWER_OFF", {})
-            }
+            onClick={() => onSendMasterCmd(device.id, null, "POWER_OFF", {})}
           >
             Power OFF
           </SubtleButton>
@@ -474,6 +467,8 @@ export default function App() {
   /* ----------- AUTH -------------- */
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState(null);
+  // nom personnalisable du compte (affiché dans le header)
+  const [accountName, setAccountName] = useState("");
 
   /* ----------- DATA STATE -------- */
   const [devices, setDevices] = useState([]); // masters
@@ -513,45 +508,41 @@ export default function App() {
   const [editMembersChecked, setEditMembersChecked] = useState({}); // { mac: true }
 
   /* ------------- AUTH FLOW ---------------- */
-useEffect(() => {
-  // écoute des changements de session (login/logout/refresh token)
-  const { data: sub } = sb.auth.onAuthStateChange(
-    async (_event, session) => {
-      const valid = isSessionValid(session);
-      setUser(valid ? session.user : null);
-      setAuthReady(true);
+  useEffect(() => {
+    // écoute auth
+    const { data: sub } = sb.auth.onAuthStateChange(
+      async (_event, session) => {
+        setUser(session?.user || null);
+        setAuthReady(true);
+        if (session?.user) {
+          await fullReload();
+          attachRealtime();
+        } else {
+          cleanupRealtime();
+          setDevices([]);
+          setNodesByMaster({});
+          setGroupsData([]);
+        }
+      }
+    );
 
-      if (valid) {
+    // init
+    (async () => {
+      const { data } = await sb.auth.getSession();
+      setUser(data.session?.user || null);
+      setAuthReady(true);
+      if (data.session?.user) {
         await fullReload();
         attachRealtime();
-      } else {
-        cleanupRealtime();
-        setDevices([]);
-        setNodesByMaster({});
-        setGroupsData([]);
       }
-    }
-  );
+    })();
 
-  // init au premier rendu
-  (async () => {
-    const { data } = await sb.auth.getSession();
-    const valid = isSessionValid(data.session);
-    setUser(valid ? data.session.user : null);
-    setAuthReady(true);
-
-    if (valid) {
-      await fullReload();
-      attachRealtime();
-    }
-  })();
-
-  return () => {
-    sub?.subscription?.unsubscribe();
-    cleanupRealtime();
-  };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+    return () => {
+      sub?.subscription?.unsubscribe();
+      cleanupRealtime();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* ---------- REALTIME ---------- */
   const chDevices = useRef(null);
@@ -564,8 +555,7 @@ useEffect(() => {
     if (chNodes.current) sb.removeChannel(chNodes.current);
     if (chCmds.current) sb.removeChannel(chCmds.current);
     if (chGroups.current) sb.removeChannel(chGroups.current);
-    chDevices.current = chNodes.current = chCmds.current = chGroups.current =
-      null;
+    chDevices.current = chNodes.current = chCmds.current = chGroups.current = null;
   }
 
   function attachRealtime() {
@@ -592,7 +582,7 @@ useEffect(() => {
         () => {
           addLog("[RT] nodes changed");
           refetchNodesOnly();
-          refetchGroupsOnly(); // groupes utilisent slaves
+          refetchGroupsOnly(); // MAJ stats groupes
         }
       )
       .subscribe();
@@ -607,6 +597,7 @@ useEffect(() => {
           const row = payload.new;
           if (row && row.target_mac) {
             if (row.status === "acked") {
+              // barre: succès → idle après 2s
               setSlavePhases((old) => ({
                 ...old,
                 [row.target_mac]: "acked",
@@ -619,9 +610,19 @@ useEffect(() => {
               }, 2000);
             }
           }
-          addLog(
-            `[cmd ${payload.eventType}] ${row?.action} (${row?.status}) → ${row?.master_id}`
-          );
+
+          // journal lisible : si acked => SUCCESS
+          if (row?.status === "acked") {
+            addLog(
+              `[SUCCESS] ${row?.action} → ${row?.master_id}${
+                row?.target_mac ? " ▶ " + row?.target_mac : ""
+              }`
+            );
+          } else {
+            addLog(
+              `[cmd ${payload.eventType}] ${row?.action} (${row?.status}) → ${row?.master_id}`
+            );
+          }
         }
       )
       .subscribe();
@@ -659,7 +660,6 @@ useEffect(() => {
   }
 
   async function refetchNodesOnly() {
-    // récupère tous les slaves
     const { data: rows, error } = await sb
       .from("nodes")
       .select("master_id,slave_mac,friendly_name,pc_on");
@@ -837,7 +837,9 @@ useEffect(() => {
       }
     } else {
       addLog(
-        `[cmd] ${action} → ${masterId}${targetMac ? " ▶ " + targetMac : ""}`
+        `[cmd] ${action} → ${masterId}${
+          targetMac ? " ▶ " + targetMac : ""
+        }`
       );
       if (targetMac) {
         setSlavePhases((old) => ({
@@ -979,6 +981,17 @@ useEffect(() => {
     await refetchGroupsOnly();
   }
 
+  // renommer le compte (affichage header uniquement côté UI)
+  function renameAccountLabel() {
+    const newLabel = window.prompt(
+      "Nom du compte ?",
+      accountName || user?.email || ""
+    );
+    if (!newLabel) return;
+    setAccountName(newLabel);
+    addLog(`Compte nommé : ${newLabel}`);
+  }
+
   // Logout / Login
   function handleLogout() {
     sb.auth.signOut();
@@ -1016,25 +1029,19 @@ useEffect(() => {
   }
 
   // quand on ouvre l'éditeur membres -> précocher les slaves existants
-useEffect(() => {
-  // On ne sync que AU MOMENT où la modale passe open = true.
-  if (!groupMembersOpen.open) return;
-
-  const g = groupsData.find(
-    (gg) => gg.id === groupMembersOpen.groupId
-  );
-  if (!g) return;
-
-  const initialMap = {};
-  for (const m of g.members || []) {
-    initialMap[m.mac] = true;
-  }
-  setEditMembersChecked(initialMap);
-
-  // IMPORTANT :
-  // pas de dépendance sur groupsData ici,
-  // donc on ne va PAS reécraser pendant que tu coches.
-}, [groupMembersOpen.open]);
+  useEffect(() => {
+    if (!groupMembersOpen.open) return;
+    const g = groupsData.find(
+      (gg) => gg.id === groupMembersOpen.groupId
+    );
+    if (g) {
+      const map = {};
+      for (const m of g.members || []) {
+        map[m.mac] = true;
+      }
+      setEditMembersChecked(map);
+    }
+  }, [groupMembersOpen, groupsData]);
 
   function toggleCheckMac(mac) {
     setEditMembersChecked((old) => ({
@@ -1087,14 +1094,16 @@ useEffect(() => {
   const currentGroupForOnList = useMemo(() => {
     if (!groupOnListOpen.open) return null;
     return (
-      groupsData.find((g) => g.id === groupOnListOpen.groupId) || null
+      groupsData.find((g) => g.id === groupOnListOpen.groupId) ||
+      null
     );
   }, [groupOnListOpen, groupsData]);
 
   const currentGroupForMembers = useMemo(() => {
     if (!groupMembersOpen.open) return null;
     return (
-      groupsData.find((g) => g.id === groupMembersOpen.groupId) || null
+      groupsData.find((g) => g.id === groupMembersOpen.groupId) ||
+      null
     );
   }, [groupMembersOpen, groupsData]);
 
@@ -1116,11 +1125,16 @@ useEffect(() => {
   /* ---------- Sections UI ---------- */
   function renderGroupsSection() {
     return (
-      <div className="groupsSection">
+      <div className="groupsSection cardGlass">
         <div className="sectionTitleRow">
-          <div className="sectionTitle">Groupes</div>
-          <div className="sectionSub">
-            Contrôler plusieurs machines en même temps
+          <div>
+            <div className="sectionTitle">Groupes</div>
+            <div className="sectionSub">
+              Contrôler plusieurs machines en même temps
+            </div>
+          </div>
+          <div className="sectionRightMini">
+            <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
           </div>
         </div>
 
@@ -1155,10 +1169,17 @@ useEffect(() => {
 
   function renderMastersSection() {
     return (
-      <div className="mastersSection">
+      <div className="mastersSection cardGlass">
         <div className="sectionTitleRow">
-          <div className="sectionTitle">Masters</div>
-          <div className="sectionSub">Chaque master pilote ses slaves</div>
+          <div>
+            <div className="sectionTitle">Masters</div>
+            <div className="sectionSub">
+              Chaque master pilote ses slaves
+            </div>
+          </div>
+          <div className="sectionRightMini">
+            <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
+          </div>
         </div>
 
         {!devices.length ? (
@@ -1181,9 +1202,7 @@ useEffect(() => {
                   value: 1,
                 })
               }
-              onSlaveReset={(mid, mac) =>
-                sendCmd(mid, mac, "SLV_RESET", {})
-              }
+              onSlaveReset={(mid, mac) => sendCmd(mid, mac, "SLV_RESET", {})}
               onSlaveMore={(mid, mac) => {
                 const act = window.prompt(
                   "Action ?\n1 = HARD OFF\n2 = HARD RESET",
@@ -1207,9 +1226,12 @@ useEffect(() => {
 
   function renderJournal() {
     return (
-      <div className="journalSection">
+      <div className="journalSection cardGlass">
         <div className="sectionTitleRow">
           <div className="sectionTitle">Journal</div>
+          <div className="sectionRightMini">
+            <SubtleButton onClick={fullReload}>Rafraîchir</SubtleButton>
+          </div>
         </div>
         <div className="logBox" ref={logRef}>
           {logs.join("\n")}
@@ -1248,7 +1270,7 @@ useEffect(() => {
         <div className="topHeaderInner">
           <div className="leftBlock">
             <div className="appTitleRow">
-              <div className="appName">REMOTE POWER</div>
+              <div className="appName">HIZAYA SWITCH</div>
               <div className="appStatus">Actif</div>
             </div>
             <div className="appSubtitle smallText">tableau de contrôle</div>
@@ -1256,14 +1278,17 @@ useEffect(() => {
 
           <div className="rightBlock">
             <div className="userMail smallText">
-              {isLogged ? user.email : "non connecté"}
+              {isLogged ? accountName || user?.email || "compte" : "non connecté"}
             </div>
+
             {isLogged ? (
               <>
-                <SubtleButton onClick={handleLogout}>Déconnexion</SubtleButton>
-                <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
-                <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
-                <SubtleButton onClick={fullReload}>Rafraîchir</SubtleButton>
+                <SubtleButton onClick={renameAccountLabel}>
+                  Renommer compte
+                </SubtleButton>
+                <SubtleButton onClick={handleLogout}>
+                  Déconnexion
+                </SubtleButton>
               </>
             ) : (
               <SubtleButton onClick={handleLogin}>
@@ -1277,9 +1302,14 @@ useEffect(() => {
       {/* CONTENU PAGE (fond photo + cartes alignées) */}
       <div className="pageBg">
         <div className="pageContent">
-          {renderGroupsSection()}
-          {renderMastersSection()}
-          {renderJournal()}
+          {/* colonne principale gauche = groupes + masters */}
+          <div className="mainCol">
+            {renderGroupsSection()}
+            {renderMastersSection()}
+          </div>
+
+          {/* colonne droite = journal */}
+          <div className="sideCol">{renderJournal()}</div>
         </div>
       </div>
 
@@ -1294,11 +1324,7 @@ useEffect(() => {
         }
         pcOn={!!currentSlaveInfo?.pc_on}
         onRename={(newName) => {
-          doRenameSlave(
-            slaveInfoOpen.masterId,
-            slaveInfoOpen.mac,
-            newName
-          );
+          doRenameSlave(slaveInfoOpen.masterId, slaveInfoOpen.mac, newName);
           closeSlaveInfo();
         }}
       />
@@ -1327,25 +1353,25 @@ useEffect(() => {
 /* =========================================================
    STYLES
 ========================================================= */
- const STYLES = `
+const STYLES = `
 :root{
   --bg-page:#0d0f10;
-  --glass-bg:rgba(255,255,255,0.08);
-  --glass-border:rgba(255,255,255,0.14);
-  --glass-inner-bg:rgba(255,255,255,0.22);
+  --glass-bg:rgba(255,255,255,0.07);
+  --glass-inner-bg:rgba(255,255,255,0.12);
+  --glass-border:rgba(255,255,255,0.18);
+
   --text-main:#fff;
-  --text-dim:rgba(255,255,255,0.75);
-  --text-soft:rgba(255,255,255,0.55);
+  --text-dim:rgba(255,255,255,0.8);
+  --text-soft:rgba(255,255,255,0.6);
+
   --bubble-bg:rgba(255,255,255,0.06);
-  --bubble-bg-hover:rgba(255,255,255,0.10);
-  --bubble-border:rgba(255,255,255,0.20);
+  --bubble-bg-hover:rgba(255,255,255,0.1);
+  --bubble-border:rgba(255,255,255,0.2);
+
   --online-green:#4ade80;
   --online-red:#f87171;
-  --modal-bg:rgba(0,0,0,0.45);
 
-  /* plus d'ombres */
-  --shadow-card:none;
-  --shadow-small:none;
+  --modal-bg:rgba(0,0,0,0.45);
 
   --transition-fast:0.15s ease;
 
@@ -1368,170 +1394,182 @@ html,body,#root{
   color:var(--text-soft);
 }
 
-/* HEADER sticky */
+/* HEADER sticky bande pleine largeur */
 .topHeader{
   position:sticky;
   top:0;
   left:0;
   right:0;
-  z-index:2000;
-  backdrop-filter:blur(20px) saturate(140%);
-  -webkit-backdrop-filter:blur(20px) saturate(140%);
-  background:rgba(20,20,20,0.55);
-  border-bottom:1px solid rgba(255,255,255,0.12);
-  box-shadow:var(--shadow-card);
-  padding:12px 16px;
-  color:#fff;
+  z-index:1000;
+  background:rgba(0,0,0,0.4);
+  backdrop-filter:blur(20px);
+  border-bottom:1px solid rgba(255,255,255,0.15);
 }
 .topHeaderInner{
-  display:flex;
-  justify-content:space-between;
-  align-items:flex-start;
-  flex-wrap:wrap;
-  max-width:1200px;
+  max-width:1400px;
   margin:0 auto;
+  padding:12px 16px;
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  flex-wrap:wrap;
   row-gap:8px;
+}
+.leftBlock{
+  display:flex;
+  flex-direction:column;
 }
 .appTitleRow{
   display:flex;
   align-items:baseline;
-  gap:8px;
+  gap:10px;
 }
 .appName{
+  font-size:15px;
   font-weight:600;
-  font-size:16px;
   color:var(--text-main);
-  letter-spacing:.02em;
+  letter-spacing:.03em;
 }
 .appStatus{
   font-size:12px;
   color:var(--online-green);
-  font-weight:500;
 }
 .appSubtitle{
-  color:var(--text-soft);
   font-size:12px;
+  color:var(--text-soft);
 }
+
 .rightBlock{
   display:flex;
   flex-wrap:wrap;
-  gap:8px;
-  align-items:center;
+  column-gap:8px;
+  row-gap:6px;
   justify-content:flex-end;
+  min-width:200px;
+  text-align:right;
 }
 .userMail{
+  min-width:160px;
+  text-align:right;
   color:var(--text-dim);
-  margin-right:4px;
   font-size:12px;
 }
 
-/* BG full-screen */
+/* PAGE background */
 .pageBg{
   min-height:100vh;
   background:
-    radial-gradient(circle at 20% 20%, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0) 60%),
-    radial-gradient(circle at 80% 30%, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 70%),
-    url("https://4kwallpapers.com/images/walls/thumbs_3t/9729.jpg");
+    radial-gradient(circle at 20% 20%, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 60%),
+    radial-gradient(circle at 80% 30%, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 70%),
+    url("https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1600&q=60");
   background-size:cover;
   background-position:center;
+  background-repeat:no-repeat;
   padding:24px 16px 80px;
-  position:relative;
-}
-.pageBg::after{
-  content:"";
-  position:absolute;
-  inset:0;
-  background:rgba(0,0,0,0.28);
 }
 .pageContent{
-  position:relative;
-  z-index:10;
-  max-width:1200px;
+  max-width:1400px;
   margin:0 auto;
+  display:flex;
+  flex-direction:row;
+  flex-wrap:wrap;
+  gap:24px;
+}
+.mainCol{
+  flex:1 1 780px;
   display:flex;
   flex-direction:column;
   gap:24px;
-  padding-bottom:96px;
-  color:var(--text-main);
+  min-width:320px;
 }
-
-/* Sections : Groupes / Masters / Journal */
-.groupsSection,
-.mastersSection,
-.journalSection{
-  background:var(--glass-bg);
-  border:1px solid var(--glass-border);
-  border-radius:16px;
-  box-shadow:var(--shadow-card);
-  backdrop-filter:blur(18px) saturate(140%);
-  -webkit-backdrop-filter:blur(18px) saturate(140%);
-  padding:16px;
-  color:var(--text-main);
-}
-
-/* Titres de section */
-.sectionTitleRow{
+.sideCol{
+  flex:0 0 320px;
   display:flex;
   flex-direction:column;
-  margin-bottom:12px;
-}
-.sectionTitle{
-  color:var(--text-main);
-  font-weight:600;
-  font-size:14px;
-}
-.sectionSub{
-  color:var(--text-soft);
-  font-size:12px;
-}
-.noGroupsNote{
-  color:var(--text-soft);
-  font-size:12px;
+  gap:24px;
+  min-width:280px;
 }
 
-/* GROUPS */
-.groupListWrap{
+/* cartes en verre (groupes, masters, journal) */
+.cardGlass{
+  background:var(--glass-bg);
+  backdrop-filter:blur(30px);
+  border:1px solid var(--glass-border);
+  border-radius:20px;
+  padding:16px 16px 20px;
+  color:var(--text-main);
+  max-width:100%;
+}
+
+/* titres de section */
+.sectionTitleRow{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  row-gap:8px;
+}
+.sectionTitle{
+  font-size:14px;
+  font-weight:600;
+  color:var(--text-main);
+}
+.sectionSub{
+  font-size:12px;
+  color:var(--text-soft);
+}
+.sectionRightMini{
   display:flex;
   flex-wrap:wrap;
-  gap:16px;
+  gap:8px;
+  align-items:flex-start;
+  justify-content:flex-end;
+}
+
+/* pas de groupe / pas de master */
+.noGroupsNote{
+  margin-top:8px;
+  font-size:12px;
+  color:var(--text-soft);
+}
+
+/* GROUP CARD */
+.groupListWrap{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  margin-top:12px;
 }
 .groupCard{
-  min-width:260px;
-  flex:1 1 260px;
-  background:rgba(255,255,255,0.07);
-  border:1px solid rgba(255,255,255,0.16);
+  background:var(--glass-inner-bg);
+  border:1px solid var(--glass-border);
   border-radius:16px;
-  padding:16px;
+  padding:12px 14px;
   color:var(--text-main);
-  position:relative;
-  box-shadow:var(--shadow-card);
-  backdrop-filter:blur(18px) saturate(140%);
-  -webkit-backdrop-filter:blur(18px) saturate(140%);
 }
 .groupHeadRow{
   display:flex;
-  flex-wrap:wrap;
   justify-content:space-between;
-  gap:12px;
-  margin-bottom:12px;
+  flex-wrap:wrap;
+  row-gap:8px;
 }
 .groupMainInfo{
-  flex:1;
-  min-width:150px;
+  min-width:180px;
+  max-width:100%;
 }
 .groupNameLine{
-  font-size:15px;
+  font-size:14px;
   font-weight:600;
   color:var(--text-main);
-  letter-spacing:.02em;
 }
 .groupSubLine{
   font-size:12px;
-  color:var(--text-dim);
-  margin-top:4px;
+  color:var(--text-soft);
   display:flex;
   flex-wrap:wrap;
   align-items:center;
+  gap:6px;
+  margin-top:2px;
 }
 .groupMiniActions{
   display:flex;
@@ -1540,181 +1578,170 @@ html,body,#root{
   justify-content:flex-end;
 }
 .groupCmdRow{
+  margin-top:12px;
   display:flex;
   flex-wrap:wrap;
   gap:8px;
-  font-size:12px;
 }
 
-/* Masters */
-.mastersSection > .sectionTitleRow + .noGroupsNote{
-  margin-bottom:8px;
-}
-.masterCard{
-  background:rgba(255,255,255,0.07);
-  border:1px solid rgba(255,255,255,0.16);
-  border-radius:16px;
-  padding:16px;
-  margin-bottom:16px;
+/* bouton chip secondaire */
+.chipBtn{
+  background:var(--bubble-bg);
+  border:1px solid var(--bubble-border);
+  border-radius:999px;
+  font-size:12px;
   color:var(--text-main);
-  box-shadow:var(--shadow-card);
-  backdrop-filter:blur(18px) saturate(140%);
-  -webkit-backdrop-filter:blur(18px) saturate(140%);
+  padding:4px 10px;
+  cursor:pointer;
+  line-height:1.2;
+}
+.chipBtn:hover{
+  background:var(--bubble-bg-hover);
+}
+
+/* MASTER CARD */
+.masterCard{
+  background:var(--glass-inner-bg);
+  border:1px solid var(--glass-border);
+  border-radius:16px;
+  padding:14px 16px 16px;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  color:var(--text-main);
 }
 .masterTopRow{
   display:flex;
-  flex-wrap:wrap;
-  justify-content:space-between;
-  gap:12px;
-  margin-bottom:16px;
+  flex-direction:column;
+  gap:10px;
 }
 .masterTitleLeft{
-  min-width:200px;
-  flex:1;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
 }
 .masterNameLine{
   display:flex;
   flex-wrap:wrap;
-  align-items:center;
+  align-items:baseline;
   gap:8px;
-  margin-bottom:6px;
 }
 .masterCardTitle{
   font-size:15px;
   font-weight:600;
   color:var(--text-main);
-  letter-spacing:.02em;
 }
 .onlineBadge{
   font-size:11px;
   font-weight:500;
-  border-radius:9999px;
   padding:2px 8px;
-  line-height:1.2;
-  border:1px solid rgba(255,255,255,0.18);
+  border-radius:999px;
+  line-height:1.3;
+  border:1px solid var(--bubble-border);
 }
 .onlineYes{
   color:var(--online-green);
-  background:rgba(16,185,129,0.10);
-  border-color:rgba(16,185,129,0.32);
+  background:rgba(16,185,129,0.08);
+  border-color:rgba(16,185,129,0.4);
 }
 .onlineNo{
   color:var(--online-red);
-  background:rgba(239,68,68,0.10);
-  border-color:rgba(239,68,68,0.32);
+  background:rgba(248,113,113,0.08);
+  border-color:rgba(248,113,113,0.4);
 }
+
 .masterMeta{
-  display:flex;
-  flex-wrap:wrap;
-  gap:6px;
   font-size:12px;
-  line-height:1.3;
+  line-height:1.4;
   color:var(--text-soft);
 }
-.kv .k{
-  color:var(--text-soft);
+.masterMeta .kv .k{
+  color:var(--text-dim);
   font-weight:500;
-  font-size:12px;
 }
-.kv .v{
+.masterMeta .kv .v{
   color:var(--text-main);
-  font-size:12px;
+  font-weight:400;
 }
+
 .masterActionsRow{
   display:flex;
   flex-wrap:wrap;
   gap:8px;
-  justify-content:flex-end;
   align-items:flex-start;
+  justify-content:flex-start;
 }
 
-/* grille de slaves centrée */
+/* slaves zone */
 .slavesWrap{
+  width:100%;
   display:flex;
   justify-content:center;
 }
 .slavesGrid{
-  width:100%;
-  max-width:1000px;
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
   gap:16px;
-  justify-items:center;
+  width:100%;
 }
 
-/* Slave card */
+/* SLAVE CARD */
 .slaveCard{
   position:relative;
-  width:100%;
-  max-width:200px;
-  min-width:160px;
-  background:rgba(255,255,255,0.09);
-  border:1px solid rgba(255,255,255,0.20);
-  border-radius:20px;
-  box-shadow:var(--shadow-card);
-  backdrop-filter:blur(18px) saturate(140%);
-  -webkit-backdrop-filter:blur(18px) saturate(140%);
-  padding:18px 14px 14px;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  text-align:center;
+  background:var(--glass-bg);
+  border:1px solid var(--glass-border);
+  border-radius:18px;
+  padding:14px 12px 44px;
+  min-width:140px;
+  max-width:180px;
+  flex:1 1 140px;
   color:var(--text-main);
+  text-align:center;
 }
 .infoChip{
   position:absolute;
-  top:10px;
-  right:10px;
+  top:8px;
+  right:8px;
+  font-size:11px;
+  line-height:1;
   width:20px;
   height:20px;
-  font-size:12px;
-  line-height:20px;
-  border-radius:9999px;
+  border-radius:999px;
+  color:var(--text-main);
   background:var(--bubble-bg);
-  color:var(--text-dim);
   border:1px solid var(--bubble-border);
-  text-align:center;
+  display:flex;
+  align-items:center;
+  justify-content:center;
   cursor:pointer;
-  user-select:none;
-  transition:all var(--transition-fast);
-  box-shadow:var(--shadow-small);
 }
 .infoChip:hover{
   background:var(--bubble-bg-hover);
-  color:var(--text-main);
 }
 .slaveNameMain{
-  font-size:16px;
+  margin-top:18px; /* descend sous le i */
+  font-size:15px;
   font-weight:600;
   color:var(--text-main);
-  margin-top:26px;
-  margin-bottom:6px;
-  min-height:2.6em;
-  display:flex;
-  align-items:flex-end;
-  justify-content:center;
-  text-align:center;
-  line-height:1.2;
-  letter-spacing:.02em;
+  word-break:break-word;
 }
 .slaveSub{
   font-size:12px;
-  line-height:1.3;
   color:var(--text-soft);
-  margin-bottom:10px;
-  min-height:1.4em;
-  letter-spacing:.02em;
+  margin-top:4px;
+  min-height:16px;
 }
+
+/* barre d'action */
 .actionBarWrapper{
-  width:100%;
+  position:relative;
   height:4px;
   border-radius:999px;
   background:rgba(0,0,0,0.4);
-  border:1px solid rgba(255,255,255,0.12);
-  position:relative;
   overflow:hidden;
-  margin-bottom:12px;
-  box-shadow:var(--shadow-small);
+  margin:10px auto 8px;
+  width:80%;
 }
 .actionBarFill{
   position:absolute;
@@ -1722,14 +1749,22 @@ html,body,#root{
   left:0;
   bottom:0;
   background:#000;
+  width:0%;
 }
 .queueAnim{
   width:30%;
-  animation:pulseBar 1.2s infinite;
+  animation:pulseBar 0.8s infinite alternate;
+}
+@keyframes pulseBar{
+  from{opacity:0.4;}
+  to{opacity:1;}
 }
 .sendAnim{
-  width:100%;
-  animation:fillBar 1s forwards;
+  animation:sendBar 1.2s linear forwards;
+}
+@keyframes sendBar{
+  from{width:0%;}
+  to{width:100%;}
 }
 .ackedFill{
   width:100%;
@@ -1738,153 +1773,118 @@ html,body,#root{
 .actionBarAck{
   position:absolute;
   right:6px;
-  top:-18px;
-  font-size:10px;
-  font-weight:600;
+  top:-14px;
+  font-size:11px;
   color:#000;
   background:#fff;
   border-radius:6px;
-  padding:2px 4px;
-  box-shadow:var(--shadow-small);
+  padding:1px 4px;
+  line-height:1.2;
+  font-weight:600;
+  border:1px solid #000;
 }
-@keyframes pulseBar{
-  0%{opacity:0.4;}
-  50%{opacity:1;}
-  100%{opacity:0.4;}
-}
-@keyframes fillBar{
-  0%{width:0%;}
-  100%{width:100%;}
-}
+
+/* boutons ronds en bas */
 .slaveBtnsRow{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:8px;
   display:flex;
-  flex-wrap:nowrap;
-  align-items:flex-end;
   justify-content:center;
-  gap:12px;
-  margin-top:auto;
+  gap:10px;
 }
 .circleBtn{
-  width:44px;
-  height:44px;
-  border-radius:9999px;
-  background:var(--bubble-bg);
+  width:34px;
+  height:34px;
+  border-radius:999px;
   border:1px solid var(--bubble-border);
-  box-shadow:var(--shadow-small);
+  background:var(--bubble-bg);
   color:var(--text-main);
+  font-size:14px;
+  line-height:1;
   display:flex;
   align-items:center;
   justify-content:center;
   cursor:pointer;
-  transition:all var(--transition-fast);
-  padding:0;
+  transition:background var(--transition-fast), border var(--transition-fast), transform var(--transition-fast);
 }
 .circleBtn:hover{
   background:var(--bubble-bg-hover);
 }
 .circleBtn:active{
-  transform:scale(.96);
+  transform:scale(0.95);
 }
-.circleBtn.moreBtn{
-  font-weight:500;
-}
-.circleBtn > span,
-.circleBtnInner{
+.moreBtn{
   font-size:16px;
   line-height:1;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  margin-top:0;
+  padding-bottom:2px;
 }
 
-/* Journal */
-.journalSection .logBox{
-  width:100%;
-  min-height:120px;
-  max-height:200px;
-  background:rgba(0,0,0,0.45);
+/* JOURNAL */
+.journalSection{
+  min-height:200px;
+  display:flex;
+  flex-direction:column;
+}
+.logBox{
+  background:rgba(0,0,0,0.4);
   border:1px solid rgba(255,255,255,0.15);
   border-radius:12px;
   padding:12px;
-  font-size:12px;
-  line-height:1.4;
-  color:var(--text-dim);
-  white-space:pre-wrap;
+  min-height:200px;
+  max-height:320px;
   overflow:auto;
-  box-shadow:none;
+  font-size:12px;
+  white-space:pre-wrap;
+  color:var(--text-dim);
+  margin-top:12px;
 }
 
-/* Boutons "capsule" */
+/* BOUTONS SUBTLES (capsules header etc.) */
 .subtleBtn{
-  appearance:none;
   background:var(--bubble-bg);
   border:1px solid var(--bubble-border);
-  border-radius:9999px;
+  border-radius:999px;
+  color:var(--text-main);
   font-size:12px;
   line-height:1.2;
-  color:var(--text-main);
-  cursor:pointer;
   padding:6px 10px;
-  min-height:28px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  box-shadow:var(--shadow-small);
-  transition:all var(--transition-fast);
+  cursor:pointer;
+  transition:background var(--transition-fast), border var(--transition-fast), color var(--transition-fast);
+  white-space:nowrap;
 }
 .subtleBtn:hover{
   background:var(--bubble-bg-hover);
 }
 .subtleBtn:active{
-  transform:scale(.97);
+  transform:scale(0.97);
 }
-
-.chipBtn{
-  appearance:none;
-  background:var(--bubble-bg);
-  border:1px solid var(--bubble-border);
-  border-radius:9999px;
-  font-size:11px;
-  line-height:1.2;
-  color:var(--text-main);
-  cursor:pointer;
-  padding:4px 8px;
-  box-shadow:var(--shadow-small);
-  transition:all var(--transition-fast);
-}
-.chipBtn:hover{
-  background:var(--bubble-bg-hover);
-}
-.chipBtn:active{
-  transform:scale(.97);
+.subtleBtn[disabled]{
+  opacity:0.4;
+  cursor:default;
+  transform:none;
 }
 
 /* MODALES */
 .modalOverlay{
   position:fixed;
-  inset:0;
+  left:0;top:0;right:0;bottom:0;
   background:var(--modal-bg);
   backdrop-filter:blur(4px);
-  -webkit-backdrop-filter:blur(4px);
-  z-index:3000;
   display:flex;
   align-items:center;
   justify-content:center;
   padding:16px;
+  z-index:2000;
 }
 .modalCard{
-  width:100%;
-  max-width:360px;
-  background:rgba(20,20,20,0.8);
-  border:1px solid rgba(255,255,255,0.16);
+  background:var(--glass-bg);
+  border:1px solid var(--glass-border);
   border-radius:16px;
-  box-shadow:var(--shadow-card);
+  min-width:260px;
+  max-width:90vw;
   color:var(--text-main);
-  backdrop-filter:blur(18px) saturate(140%);
-  -webkit-backdrop-filter:blur(18px) saturate(140%);
-  display:flex;
-  flex-direction:column;
   padding:16px;
 }
 .modalHeader{
@@ -1899,155 +1899,115 @@ html,body,#root{
   color:var(--text-main);
 }
 .smallCloseBtn{
-  appearance:none;
   background:var(--bubble-bg);
   border:1px solid var(--bubble-border);
-  border-radius:8px;
   color:var(--text-main);
-  cursor:pointer;
-  line-height:1;
+  border-radius:8px;
   font-size:12px;
+  line-height:1;
   padding:4px 6px;
-  min-width:28px;
-  text-align:center;
-  box-shadow:var(--shadow-small);
+  cursor:pointer;
 }
 .smallCloseBtn:hover{
   background:var(--bubble-bg-hover);
 }
-.smallCloseBtn:active{
-  transform:scale(.97);
-}
 .modalBody{
   font-size:13px;
-  display:flex;
-  flex-direction:column;
-  gap:16px;
   color:var(--text-main);
+  max-height:60vh;
+  overflow:auto;
 }
 .modalSection{
-  display:flex;
-  flex-direction:column;
-  gap:8px;
+  margin-bottom:16px;
 }
 .modalLabel{
   font-size:12px;
   color:var(--text-soft);
+  margin-bottom:4px;
+  display:block;
 }
 .modalInput{
   width:100%;
-  background:rgba(0,0,0,0.6);
+  background:rgba(0,0,0,0.4);
   border:1px solid rgba(255,255,255,0.2);
+  border-radius:8px;
   color:var(--text-main);
   font-size:13px;
-  border-radius:8px;
   padding:8px;
-  outline:none;
 }
 .modalInput:focus{
+  outline:none;
   border-color:rgba(255,255,255,0.4);
+  background:rgba(0,0,0,0.5);
 }
 .modalInfoRow{
   display:flex;
   justify-content:space-between;
+  align-items:flex-start;
   font-size:13px;
-  line-height:1.4;
   color:var(--text-main);
-  background:rgba(255,255,255,0.05);
-  border:1px solid rgba(255,255,255,0.15);
-  border-radius:8px;
-  padding:6px 8px;
+  padding:4px 0;
+  border-bottom:1px solid rgba(255,255,255,0.07);
 }
 .modalInfoKey{
-  color:var(--text-soft);
+  font-weight:500;
+  color:var(--text-dim);
   margin-right:8px;
+  word-break:break-word;
 }
 .modalInfoVal{
-  color:var(--text-main);
-  font-weight:500;
   text-align:right;
-  word-break:break-all;
+  color:var(--text-main);
+  word-break:break-word;
+  max-width:60%;
+  font-feature-settings:"tnum";
 }
 .modalEmpty{
   font-size:12px;
   color:var(--text-soft);
   text-align:center;
-  padding:12px;
+  padding:24px 0;
 }
+
+/* liste checkbox membres groupe */
 .checkRow{
   display:flex;
   align-items:center;
-  justify-content:space-between;
-  gap:8px;
   font-size:13px;
   line-height:1.4;
-  padding:6px 8px;
-  background:rgba(255,255,255,0.05);
-  border:1px solid rgba(255,255,255,0.15);
-  border-radius:8px;
   color:var(--text-main);
-  margin-bottom:6px;
+  margin-bottom:8px;
+  gap:8px;
+  flex-wrap:wrap;
 }
 .checkName{
-  flex:1;
-  margin-left:6px;
   color:var(--text-main);
   font-weight:500;
 }
 .checkState{
-  color:var(--text-soft);
   font-size:12px;
+  color:var(--text-soft);
 }
 
-/* Scrollbars */
-.logBox::-webkit-scrollbar,
-.modalBody::-webkit-scrollbar,
-.pageContent::-webkit-scrollbar{
-  width:6px;
-  height:6px;
-}
-.logBox::-webkit-scrollbar-track,
-.modalBody::-webkit-scrollbar-track,
-.pageContent::-webkit-scrollbar-track{
-  background:rgba(255,255,255,0.05);
-  border-radius:999px;
-}
-.logBox::-webkit-scrollbar-thumb,
-.modalBody::-webkit-scrollbar-thumb,
-.pageContent::-webkit-scrollbar-thumb{
-  background:rgba(255,255,255,0.2);
-  border-radius:999px;
-}
-
-/* responsive petits écrans */
-@media(max-width:600px){
+/* responsive */
+@media(max-width:900px){
+  .sideCol{
+    flex:1 1 100%;
+    order:-1;
+  }
+  .mainCol{
+    flex:1 1 100%;
+  }
   .topHeaderInner{
     flex-direction:column;
     align-items:flex-start;
   }
   .rightBlock{
-    width:100%;
     justify-content:flex-start;
-    flex-wrap:wrap;
+    text-align:left;
   }
-  .groupCard{
-    flex:1 1 100%;
-    min-width:0;
-  }
-  .slavesGrid{
-    grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
-    gap:12px;
-  }
-  .slaveCard{
-    max-width:190px;
-    min-width:160px;
-  }
-  .circleBtn{
-    width:42px;
-    height:42px;
-  }
-  .circleBtnInner{
-    font-size:15px;
+  .userMail{
+    text-align:left;
   }
 }
 `;
