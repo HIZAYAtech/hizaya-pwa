@@ -6,7 +6,13 @@ import { createClient } from "@supabase/supabase-js";
    ========================================= */
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+});
 
 /* règles de "online": un master est "en ligne" si last_seen < 8s */
 const LIVE_TTL_MS = 8_000;
@@ -28,11 +34,41 @@ function isLiveDevice(dev) {
 }
 
 /* -----------------------------------------
+   Nettoyage des paramètres OAuth dans l’URL
+----------------------------------------- */
+function stripOAuthParams() {
+  const url = new URL(window.location.href);
+  const drop = ["code", "state", "provider", "error", "error_description"];
+  let changed = false;
+
+  drop.forEach((p) => {
+    if (url.searchParams.has(p)) {
+      url.searchParams.delete(p);
+      changed = true;
+    }
+  });
+
+  if (url.hash && /#.*(access_token|refresh_token|error)/i.test(url.hash)) {
+    url.hash = "";
+    changed = true;
+  }
+
+  if (changed) {
+    window.history.replaceState({}, document.title, url.toString());
+  }
+}
+
+/* -----------------------------------------
    Bouton capsule gris réutilisable
 ----------------------------------------- */
 function SubtleButton({ children, onClick, disabled, style }) {
   return (
-    <button className="subtleBtn" disabled={disabled} onClick={onClick} style={style}>
+    <button
+      className="subtleBtn"
+      disabled={disabled}
+      onClick={onClick}
+      style={style}
+    >
       {children}
     </button>
   );
@@ -43,7 +79,11 @@ function SubtleButton({ children, onClick, disabled, style }) {
 ----------------------------------------- */
 function CircleBtn({ children, onClick, disabled, extraClass }) {
   return (
-    <button className={`circleBtn ${extraClass || ""}`} disabled={disabled} onClick={onClick}>
+    <button
+      className={`circleBtn ${extraClass || ""}`}
+      disabled={disabled}
+      onClick={onClick}
+    >
       <span className="circleBtnInner">{children}</span>
     </button>
   );
@@ -51,18 +91,33 @@ function CircleBtn({ children, onClick, disabled, extraClass }) {
 
 /* -----------------------------------------
    Barre de progression / statut d'action
+   phase:
+   - "idle": rien → barre cachée
+   - "queue": en attente → petite anim pulsée
+   - "send": envoi → anim de remplissage
+   - "acked": succès → plein + ✓ puis disparaît
 ----------------------------------------- */
 function ActionBar({ phase }) {
   if (!phase || phase === "idle") return null;
   const isAck = phase === "acked";
+
   return (
     <div className="actionBarBlock">
+      {/* texte au-dessus */}
       {isAck && <div className="actionStatusText">succès</div>}
+
+      {/* barre elle-même */}
       <div className="actionBarWrapper">
         <div
           className={
             "actionBarFill " +
-            (phase === "queue" ? "queueAnim" : phase === "send" ? "sendAnim" : isAck ? "ackedFill" : "")
+            (phase === "queue"
+              ? "queueAnim"
+              : phase === "send"
+              ? "sendAnim"
+              : isAck
+              ? "ackedFill"
+              : "")
           }
         />
       </div>
@@ -71,16 +126,23 @@ function ActionBar({ phase }) {
 }
 
 /* =========================================================
-   MODALES
+   MODALE FLOTTANTE GÉNÉRIQUE
 ========================================================= */
 function ModalShell({ open, onClose, children, title }) {
   if (!open) return null;
   return (
     <div className="modalOverlay" onClick={onClose}>
-      <div className="modalCard" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modalCard"
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+      >
         <div className="modalHeader">
           <div className="modalTitle">{title}</div>
-          <button className="smallCloseBtn" onClick={onClose}>✕</button>
+          <button className="smallCloseBtn" onClick={onClose}>
+            ✕
+          </button>
         </div>
         <div className="modalBody">{children}</div>
       </div>
@@ -88,29 +150,72 @@ function ModalShell({ open, onClose, children, title }) {
   );
 }
 
-function SlaveInfoModal({ open, onClose, slaveMac, masterId, currentName, onRename, pcOn }) {
+/* =========================================================
+   MODALE INFOS SLAVE (renommer + détails)
+========================================================= */
+function SlaveInfoModal({
+  open,
+  onClose,
+  slaveMac,
+  masterId,
+  currentName,
+  onRename,
+  pcOn,
+}) {
   const [nameDraft, setNameDraft] = useState(currentName || "");
-  useEffect(() => setNameDraft(currentName || ""), [currentName, slaveMac, open]);
+
+  useEffect(() => {
+    setNameDraft(currentName || "");
+  }, [currentName, slaveMac, open]);
+
   return (
     <ModalShell open={open} onClose={onClose} title="Détails du Slave">
       <div className="modalSection">
         <label className="modalLabel">Nom du slave</label>
-        <input className="modalInput" value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} />
-        <button className="subtleBtn" style={{ marginTop: 8 }} onClick={() => onRename(nameDraft)}>Enregistrer</button>
+        <input
+          className="modalInput"
+          value={nameDraft}
+          onChange={(e) => setNameDraft(e.target.value)}
+          placeholder="Nom lisible…"
+        />
+        <button
+          className="subtleBtn"
+          style={{ marginTop: "8px" }}
+          onClick={() => {
+            onRename(nameDraft);
+          }}
+        >
+          Enregistrer
+        </button>
       </div>
+
       <div className="modalSection">
-        <div className="modalInfoRow"><span className="modalInfoKey">MAC :</span><span className="modalInfoVal">{slaveMac || "—"}</span></div>
-        <div className="modalInfoRow"><span className="modalInfoKey">Master :</span><span className="modalInfoVal">{masterId || "—"}</span></div>
-        <div className="modalInfoRow"><span className="modalInfoKey">PC :</span><span className="modalInfoVal">{pcOn ? "allumé" : "éteint"}</span></div>
+        <div className="modalInfoRow">
+          <span className="modalInfoKey">MAC :</span>
+          <span className="modalInfoVal">{slaveMac || "—"}</span>
+        </div>
+        <div className="modalInfoRow">
+          <span className="modalInfoKey">Master :</span>
+          <span className="modalInfoVal">{masterId || "—"}</span>
+        </div>
+        <div className="modalInfoRow">
+          <span className="modalInfoKey">PC :</span>
+          <span className="modalInfoVal">{pcOn ? "allumé" : "éteint"}</span>
+        </div>
       </div>
     </ModalShell>
   );
 }
 
+/* =========================================================
+   MODALE "Machines allumées" d'un groupe
+========================================================= */
 function GroupOnListModal({ open, onClose, members }) {
   return (
     <ModalShell open={open} onClose={onClose} title="Machines allumées">
-      {(!members || !members.length) && <div className="modalEmpty">Aucune machine allumée</div>}
+      {(!members || !members.length) && (
+        <div className="modalEmpty">Aucune machine allumée</div>
+      )}
       {(members || []).map((m) => (
         <div key={m.mac} className="modalInfoRow">
           <span className="modalInfoKey">{m.friendly_name || m.mac}</span>
@@ -121,44 +226,93 @@ function GroupOnListModal({ open, onClose, members }) {
   );
 }
 
-function GroupMembersModal({ open, onClose, groupName, allSlaves, checkedMap, onToggleMac, onSave }) {
+/* =========================================================
+   MODALE "Éditer les membres d'un groupe"
+========================================================= */
+function GroupMembersModal({
+  open,
+  onClose,
+  groupName,
+  allSlaves,
+  checkedMap,
+  onToggleMac,
+  onSave,
+}) {
   return (
     <ModalShell open={open} onClose={onClose} title={`Membres de "${groupName}"`}>
       <div className="modalSection">
         {(allSlaves || []).map((sl) => (
           <label key={sl.mac} className="checkRow">
-            <input type="checkbox" checked={!!checkedMap[sl.mac]} onChange={() => onToggleMac(sl.mac)} />
+            <input
+              type="checkbox"
+              checked={!!checkedMap[sl.mac]}
+              onChange={() => onToggleMac(sl.mac)}
+            />
             <span className="checkName">{sl.friendly_name || sl.mac}</span>
             <span className="checkState">{sl.pc_on ? "allumé" : "éteint"}</span>
           </label>
         ))}
       </div>
-      <div style={{ textAlign: "right", marginTop: 8 }}>
-        <button className="subtleBtn" onClick={onSave}>Enregistrer</button>
+      <div style={{ textAlign: "right", marginTop: "8px" }}>
+        <button className="subtleBtn" onClick={onSave}>
+          Enregistrer
+        </button>
       </div>
     </ModalShell>
   );
 }
 
 /* =========================================================
-   CARDS
+   SlaveCard
 ========================================================= */
-function SlaveCard({ masterId, mac, friendlyName, pcOn, onInfoClick, onIO, onReset, onMore, actionBarPhase }) {
+function SlaveCard({
+  masterId,
+  mac,
+  friendlyName,
+  pcOn,
+  onInfoClick,
+  onIO,
+  onReset,
+  onMore,
+  actionBarPhase,
+}) {
   return (
     <div className="slaveCard">
-      <div className="infoChip" onClick={onInfoClick} title="Infos / renommer">i</div>
+      {/* bouton info en haut à droite */}
+      <div className="infoChip" onClick={onInfoClick} title="Infos / renommer">
+        i
+      </div>
+
+      {/* nom du slave en gros */}
       <div className="slaveNameMain">{friendlyName || mac}</div>
-      <div className="slaveSub">{pcOn ? "Ordinateur allumé" : "Ordinateur éteint"}</div>
+
+      {/* état PC */}
+      <div className="slaveSub">
+        {pcOn ? "Ordinateur allumé" : "Ordinateur éteint"}
+      </div>
+
+      {/* barre d'action (progression) */}
       <ActionBar phase={actionBarPhase} />
+
+      {/* boutons ronds bas de carte */}
       <div className="slaveBtnsRow">
-        <CircleBtn onClick={onIO}>⏻</CircleBtn>
-        <CircleBtn onClick={onReset}>↺</CircleBtn>
-        <CircleBtn extraClass="moreBtn" onClick={onMore}>⋯</CircleBtn>
+        <CircleBtn onClick={onIO} disabled={false}>
+          ⏻
+        </CircleBtn>
+        <CircleBtn onClick={onReset} disabled={false}>
+          ↺
+        </CircleBtn>
+        <CircleBtn extraClass="moreBtn" onClick={onMore} disabled={false}>
+          ⋯
+        </CircleBtn>
       </div>
     </div>
   );
 }
 
+/* =========================================================
+   MasterCard
+========================================================= */
 function MasterCard({
   device,
   slaves,
@@ -166,37 +320,81 @@ function MasterCard({
   onMasterDelete,
   onSendMasterCmd,
   openSlaveInfoFor,
+  onSlaveRename,
   onSlaveIO,
   onSlaveReset,
   onSlaveMore,
   slavePhases,
 }) {
   const live = isLiveDevice(device);
+
   return (
     <section className="masterCard">
       <div className="masterTopRow">
         <div className="masterTitleLeft">
           <div className="masterNameLine">
             <span className="masterCardTitle">{device.name || device.id}</span>
-            <span className={"onlineBadge " + (live ? "onlineYes" : "onlineNo")}>
+            <span
+              className={"onlineBadge " + (live ? "onlineYes" : "onlineNo")}
+            >
               {live ? "EN LIGNE" : "HORS LIGNE"}
             </span>
           </div>
+
           <div className="masterMeta smallText">
-            <span className="kv"><span className="k">ID :</span> <span className="v">{device.id}</span></span> ·{" "}
-            <span className="kv"><span className="k">MAC :</span> <span className="v">{device.master_mac || "—"}</span></span> ·{" "}
-            <span className="kv"><span className="k">Dernier contact :</span> <span className="v">{device.last_seen ? fmtTS(device.last_seen) : "jamais"}</span></span>
+            <span className="kv">
+              <span className="k">ID :</span>{" "}
+              <span className="v">{device.id}</span>
+            </span>{" "}
+            ·{" "}
+            <span className="kv">
+              <span className="k">MAC :</span>{" "}
+              <span className="v">{device.master_mac || "—"}</span>
+            </span>{" "}
+            ·{" "}
+            <span className="kv">
+              <span className="k">Dernier contact :</span>{" "}
+              <span className="v">
+                {device.last_seen ? fmtTS(device.last_seen) : "jamais"}
+              </span>
+            </span>
           </div>
         </div>
+
+        {/* actions globales master */}
         <div className="masterActionsRow">
-          <SubtleButton onClick={() => onMasterRename(device.id)}>Renommer</SubtleButton>
-          <SubtleButton onClick={() => onMasterDelete(device.id)}>Supprimer</SubtleButton>
-          <SubtleButton onClick={() => onSendMasterCmd(device.id, null, "PULSE", { ms: 500 })}>Pulse 500ms</SubtleButton>
-          <SubtleButton onClick={() => onSendMasterCmd(device.id, null, "POWER_ON", {})}>Power ON</SubtleButton>
-          <SubtleButton onClick={() => onSendMasterCmd(device.id, null, "POWER_OFF", {})}>Power OFF</SubtleButton>
-          <SubtleButton onClick={() => onSendMasterCmd(device.id, null, "RESET", {})}>Reset</SubtleButton>
+          <SubtleButton onClick={() => onMasterRename(device.id)}>
+            Renommer
+          </SubtleButton>
+          <SubtleButton onClick={() => onMasterDelete(device.id)}>
+            Supprimer
+          </SubtleButton>
+          <SubtleButton
+            onClick={() =>
+              onSendMasterCmd(device.id, null, "PULSE", { ms: 500 })
+            }
+          >
+            Pulse 500ms
+          </SubtleButton>
+          <SubtleButton
+            onClick={() => onSendMasterCmd(device.id, null, "POWER_ON", {})}
+          >
+            Power ON
+          </SubtleButton>
+          <SubtleButton
+            onClick={() => onSendMasterCmd(device.id, null, "POWER_OFF", {})}
+          >
+            Power OFF
+          </SubtleButton>
+          <SubtleButton
+            onClick={() => onSendMasterCmd(device.id, null, "RESET", {})}
+          >
+            Reset
+          </SubtleButton>
         </div>
       </div>
+
+      {/* zone slaves */}
       <div className="slavesWrap">
         <div className="slavesGrid">
           {(slaves || []).map((sl) => (
@@ -207,8 +405,12 @@ function MasterCard({
               friendlyName={sl.friendly_name}
               pcOn={!!sl.pc_on}
               actionBarPhase={slavePhases[sl.mac] || "idle"}
-              onInfoClick={() => openSlaveInfoFor(device.id, sl.mac)}
-              onIO={() => onSlaveIO(device.id, sl.mac)}
+              onInfoClick={() => {
+                openSlaveInfoFor(device.id, sl.mac);
+              }}
+              onIO={() =>
+                onSlaveIO(device.id, sl.mac) /* IO ON impulse */
+              }
               onReset={() => onSlaveReset(device.id, sl.mac)}
               onMore={() => onSlaveMore(device.id, sl.mac)}
             />
@@ -219,7 +421,17 @@ function MasterCard({
   );
 }
 
-function GroupCard({ group, onRenameGroup, onDeleteGroup, onOpenMembersEdit, onOpenOnList, onGroupCmd }) {
+/* =========================================================
+   GroupCard
+========================================================= */
+function GroupCard({
+  group,
+  onRenameGroup,
+  onDeleteGroup,
+  onOpenMembersEdit,
+  onOpenOnList,
+  onGroupCmd,
+}) {
   const { id, name, statsOn, statsTotal } = group;
   return (
     <div className="groupCard">
@@ -228,23 +440,42 @@ function GroupCard({ group, onRenameGroup, onDeleteGroup, onOpenMembersEdit, onO
           <div className="groupNameLine">{name}</div>
           <div className="groupSubLine">
             {statsOn}/{statsTotal} allumé(s)
-            <button className="chipBtn" style={{ marginLeft: 6 }} onClick={() => onOpenOnList(id)} disabled={!statsTotal}>
+            <button
+              className="chipBtn"
+              style={{ marginLeft: "6px" }}
+              onClick={() => onOpenOnList(id)}
+              disabled={!statsTotal}
+            >
               Voir la liste
             </button>
           </div>
         </div>
+
         <div className="groupMiniActions">
           <SubtleButton onClick={() => onRenameGroup(id)}>Renommer</SubtleButton>
           <SubtleButton onClick={() => onDeleteGroup(id)}>Supprimer</SubtleButton>
-          <SubtleButton onClick={() => onOpenMembersEdit(id)}>Membres</SubtleButton>
+          <SubtleButton onClick={() => onOpenMembersEdit(id)}>
+            Membres
+          </SubtleButton>
         </div>
       </div>
+
       <div className="groupCmdRow">
-        <SubtleButton onClick={() => onGroupCmd(id, "SLV_IO_ON")}>IO ON</SubtleButton>
-        <SubtleButton onClick={() => onGroupCmd(id, "RESET")}>RESET</SubtleButton>
-        <SubtleButton onClick={() => onGroupCmd(id, "SLV_IO_OFF")}>OFF</SubtleButton>
-        <SubtleButton onClick={() => onGroupCmd(id, "SLV_FORCE_OFF")}>HARD OFF</SubtleButton>
-        <SubtleButton onClick={() => onGroupCmd(id, "SLV_HARD_RESET")}>HARD RESET</SubtleButton>
+        <SubtleButton onClick={() => onGroupCmd(id, "SLV_IO_ON")}>
+          IO ON
+        </SubtleButton>
+        <SubtleButton onClick={() => onGroupCmd(id, "RESET")}>
+          RESET
+        </SubtleButton>
+        <SubtleButton onClick={() => onGroupCmd(id, "SLV_IO_OFF")}>
+          OFF
+        </SubtleButton>
+        <SubtleButton onClick={() => onGroupCmd(id, "SLV_FORCE_OFF")}>
+          HARD OFF
+        </SubtleButton>
+        <SubtleButton onClick={() => onGroupCmd(id, "SLV_HARD_RESET")}>
+          HARD RESET
+        </SubtleButton>
       </div>
     </div>
   );
@@ -257,34 +488,53 @@ export default function App() {
   /* ----------- AUTH -------------- */
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState(null);
+  // nom personnalisable du compte (affiché dans le header)
   const [accountName, setAccountName] = useState("");
 
   /* ----------- DATA STATE -------- */
   const [devices, setDevices] = useState([]); // masters
-  const [nodesByMaster, setNodesByMaster] = useState({}); // { master_id: [ { mac, friendly_name, pc_on } ] }
-  const [slavePhases, setSlavePhases] = useState({}); // { mac: "idle"|"queue"|"send"|"acked" }
+  // nodesByMaster = { [master_id]: [ { mac, friendly_name, pc_on }, ...] }
+  const [nodesByMaster, setNodesByMaster] = useState({});
+  // état visuel d’action pour chaque slave_mac
+  const [slavePhases, setSlavePhases] = useState({});
+  // groupsData = [
+  //   { id, name, statsOn, statsTotal, members:[{mac, master_id, friendly_name, pc_on}] }
+  // ]
   const [groupsData, setGroupsData] = useState([]);
 
   /* journal */
   const [logs, setLogs] = useState([]);
   const logRef = useRef(null);
-  const rtAttachedRef = useRef(false); // ⇐ anti double-attach realtime
-
   function addLog(text) {
-    setLogs((old) => [...old.slice(-199), new Date().toLocaleTimeString() + "  " + text]);
+    setLogs((old) => [
+      ...old.slice(-199),
+      new Date().toLocaleTimeString() + "  " + text,
+    ]);
   }
-
-  // Auto-scroll du journal
+  // auto-scroll du journal
   useEffect(() => {
     const el = logRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, [logs]);
 
+  /* Flag anti double-attach realtime (par onglet) */
+  const rtAttachedRef = useRef(false);
+
   /* Modales */
-  const [slaveInfoOpen, setSlaveInfoOpen] = useState({ open: false, masterId: "", mac: "" });
-  const [groupOnListOpen, setGroupOnListOpen] = useState({ open: false, groupId: "" });
-  const [groupMembersOpen, setGroupMembersOpen] = useState({ open: false, groupId: "" });
+  const [slaveInfoOpen, setSlaveInfoOpen] = useState({
+    open: false,
+    masterId: "",
+    mac: "",
+  });
+  const [groupOnListOpen, setGroupOnListOpen] = useState({
+    open: false,
+    groupId: "",
+  });
+  const [groupMembersOpen, setGroupMembersOpen] = useState({
+    open: false,
+    groupId: "",
+  });
   const [editMembersChecked, setEditMembersChecked] = useState({}); // { mac: true }
 
   /* ---------- REALTIME ---------- */
@@ -298,57 +548,109 @@ export default function App() {
     if (chNodes.current) sb.removeChannel(chNodes.current);
     if (chCmds.current) sb.removeChannel(chCmds.current);
     if (chGroups.current) sb.removeChannel(chGroups.current);
-    chDevices.current = chNodes.current = chCmds.current = chGroups.current = null;
+
+    chDevices.current = null;
+    chNodes.current = null;
+    chCmds.current = null;
+    chGroups.current = null;
+
     rtAttachedRef.current = false;
   }
 
   function attachRealtime() {
-    if (rtAttachedRef.current) return; // déjà attaché dans cet onglet
-    cleanupRealtime(); // on part propre
+    // si déjà attaché dans cet onglet => on ne refait rien
+    if (rtAttachedRef.current) return;
 
+    cleanupRealtime(); // au cas où, on part propre
+
+    // devices
     chDevices.current = sb
       .channel("rt:devices")
-      .on("postgres_changes", { event: "*", schema: "public", table: "devices" }, () => {
-        addLog("[RT] devices changed");
-        refetchDevicesOnly();
-      })
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "devices" },
+        () => {
+          addLog("[RT] devices changed");
+          refetchDevicesOnly();
+        }
+      )
       .subscribe();
 
+    // nodes
     chNodes.current = sb
       .channel("rt:nodes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "nodes" }, () => {
-        addLog("[RT] nodes changed");
-        refetchNodesOnly();
-        refetchGroupsOnly();
-      })
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "nodes" },
+        () => {
+          addLog("[RT] nodes changed");
+          refetchNodesOnly();
+          refetchGroupsOnly(); // car les groupes affichent aussi l'état des slaves
+        }
+      )
       .subscribe();
 
+    // commands
     chCmds.current = sb
       .channel("rt:commands")
-      .on("postgres_changes", { event: "*", schema: "public", table: "commands" }, (payload) => {
-        const row = payload.new;
-        if (row?.target_mac && row.status === "acked") {
-          setSlavePhases((old) => ({ ...old, [row.target_mac]: "acked" }));
-          setTimeout(() => setSlavePhases((old2) => ({ ...old2, [row.target_mac]: "idle" })), 2000);
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "commands" },
+        (payload) => {
+          const row = payload.new;
+
+          // si la commande touche un slave particulier → gérer barre d'action
+          if (row && row.target_mac) {
+            if (row.status === "acked") {
+              // on passe en acked visuel (et on reviendra à idle après 2s)
+              setSlavePhases((old) => ({
+                ...old,
+                [row.target_mac]: "acked",
+              }));
+              setTimeout(() => {
+                setSlavePhases((old2) => ({
+                  ...old2,
+                  [row.target_mac]: "idle",
+                }));
+              }, 2000);
+            }
+          }
+
+          // log plus clair
+          if (row?.status === "acked") {
+            addLog(
+              `[SUCCESS] ${row?.action} → ${row?.master_id}${
+                row?.target_mac ? " ▶ " + row?.target_mac : ""
+              }`
+            );
+          } else {
+            addLog(
+              `[cmd ${payload.eventType}] ${row?.action} (${row?.status}) → ${row?.master_id}`
+            );
+          }
         }
-        if (row?.status === "acked") {
-          addLog(`[SUCCESS] ${row?.action} → ${row?.master_id}${row?.target_mac ? " ▶ " + row?.target_mac : ""}`);
-        } else {
-          addLog(`[cmd ${payload.eventType}] ${row?.action} (${row?.status}) → ${row?.master_id}`);
-        }
-      })
+      )
       .subscribe();
 
+    // groups + members
     chGroups.current = sb
       .channel("rt:groups+members")
-      .on("postgres_changes", { event: "*", schema: "public", table: "groups" }, () => {
-        addLog("[RT] groups changed");
-        refetchGroupsOnly();
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "group_members" }, () => {
-        addLog("[RT] group_members changed");
-        refetchGroupsOnly();
-      })
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "groups" },
+        () => {
+          addLog("[RT] groups changed");
+          refetchGroupsOnly();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "group_members" },
+        () => {
+          addLog("[RT] group_members changed");
+          refetchGroupsOnly();
+        }
+      )
       .subscribe();
 
     rtAttachedRef.current = true;
@@ -361,7 +663,12 @@ export default function App() {
     async function initSessionOnce() {
       const { data } = await sb.auth.getSession();
       const sess = data.session;
+
+      // IMPORTANT : enlève les vieux paramètres OAuth de l'URL (après éventuel échange)
+      stripOAuthParams();
+
       if (!isMounted) return;
+
       if (sess?.user) {
         setUser(sess.user);
         setAuthReady(true);
@@ -375,6 +682,7 @@ export default function App() {
 
     const { data: sub } = sb.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
+
       if (event === "SIGNED_IN") {
         setUser(session?.user || null);
         await fullReload();
@@ -389,10 +697,12 @@ export default function App() {
       } else if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
         setUser(session?.user || null);
       }
+
       setAuthReady(true);
     });
 
     initSessionOnce();
+
     return () => {
       isMounted = false;
       sub?.subscription?.unsubscribe();
@@ -411,27 +721,62 @@ export default function App() {
   }
 
   async function refetchNodesOnly() {
-    const { data: rows, error } = await sb.from("nodes").select("master_id,slave_mac,friendly_name,pc_on");
-    if (error) return addLog("Err nodes: " + error.message);
+    // récupère tous les slaves
+    const { data: rows, error } = await sb
+      .from("nodes")
+      .select("master_id,slave_mac,friendly_name,pc_on");
+    if (error) {
+      addLog("Err nodes: " + error.message);
+      return;
+    }
     const map = {};
     for (const r of rows || []) {
-      (map[r.master_id] ??= []).push({ mac: r.slave_mac, friendly_name: r.friendly_name, pc_on: r.pc_on });
+      if (!map[r.master_id]) map[r.master_id] = [];
+      map[r.master_id].push({
+        mac: r.slave_mac,
+        friendly_name: r.friendly_name,
+        pc_on: r.pc_on,
+      });
     }
     setNodesByMaster(map);
   }
 
+  // groupes + membres + status ON
   async function refetchGroupsOnly() {
-    const { data: gs, error: gErr } = await sb.from("groups").select("id,name");
-    if (gErr) return addLog("Err groups: " + gErr.message);
-    const { data: membs, error: mErr } = await sb.from("group_members").select("group_id,slave_mac,master_id");
-    if (mErr) return addLog("Err group_members: " + mErr.message);
-    const { data: allNodes, error: nErr } = await sb.from("nodes").select("master_id,slave_mac,friendly_name,pc_on");
-    if (nErr) return addLog("Err nodes in groups: " + nErr.message);
+    // 1. lire groupes
+    const { data: gs, error: gErr } = await sb
+      .from("groups")
+      .select("id,name");
+    if (gErr) {
+      addLog("Err groups: " + gErr.message);
+      return;
+    }
+    // 2. lire membres
+    const { data: membs, error: mErr } = await sb
+      .from("group_members")
+      .select("group_id,slave_mac,master_id");
+    if (mErr) {
+      addLog("Err group_members: " + mErr.message);
+      return;
+    }
+    // 3. lire nodes pour friendly_name + pc_on + master_id
+    const { data: allNodes, error: nErr } = await sb
+      .from("nodes")
+      .select("master_id,slave_mac,friendly_name,pc_on");
+    if (nErr) {
+      addLog("Err nodes in groups: " + nErr.message);
+      return;
+    }
 
     const membersByGroup = {};
     for (const gm of membs || []) {
-      const nodeInfo = (allNodes || []).find((nd) => nd.slave_mac === gm.slave_mac);
-      (membersByGroup[gm.group_id] ??= []).push({
+      if (!membersByGroup[gm.group_id]) {
+        membersByGroup[gm.group_id] = [];
+      }
+      const nodeInfo = (allNodes || []).find(
+        (nd) => nd.slave_mac === gm.slave_mac
+      );
+      membersByGroup[gm.group_id].push({
         mac: gm.slave_mac,
         master_id: nodeInfo?.master_id || gm.master_id || null,
         friendly_name: nodeInfo?.friendly_name || gm.slave_mac,
@@ -439,179 +784,374 @@ export default function App() {
       });
     }
 
-    setGroupsData(
-      (gs || []).map((g) => {
-        const mems = membersByGroup[g.id] || [];
-        return { id: g.id, name: g.name, statsOn: mems.filter((x) => x.pc_on).length, statsTotal: mems.length, members: mems };
-      })
-    );
+    const final = (gs || []).map((g) => {
+      const mems = membersByGroup[g.id] || [];
+      const onCount = mems.filter((x) => x.pc_on).length;
+      return {
+        id: g.id,
+        name: g.name,
+        statsOn: onCount,
+        statsTotal: mems.length,
+        members: mems,
+      };
+    });
+
+    setGroupsData(final);
   }
 
   async function fullReload() {
-    await Promise.all([refetchDevicesOnly(), refetchNodesOnly(), refetchGroupsOnly()]);
+    await Promise.all([
+      refetchDevicesOnly(),
+      refetchNodesOnly(),
+      refetchGroupsOnly(),
+    ]);
   }
 
   /* ---------- COMMANDES / ACTIONS ---------- */
+
+  // Master rename
   async function renameMaster(id) {
     const newName = window.prompt("Nouveau nom du master ?", "");
     if (!newName) return;
     const { error } = await sb.from("devices").update({ name: newName }).eq("id", id);
-    if (error) window.alert(error.message);
-    else {
+    if (error) {
+      window.alert(error.message);
+    } else {
       addLog(`Master ${id} renommé en ${newName}`);
       await refetchDevicesOnly();
     }
   }
 
+  // Master delete
   async function deleteMaster(id) {
     if (!window.confirm(`Supprimer le master ${id} ?`)) return;
+
     const { data: sessionRes } = await sb.auth.getSession();
     const token = sessionRes?.session?.access_token;
-    if (!token) return window.alert("Non connecté.");
+    if (!token) {
+      window.alert("Non connecté.");
+      return;
+    }
     const r = await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({ master_id: id }),
     });
-    if (!r.ok) addLog("❌ Suppression : " + (await r.text()));
-    else addLog(`MASTER supprimé : ${id}`);
+    if (!r.ok) {
+      const txt = await r.text();
+      addLog("❌ Suppression : " + txt);
+    } else {
+      addLog(`MASTER supprimé : ${id}`);
+    }
     await fullReload();
   }
 
+  // Slave rename
   async function doRenameSlave(masterId, mac, newName) {
-    const { error } = await sb.from("nodes").update({ friendly_name: newName }).eq("master_id", masterId).eq("slave_mac", mac);
-    if (error) window.alert("Erreur rename slave: " + error.message);
-    else {
+    const { error } = await sb
+      .from("nodes")
+      .update({ friendly_name: newName })
+      .eq("master_id", masterId)
+      .eq("slave_mac", mac);
+    if (error) {
+      window.alert("Erreur rename slave: " + error.message);
+    } else {
       addLog(`Slave ${mac} renommé en ${newName}`);
       await refetchNodesOnly();
       await refetchGroupsOnly();
     }
   }
 
+  // Envoi d'une commande master/slave
   async function sendCmd(masterId, targetMac, action, payload = {}) {
-    if (targetMac) setSlavePhases((old) => ({ ...old, [targetMac]: "queue" }));
-    const { error } = await sb.from("commands").insert({ master_id: masterId, target_mac: targetMac || null, action, payload });
+    // effet visuel "queue" → "send"
+    if (targetMac) {
+      setSlavePhases((old) => ({
+        ...old,
+        [targetMac]: "queue",
+      }));
+    }
+
+    const { error } = await sb.from("commands").insert({
+      master_id: masterId,
+      target_mac: targetMac || null,
+      action,
+      payload,
+    });
+
     if (error) {
       addLog("cmd err: " + error.message);
-      if (targetMac) setSlavePhases((old) => ({ ...old, [targetMac]: "idle" }));
+      if (targetMac) {
+        setSlavePhases((old) => ({
+          ...old,
+          [targetMac]: "idle",
+        }));
+      }
     } else {
-      addLog(`[cmd] ${action} → ${masterId}${targetMac ? " ▶ " + targetMac : ""}`);
-      if (targetMac) setSlavePhases((old) => ({ ...old, [targetMac]: "send" }));
+      addLog(
+        `[cmd] ${action} → ${masterId}${targetMac ? " ▶ " + targetMac : ""}`
+      );
+      if (targetMac) {
+        setSlavePhases((old) => ({
+          ...old,
+          [targetMac]: "send",
+        }));
+      }
     }
   }
 
+  // Commandes groupées
   async function sendGroupCmd(groupId, actionKey) {
     const g = groupsData.find((x) => x.id === groupId);
     if (!g) return;
+
     for (const m of g.members) {
-      if (!m.master_id) continue;
-      if (actionKey === "SLV_IO_ON") await sendCmd(m.master_id, m.mac, "SLV_IO", { pin: DEFAULT_IO_PIN, mode: "OUT", value: 1 });
-      else if (actionKey === "SLV_IO_OFF") await sendCmd(m.master_id, m.mac, "SLV_IO", { pin: DEFAULT_IO_PIN, mode: "OUT", value: 0 });
-      else if (actionKey === "RESET") await sendCmd(m.master_id, m.mac, "SLV_RESET", {});
-      else if (actionKey === "SLV_FORCE_OFF") await sendCmd(m.master_id, m.mac, "SLV_FORCE_OFF", {});
-      else if (actionKey === "SLV_HARD_RESET") await sendCmd(m.master_id, m.mac, "SLV_HARD_RESET", { ms: 3000 });
+      if (!m.master_id) continue; // sécurité
+
+      switch (actionKey) {
+        case "SLV_IO_ON":
+          await sendCmd(m.master_id, m.mac, "SLV_IO", {
+            pin: DEFAULT_IO_PIN,
+            mode: "OUT",
+            value: 1,
+          });
+          break;
+        case "SLV_IO_OFF":
+          await sendCmd(m.master_id, m.mac, "SLV_IO", {
+            pin: DEFAULT_IO_PIN,
+            mode: "OUT",
+            value: 0,
+          });
+          break;
+        case "RESET":
+          await sendCmd(m.master_id, m.mac, "SLV_RESET", {});
+          break;
+        case "SLV_FORCE_OFF":
+          await sendCmd(m.master_id, m.mac, "SLV_FORCE_OFF", {});
+          break;
+        case "SLV_HARD_RESET":
+          await sendCmd(m.master_id, m.mac, "SLV_HARD_RESET", {
+            ms: 3000,
+          });
+          break;
+        default:
+          break;
+      }
     }
   }
 
+  // Renommer un groupe
   async function renameGroup(id) {
     const newName = window.prompt("Nouveau nom du groupe ?", "");
     if (!newName) return;
     const { error } = await sb.from("groups").update({ name: newName }).eq("id", id);
-    if (error) window.alert("Erreur rename group: " + error.message);
-    else {
+    if (error) {
+      window.alert("Erreur rename group: " + error.message);
+    } else {
       addLog(`Groupe ${id} renommé en ${newName}`);
       await refetchGroupsOnly();
     }
   }
 
+  // Supprimer un groupe
   async function deleteGroup(id) {
     if (!window.confirm("Supprimer ce groupe ?")) return;
-    const { error: e1 } = await sb.from("group_members").delete().eq("group_id", id);
-    if (e1) return window.alert("Erreur suppr membres groupe: " + e1.message);
+    // 1. purge membres
+    const { error: e1 } = await sb
+      .from("group_members")
+      .delete()
+      .eq("group_id", id);
+    if (e1) {
+      window.alert("Erreur suppr membres groupe: " + e1.message);
+      return;
+    }
+    // 2. suppr le groupe
     const { error: e2 } = await sb.from("groups").delete().eq("id", id);
-    if (e2) return window.alert("Erreur suppr groupe: " + e2.message);
+    if (e2) {
+      window.alert("Erreur suppr groupe: " + e2.message);
+      return;
+    }
     addLog(`Groupe ${id} supprimé`);
     await refetchGroupsOnly();
   }
 
+  // +MASTER = récupérer un pair-code
   async function askAddMaster() {
     const { data: sessionRes } = await sb.auth.getSession();
     const token = sessionRes?.session?.access_token;
-    if (!token) return window.alert("Non connecté.");
+    if (!token) {
+      window.alert("Non connecté.");
+      return;
+    }
     const r = await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({ ttl_minutes: 10 }),
     });
-    if (!r.ok) return window.alert("Erreur pair-code: " + (await r.text()));
+    if (!r.ok) {
+      const txt = await r.text();
+      window.alert("Erreur pair-code: " + txt);
+      return;
+    }
     const { code, expires_at } = await r.json();
     const end = new Date(expires_at).getTime();
     const ttlSec = Math.floor((end - Date.now()) / 1000);
-    window.alert(`Code: ${String(code).padStart(6, "0")} (expire dans ~${ttlSec}s)\nSaisis ce code dans le portail Wi-Fi du MASTER.`);
+    window.alert(
+      `Code: ${String(code).padStart(6, "0")} (expire dans ~${ttlSec}s)\nSaisis ce code dans le portail Wi-Fi du MASTER.`
+    );
   }
 
+  // +Groupe
   async function askAddGroup() {
     const gname = window.prompt("Nom du nouveau groupe ?", "");
     if (!gname) return;
-    const { data: ins, error } = await sb.from("groups").insert({ name: gname }).select("id").single();
-    if (error) return window.alert("Erreur création groupe: " + error.message);
+    const { data: ins, error } = await sb
+      .from("groups")
+      .insert({ name: gname })
+      .select("id")
+      .single();
+    if (error) {
+      window.alert("Erreur création groupe: " + error.message);
+      return;
+    }
     addLog(`Groupe créé (${ins?.id || "?"}): ${gname}`);
     await refetchGroupsOnly();
   }
 
+  // renommer le compte (affichage header côté UI uniquement pour l'instant)
   function renameAccountLabel() {
-    const newLabel = window.prompt("Nom du compte ?", accountName || (user?.email || ""));
+    const newLabel = window.prompt(
+      "Nom du compte ?",
+      accountName || (user?.email || "")
+    );
     if (!newLabel) return;
     setAccountName(newLabel);
     addLog(`Compte nommé : ${newLabel}`);
   }
 
-  function handleLogout() { sb.auth.signOut(); }
+  // Logout / Login
+  async function handleLogout() {
+    await sb.auth.signOut();
+    stripOAuthParams();
+  }
   function handleLogin() {
+    stripOAuthParams();
     sb.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: location.href, queryParams: { prompt: "select_account" } },
+      options: {
+        redirectTo: window.location.origin, // doit être autorisé dans Supabase
+        queryParams: { prompt: "select_account" },
+      },
     });
   }
 
-  /* ---------- Modales ouvr/ferm ---------- */
-  function openSlaveInfo(masterId, mac) { setSlaveInfoOpen({ open: true, masterId, mac }); }
-  function closeSlaveInfo() { setSlaveInfoOpen({ open: false, masterId: "", mac: "" }); }
-  function openGroupOnListModal(groupId) { setGroupOnListOpen({ open: true, groupId }); }
-  function closeGroupOnListModal() { setGroupOnListOpen({ open: false, groupId: "" }); }
-  function openGroupMembersModal(groupId) { setGroupMembersOpen({ open: true, groupId }); }
-  function closeGroupMembersModal() { setGroupMembersOpen({ open: false, groupId: "" }); }
+  // Reset dur en cas d’état auth coincé
+  async function hardResetAuth() {
+    try {
+      await sb.auth.signOut({ scope: "local" }); // purge stockage supabase
+    } catch {}
+    Object.keys(localStorage).forEach((k) => {
+      if (k.startsWith("sb-")) localStorage.removeItem(k);
+    });
+    sessionStorage.clear();
+    stripOAuthParams();
+    window.location.replace(
+      window.location.origin + window.location.pathname
+    );
+  }
 
-  // Pré-cocher uniquement à l'ouverture
+  /* ---------- Modales ouvr/ferm ---------- */
+  function openSlaveInfo(masterId, mac) {
+    setSlaveInfoOpen({ open: true, masterId, mac });
+  }
+  function closeSlaveInfo() {
+    setSlaveInfoOpen({ open: false, masterId: "", mac: "" });
+  }
+
+  function openGroupOnListModal(groupId) {
+    setGroupOnListOpen({ open: true, groupId });
+  }
+  function closeGroupOnListModal() {
+    setGroupOnListOpen({ open: false, groupId: "" });
+  }
+
+  function openGroupMembersModal(groupId) {
+    setGroupMembersOpen({ open: true, groupId });
+  }
+  function closeGroupMembersModal() {
+    setGroupMembersOpen({ open: false, groupId: "" });
+  }
+
+  // quand on ouvre l'éditeur membres -> précocher les slaves existants
   useEffect(() => {
+    // On ne sync que AU MOMENT où la modale passe open = true.
     if (!groupMembersOpen.open) return;
+
     const g = groupsData.find((gg) => gg.id === groupMembersOpen.groupId);
     if (!g) return;
+
     const initialMap = {};
-    for (const m of g.members || []) initialMap[m.mac] = true;
+    for (const m of g.members || []) {
+      initialMap[m.mac] = true;
+    }
     setEditMembersChecked(initialMap);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupMembersOpen.open]);
 
-  function toggleCheckMac(mac) { setEditMembersChecked((old) => ({ ...old, [mac]: !old[mac] })); }
+  function toggleCheckMac(mac) {
+    setEditMembersChecked((old) => ({
+      ...old,
+      [mac]: !old[mac],
+    }));
+  }
 
   async function saveGroupMembers() {
     const gid = groupMembersOpen.groupId;
     if (!gid) return;
+
+    // 1. construire un index { MAC -> master_id }
     const macToMaster = {};
-    for (const s of allSlavesFlat) macToMaster[s.mac] = s.master_id;
+    for (const s of allSlavesFlat) {
+      macToMaster[s.mac] = s.master_id;
+    }
 
-    const { error: delErr } = await sb.from("group_members").delete().eq("group_id", gid);
-    if (delErr) return window.alert("Erreur clear membres: " + delErr.message);
+    // 2. on supprime les anciens membres du groupe
+    const { error: delErr } = await sb
+      .from("group_members")
+      .delete()
+      .eq("group_id", gid);
 
+    if (delErr) {
+      window.alert("Erreur clear membres: " + delErr.message);
+      return;
+    }
+
+    // 3. on prépare les nouvelles lignes avec master_id obligatoire
     const rows = Object.entries(editMembersChecked)
-      .filter(([, ok]) => ok)
-      .map(([mac]) => ({ group_id: gid, slave_mac: mac, master_id: macToMaster[mac] || null }))
-      .filter((r) => r.master_id);
+      .filter(([_, ok]) => ok) // seulement les cases cochées
+      .map(([mac]) => ({
+        group_id: gid,
+        slave_mac: mac,
+        master_id: macToMaster[mac] || null, // IMPORTANT
+      }))
+      .filter((r) => r.master_id); // on enlève ceux sans master_id par sécurité
 
-    if (rows.length) {
+    // 4. INSERT
+    if (rows.length > 0) {
       const { error: insErr } = await sb.from("group_members").insert(rows);
-      if (insErr) return window.alert("Erreur insert membres: " + insErr.message);
+
+      if (insErr) {
+        window.alert("Erreur insert membres: " + insErr.message);
+        return;
+      }
     }
 
     addLog(`Membres groupe ${gid} mis à jour.`);
@@ -627,22 +1167,31 @@ export default function App() {
     return list.find((s) => s.mac === mac) || null;
   }, [slaveInfoOpen, nodesByMaster]);
 
-  const currentGroupForOnList = useMemo(
-    () => (groupOnListOpen.open ? groupsData.find((g) => g.id === groupOnListOpen.groupId) || null : null),
-    [groupOnListOpen, groupsData]
-  );
+  const currentGroupForOnList = useMemo(() => {
+    if (!groupOnListOpen.open) return null;
+    return (
+      groupsData.find((g) => g.id === groupOnListOpen.groupId) || null
+    );
+  }, [groupOnListOpen, groupsData]);
 
-  const currentGroupForMembers = useMemo(
-    () => (groupMembersOpen.open ? groupsData.find((g) => g.id === groupMembersOpen.groupId) || null : null),
-    [groupMembersOpen, groupsData]
-  );
+  const currentGroupForMembers = useMemo(() => {
+    if (!groupMembersOpen.open) return null;
+    return (
+      groupsData.find((g) => g.id === groupMembersOpen.groupId) || null
+    );
+  }, [groupMembersOpen, groupsData]);
 
   // tous les slaves (pour modale membres)
   const allSlavesFlat = useMemo(() => {
     const arr = [];
     for (const mid of Object.keys(nodesByMaster)) {
       for (const sl of nodesByMaster[mid]) {
-        arr.push({ mac: sl.mac, master_id: mid, friendly_name: sl.friendly_name, pc_on: sl.pc_on });
+        arr.push({
+          mac: sl.mac,
+          master_id: mid, // << on garde le master_id ici
+          friendly_name: sl.friendly_name,
+          pc_on: sl.pc_on,
+        });
       }
     }
     return arr;
@@ -654,10 +1203,15 @@ export default function App() {
       <div className="groupsSection">
         <div className="sectionTitleRow">
           <div className="sectionTitle">Groupes</div>
-          <div className="sectionSub">Contrôler plusieurs machines en même temps</div>
+          <div className="sectionSub">
+            Contrôler plusieurs machines en même temps
+          </div>
         </div>
+
         {!groupsData.length ? (
-          <div className="noGroupsNote smallText">Aucun groupe pour l’instant</div>
+          <div className="noGroupsNote smallText">
+            Aucun groupe pour l’instant
+          </div>
         ) : (
           <div className="groupListWrap">
             {groupsData.map((g) => (
@@ -666,9 +1220,15 @@ export default function App() {
                 group={g}
                 onRenameGroup={renameGroup}
                 onDeleteGroup={deleteGroup}
-                onOpenMembersEdit={(id) => openGroupMembersModal(id)}
-                onOpenOnList={(id) => openGroupOnListModal(id)}
-                onGroupCmd={(id, act) => sendGroupCmd(id, act)}
+                onOpenMembersEdit={(id) => {
+                  openGroupMembersModal(id);
+                }}
+                onOpenOnList={(id) => {
+                  openGroupOnListModal(id);
+                }}
+                onGroupCmd={(id, act) => {
+                  sendGroupCmd(id, act);
+                }}
               />
             ))}
           </div>
@@ -684,6 +1244,7 @@ export default function App() {
           <div className="sectionTitle">Masters</div>
           <div className="sectionSub">Chaque master pilote ses slaves</div>
         </div>
+
         {!devices.length ? (
           <div className="noGroupsNote smallText">Aucun master</div>
         ) : (
@@ -696,12 +1257,27 @@ export default function App() {
               onMasterDelete={deleteMaster}
               onSendMasterCmd={sendCmd}
               openSlaveInfoFor={openSlaveInfo}
-              onSlaveIO={(mid, mac) => sendCmd(mid, mac, "SLV_IO", { pin: DEFAULT_IO_PIN, mode: "OUT", value: 1 })}
+              onSlaveRename={doRenameSlave}
+              onSlaveIO={(mid, mac) =>
+                sendCmd(mid, mac, "SLV_IO", {
+                  pin: DEFAULT_IO_PIN,
+                  mode: "OUT",
+                  value: 1,
+                })
+              }
               onSlaveReset={(mid, mac) => sendCmd(mid, mac, "SLV_RESET", {})}
               onSlaveMore={(mid, mac) => {
-                const act = window.prompt("Action ?\n1 = HARD OFF\n2 = HARD RESET", "1");
-                if (act === "1") sendCmd(mid, mac, "SLV_FORCE_OFF", {});
-                else if (act === "2") sendCmd(mid, mac, "SLV_HARD_RESET", { ms: 3000 });
+                const act = window.prompt(
+                  "Action ?\n1 = HARD OFF\n2 = HARD RESET",
+                  "1"
+                );
+                if (act === "1") {
+                  sendCmd(mid, mac, "SLV_FORCE_OFF", {});
+                } else if (act === "2") {
+                  sendCmd(mid, mac, "SLV_HARD_RESET", {
+                    ms: 3000,
+                  });
+                }
               }}
               slavePhases={slavePhases}
             />
@@ -714,8 +1290,12 @@ export default function App() {
   function renderJournal() {
     return (
       <div className="journalSection">
-        <div className="sectionTitleRow"><div className="sectionTitle">Journal</div></div>
-        <div className="logBox" ref={logRef}>{logs.join("\n")}</div>
+        <div className="sectionTitleRow">
+          <div className="sectionTitle">Journal</div>
+        </div>
+        <div className="logBox" ref={logRef}>
+          {logs.join("\n")}
+        </div>
       </div>
     );
   }
@@ -725,7 +1305,14 @@ export default function App() {
     return (
       <>
         <style>{STYLES}</style>
-        <div style={{ color: "#fff", fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif', padding: "2rem" }}>
+        <div
+          style={{
+            color: "#fff",
+            fontFamily:
+              'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif',
+            padding: "2rem",
+          }}
+        >
           Chargement…
         </div>
       </>
@@ -750,23 +1337,30 @@ export default function App() {
           </div>
 
           <div className="rightBlock">
-            <div className="userMail smallText">{isLogged ? (accountName || user.email) : "non connecté"}</div>
+            <div className="userMail smallText">
+              {isLogged ? (accountName || user.email) : "non connecté"}
+            </div>
             {isLogged ? (
               <>
-                <SubtleButton onClick={renameAccountLabel}>Renommer compte</SubtleButton>
+                <SubtleButton onClick={renameAccountLabel}>
+                  Renommer compte
+                </SubtleButton>
                 <SubtleButton onClick={handleLogout}>Déconnexion</SubtleButton>
                 <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
                 <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
                 <SubtleButton onClick={fullReload}>Rafraîchir</SubtleButton>
               </>
             ) : (
-              <SubtleButton onClick={handleLogin}>Connexion Google</SubtleButton>
+              <>
+                <SubtleButton onClick={handleLogin}>Connexion Google</SubtleButton>
+                <SubtleButton onClick={hardResetAuth}>Réparer connexion</SubtleButton>
+              </>
             )}
           </div>
         </div>
       </header>
 
-      {/* CONTENU PAGE */}
+      {/* CONTENU PAGE (fond photo + cartes alignées) */}
       <div className="pageBg">
         <div className="pageContent">
           {renderGroupsSection()}
@@ -775,7 +1369,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* MODALES */}
+      {/* MODALE SLAVE INFO */}
       <SlaveInfoModal
         open={slaveInfoOpen.open}
         onClose={closeSlaveInfo}
@@ -783,18 +1377,27 @@ export default function App() {
         masterId={slaveInfoOpen.masterId}
         currentName={currentSlaveInfo?.friendly_name || slaveInfoOpen.mac}
         pcOn={!!currentSlaveInfo?.pc_on}
-        onRename={(newName) => { doRenameSlave(slaveInfoOpen.masterId, slaveInfoOpen.mac, newName); closeSlaveInfo(); }}
+        onRename={(newName) => {
+          doRenameSlave(slaveInfoOpen.masterId, slaveInfoOpen.mac, newName);
+          closeSlaveInfo();
+        }}
       />
 
-      <GroupOnListModal open={groupOnListOpen.open} onClose={closeGroupOnListModal} members={currentGroupForOnList?.members || []} />
+      {/* MODALE LISTE ALLUMÉS */}
+      <GroupOnListModal
+        open={groupOnListOpen.open}
+        onClose={closeGroupOnListModal}
+        members={currentGroupForOnList?.members || []}
+      />
 
+      {/* MODALE EDIT MEMBRES */}
       <GroupMembersModal
         open={groupMembersOpen.open}
         onClose={closeGroupMembersModal}
         groupName={currentGroupForMembers?.name || ""}
         allSlaves={allSlavesFlat}
         checkedMap={editMembersChecked}
-        onToggleMac={(mac) => toggleCheckMac(mac)}
+        onToggleMac={toggleCheckMac}
         onSave={saveGroupMembers}
       />
     </>
@@ -1221,6 +1824,7 @@ html,body,#root{
   bottom:0;
   background:#000;
 }
+/* phases visualisées */
 .queueAnim{
   width:30%;
   animation:pulseBar 1.2s infinite;
@@ -1269,11 +1873,17 @@ html,body,#root{
   font-size:16px;
   line-height:1;
 }
-.circleBtn:hover{ background:var(--bubble-bg-hover); }
-.circleBtn:active{ transform:scale(.96); }
-.circleBtn.moreBtn{ font-weight:500; }
+.circleBtn:hover{
+  background:var(--bubble-bg-hover);
+}
+.circleBtn:active{
+  transform:scale(.96);
+}
+.circleBtn.moreBtn{
+  font-weight:500;
+}
 
-/* BOUTONS CAPSULE (header / actions) */
+/* BOUTONS CAPSULE (header / actions master / actions groupe) */
 .subtleBtn{
   appearance:none;
   background:var(--bubble-bg);
@@ -1291,8 +1901,12 @@ html,body,#root{
   box-shadow:var(--shadow-small);
   transition:all var(--transition-fast);
 }
-.subtleBtn:hover{ background:var(--bubble-bg-hover); }
-.subtleBtn:active{ transform:scale(.97); }
+.subtleBtn:hover{
+  background:var(--bubble-bg-hover);
+}
+.subtleBtn:active{
+  transform:scale(.97);
+}
 
 /* petit bouton style capsule compact */
 .chipBtn{
@@ -1308,8 +1922,12 @@ html,body,#root{
   box-shadow:var(--shadow-small);
   transition:all var(--transition-fast);
 }
-.chipBtn:hover{ background:var(--bubble-bg-hover); }
-.chipBtn:active{ transform:scale(.97); }
+.chipBtn:hover{
+  background:var(--bubble-bg-hover);
+}
+.chipBtn:active{
+  transform:scale(.97);
+}
 
 /* JOURNAL */
 .journalSection .logBox{
@@ -1382,8 +2000,12 @@ html,body,#root{
   box-shadow:var(--shadow-small);
   transition:all var(--transition-fast);
 }
-.smallCloseBtn:hover{ background:var(--bubble-bg-hover); }
-.smallCloseBtn:active{ transform:scale(.97); }
+.smallCloseBtn:hover{
+  background:var(--bubble-bg-hover);
+}
+.smallCloseBtn:active{
+  transform:scale(.97);
+}
 .modalBody{
   font-size:13px;
   display:flex;
@@ -1391,8 +2013,15 @@ html,body,#root{
   gap:16px;
   color:var(--text-main);
 }
-.modalSection{ display:flex; flex-direction:column; gap:8px; }
-.modalLabel{ font-size:12px; color:var(--text-soft); }
+.modalSection{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.modalLabel{
+  font-size:12px;
+  color:var(--text-soft);
+}
 .modalInput{
   width:100%;
   background:rgba(0,0,0,0.6);
@@ -1403,7 +2032,9 @@ html,body,#root{
   padding:8px;
   outline:none;
 }
-.modalInput:focus{ border-color:rgba(255,255,255,0.4); }
+.modalInput:focus{
+  border-color:rgba(255,255,255,0.4);
+}
 .modalInfoRow{
   display:flex;
   justify-content:space-between;
@@ -1415,9 +2046,22 @@ html,body,#root{
   border-radius:8px;
   padding:6px 8px;
 }
-.modalInfoKey{ color:var(--text-soft); margin-right:8px; }
-.modalInfoVal{ color:var(--text-main); font-weight:500; text-align:right; word-break:break-all; }
-.modalEmpty{ font-size:12px; color:var(--text-soft); text-align:center; padding:12px; }
+.modalInfoKey{
+  color:var(--text-soft);
+  margin-right:8px;
+}
+.modalInfoVal{
+  color:var(--text-main);
+  font-weight:500;
+  text-align:right;
+  word-break:break-all;
+}
+.modalEmpty{
+  font-size:12px;
+  color:var(--text-soft);
+  text-align:center;
+  padding:12px;
+}
 .checkRow{
   display:flex;
   align-items:center;
@@ -1432,8 +2076,16 @@ html,body,#root{
   color:var(--text-main);
   margin-bottom:6px;
 }
-.checkName{ flex:1; margin-left:6px; color:var(--text-main); font-weight:500; }
-.checkState{ color:var(--text-soft); font-size:12px; }
+.checkName{
+  flex:1;
+  margin-left:6px;
+  color:var(--text-main);
+  font-weight:500;
+}
+.checkState{
+  color:var(--text-soft);
+  font-size:12px;
+}
 
 /* SCROLLBARS custom */
 .logBox::-webkit-scrollbar,
@@ -1457,11 +2109,31 @@ html,body,#root{
 
 /* RESPONSIVE */
 @media(max-width:600px){
-  .topHeaderInner{ flex-direction:column; align-items:flex-start; }
-  .rightBlock{ width:100%; justify-content:flex-start; flex-wrap:wrap; }
-  .groupCard{ flex:1 1 100%; min-width:0; }
-  .slavesGrid{ grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; }
-  .slaveCard{ max-width:190px; min-width:160px; }
-  .circleBtn{ width:42px; height:42px; font-size:15px; }
+  .topHeaderInner{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+  .rightBlock{
+    width:100%;
+    justify-content:flex-start;
+    flex-wrap:wrap;
+  }
+  .groupCard{
+    flex:1 1 100%;
+    min-width:0;
+  }
+  .slavesGrid{
+    grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+    gap:12px;
+  }
+  .slaveCard{
+    max-width:190px;
+    min-width:160px;
+  }
+  .circleBtn{
+    width:42px;
+    height:42px;
+    font-size:15px;
+  }
 }
 `;
