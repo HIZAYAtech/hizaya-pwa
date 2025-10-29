@@ -1016,19 +1016,25 @@ useEffect(() => {
   }
 
   // quand on ouvre l'éditeur membres -> précocher les slaves existants
-  useEffect(() => {
-    if (!groupMembersOpen.open) return;
-    const g = groupsData.find(
-      (gg) => gg.id === groupMembersOpen.groupId
-    );
-    if (g) {
-      const map = {};
-      for (const m of g.members || []) {
-        map[m.mac] = true;
-      }
-      setEditMembersChecked(map);
-    }
-  }, [groupMembersOpen, groupsData]);
+useEffect(() => {
+  // On ne sync que AU MOMENT où la modale passe open = true.
+  if (!groupMembersOpen.open) return;
+
+  const g = groupsData.find(
+    (gg) => gg.id === groupMembersOpen.groupId
+  );
+  if (!g) return;
+
+  const initialMap = {};
+  for (const m of g.members || []) {
+    initialMap[m.mac] = true;
+  }
+  setEditMembersChecked(initialMap);
+
+  // IMPORTANT :
+  // pas de dépendance sur groupsData ici,
+  // donc on ne va PAS reécraser pendant que tu coches.
+}, [groupMembersOpen.open]);
 
   function toggleCheckMac(mac) {
     setEditMembersChecked((old) => ({
