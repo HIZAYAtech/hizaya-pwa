@@ -53,7 +53,7 @@ function CircleBtn({ children, onClick, disabled, extraClass }) {
       disabled={disabled}
       onClick={onClick}
     >
-      {children}
+      <span className="circleBtnInner">{children}</span>
     </button>
   );
 }
@@ -64,7 +64,7 @@ function CircleBtn({ children, onClick, disabled, extraClass }) {
    - "idle": rien → barre cachée
    - "queue": en attente → petite anim pulsée
    - "send": envoi → anim de remplissage
-   - "acked": succès → plein + ✓
+   - "acked": succès → plein + ✓ puis disparaît
 ----------------------------------------- */
 function ActionBar({ phase }) {
   if (!phase || phase === "idle") return null;
@@ -132,9 +132,9 @@ function SlaveInfoModal({
   }, [currentName, slaveMac, open]);
 
   return (
-    <ModalShell open={open} onClose={onClose} title="Détails de la machine">
+    <ModalShell open={open} onClose={onClose} title="Détails du Slave">
       <div className="modalSection">
-        <label className="modalLabel">Nom de la machine</label>
+        <label className="modalLabel">Nom du slave</label>
         <input
           className="modalInput"
           value={nameDraft}
@@ -181,9 +181,7 @@ function GroupOnListModal({ open, onClose, members }) {
       )}
       {(members || []).map((m) => (
         <div key={m.mac} className="modalInfoRow">
-          <span className="modalInfoKey">
-            {m.friendly_name || m.mac}
-          </span>
+          <span className="modalInfoKey">{m.friendly_name || m.mac}</span>
           <span className="modalInfoVal">{m.pc_on ? "Allumé" : "Éteint"}</span>
         </div>
       ))}
@@ -193,7 +191,6 @@ function GroupOnListModal({ open, onClose, members }) {
 
 /* =========================================================
    MODALE "Éditer les membres d'un groupe"
-   - coche/décoche les slaves
 ========================================================= */
 function GroupMembersModal({
   open,
@@ -214,12 +211,8 @@ function GroupMembersModal({
               checked={!!checkedMap[sl.mac]}
               onChange={() => onToggleMac(sl.mac)}
             />
-            <span className="checkName">
-              {sl.friendly_name || sl.mac}
-            </span>
-            <span className="checkState">
-              {sl.pc_on ? "allumé" : "éteint"}
-            </span>
+            <span className="checkName">{sl.friendly_name || sl.mac}</span>
+            <span className="checkState">{sl.pc_on ? "allumé" : "éteint"}</span>
           </label>
         ))}
       </div>
@@ -233,7 +226,7 @@ function GroupMembersModal({
 }
 
 /* =========================================================
-   SlaveCard (une machine)
+   SlaveCard
 ========================================================= */
 function SlaveCard({
   masterId,
@@ -249,15 +242,11 @@ function SlaveCard({
   return (
     <div className="slaveCard">
       {/* bouton info en haut à droite */}
-      <div
-        className="infoChip"
-        onClick={onInfoClick}
-        title="Infos / renommer"
-      >
+      <div className="infoChip" onClick={onInfoClick} title="Infos / renommer">
         i
       </div>
 
-      {/* nom en gros */}
+      {/* nom du slave en gros */}
       <div className="slaveNameMain">{friendlyName || mac}</div>
 
       {/* état PC */}
@@ -265,10 +254,10 @@ function SlaveCard({
         {pcOn ? "Ordinateur allumé" : "Ordinateur éteint"}
       </div>
 
-      {/* barre d'action */}
+      {/* barre d'action (progression) */}
       <ActionBar phase={actionBarPhase} />
 
-      {/* boutons ronds */}
+      {/* boutons ronds bas de carte */}
       <div className="slaveBtnsRow">
         <CircleBtn onClick={onIO} disabled={false}>
           ⏻
@@ -309,9 +298,7 @@ function MasterCard({
           <div className="masterNameLine">
             <span className="masterCardTitle">{device.name || device.id}</span>
             <span
-              className={
-                "onlineBadge " + (live ? "onlineYes" : "onlineNo")
-              }
+              className={"onlineBadge " + (live ? "onlineYes" : "onlineNo")}
             >
               {live ? "EN LIGNE" : "HORS LIGNE"}
             </span>
@@ -370,7 +357,7 @@ function MasterCard({
         </div>
       </div>
 
-      {/* liste des slaves */}
+      {/* zone slaves */}
       <div className="slavesWrap">
         <div className="slavesGrid">
           {(slaves || []).map((sl) => (
@@ -384,7 +371,9 @@ function MasterCard({
               onInfoClick={() => {
                 openSlaveInfoFor(device.id, sl.mac);
               }}
-              onIO={() => onSlaveIO(device.id, sl.mac)}
+              onIO={() =>
+                onSlaveIO(device.id, sl.mac) /* IO ON impulse */
+              }
               onReset={() => onSlaveReset(device.id, sl.mac)}
               onMore={() => onSlaveMore(device.id, sl.mac)}
             />
@@ -420,18 +409,14 @@ function GroupCard({
               onClick={() => onOpenOnList(id)}
               disabled={!statsTotal}
             >
-              Liste
+              Voir la liste
             </button>
           </div>
         </div>
 
         <div className="groupMiniActions">
-          <SubtleButton onClick={() => onRenameGroup(id)}>
-            Renommer
-          </SubtleButton>
-          <SubtleButton onClick={() => onDeleteGroup(id)}>
-            Supprimer
-          </SubtleButton>
+          <SubtleButton onClick={() => onRenameGroup(id)}>Renommer</SubtleButton>
+          <SubtleButton onClick={() => onDeleteGroup(id)}>Supprimer</SubtleButton>
           <SubtleButton onClick={() => onOpenMembersEdit(id)}>
             Membres
           </SubtleButton>
@@ -489,12 +474,6 @@ export default function App() {
       new Date().toLocaleTimeString() + "  " + text,
     ]);
   }
-  // autoscroll journal
-  useEffect(() => {
-    if (logRef.current) {
-      logRef.current.scrollTop = logRef.current.scrollHeight;
-    }
-  }, [logs]);
 
   /* Modales */
   const [slaveInfoOpen, setSlaveInfoOpen] = useState({
@@ -510,8 +489,7 @@ export default function App() {
     open: false,
     groupId: "",
   });
-  // { mac: true }
-  const [editMembersChecked, setEditMembersChecked] = useState({});
+  const [editMembersChecked, setEditMembersChecked] = useState({}); // { mac: true }
 
   /* ------------- AUTH FLOW ---------------- */
   useEffect(() => {
@@ -561,12 +539,12 @@ export default function App() {
     if (chNodes.current) sb.removeChannel(chNodes.current);
     if (chCmds.current) sb.removeChannel(chCmds.current);
     if (chGroups.current) sb.removeChannel(chGroups.current);
-    chDevices.current = chNodes.current = chCmds.current = chGroups.current = null;
+    chDevices.current = chNodes.current = chCmds.current = chGroups.current =
+      null;
   }
 
   function attachRealtime() {
     cleanupRealtime();
-
     // devices
     chDevices.current = sb
       .channel("rt:devices")
@@ -589,7 +567,7 @@ export default function App() {
         () => {
           addLog("[RT] nodes changed");
           refetchNodesOnly();
-          refetchGroupsOnly(); // group cards dépendent des slaves
+          refetchGroupsOnly(); // groupes utilisent slaves
         }
       )
       .subscribe();
@@ -604,11 +582,11 @@ export default function App() {
           const row = payload.new;
           if (row && row.target_mac) {
             if (row.status === "acked") {
+              // barre -> acked -> puis retour idle
               setSlavePhases((old) => ({
                 ...old,
                 [row.target_mac]: "acked",
               }));
-              // après 2s on cache
               setTimeout(() => {
                 setSlavePhases((old2) => ({
                   ...old2,
@@ -667,6 +645,7 @@ export default function App() {
   }
 
   async function refetchNodesOnly() {
+    // récupère tous les slaves
     const { data: rows, error } = await sb
       .from("nodes")
       .select("master_id,slave_mac,friendly_name,pc_on");
@@ -686,6 +665,7 @@ export default function App() {
     setNodesByMaster(map);
   }
 
+  // groupes + membres + status ON
   async function refetchGroupsOnly() {
     // 1. lire groupes
     const { data: gs, error: gErr } = await sb
@@ -695,7 +675,6 @@ export default function App() {
       addLog("Err groups: " + gErr.message);
       return;
     }
-
     // 2. lire membres
     const { data: membs, error: mErr } = await sb
       .from("group_members")
@@ -704,7 +683,6 @@ export default function App() {
       addLog("Err group_members: " + mErr.message);
       return;
     }
-
     // 3. lire nodes pour friendly_name + pc_on + master_id
     const { data: allNodes, error: nErr } = await sb
       .from("nodes")
@@ -714,7 +692,6 @@ export default function App() {
       return;
     }
 
-    // reconstruire
     const membersByGroup = {};
     for (const gm of membs || []) {
       if (!membersByGroup[gm.group_id]) {
@@ -760,10 +737,7 @@ export default function App() {
   async function renameMaster(id) {
     const newName = window.prompt("Nouveau nom du master ?", "");
     if (!newName) return;
-    const { error } = await sb
-      .from("devices")
-      .update({ name: newName })
-      .eq("id", id);
+    const { error } = await sb.from("devices").update({ name: newName }).eq("id", id);
     if (error) {
       window.alert(error.message);
     } else {
@@ -782,18 +756,15 @@ export default function App() {
       window.alert("Non connecté.");
       return;
     }
-    const r = await fetch(
-      `${SUPABASE_URL}/functions/v1/release_and_delete`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ master_id: id }),
-      }
-    );
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ master_id: id }),
+    });
     if (!r.ok) {
       const txt = await r.text();
       addLog("❌ Suppression : " + txt);
@@ -811,9 +782,9 @@ export default function App() {
       .eq("master_id", masterId)
       .eq("slave_mac", mac);
     if (error) {
-      window.alert("Erreur rename machine: " + error.message);
+      window.alert("Erreur rename slave: " + error.message);
     } else {
-      addLog(`Machine ${mac} renommée en ${newName}`);
+      addLog(`Slave ${mac} renommé en ${newName}`);
       await refetchNodesOnly();
       await refetchGroupsOnly();
     }
@@ -846,9 +817,7 @@ export default function App() {
       }
     } else {
       addLog(
-        `[cmd] ${action} → ${masterId}${
-          targetMac ? " ▶ " + targetMac : ""
-        }`
+        `[cmd] ${action} → ${masterId}${targetMac ? " ▶ " + targetMac : ""}`
       );
       if (targetMac) {
         setSlavePhases((old) => ({
@@ -903,12 +872,9 @@ export default function App() {
   async function renameGroup(id) {
     const newName = window.prompt("Nouveau nom du groupe ?", "");
     if (!newName) return;
-    const { error } = await sb
-      .from("groups")
-      .update({ name: newName })
-      .eq("id", id);
+    const { error } = await sb.from("groups").update({ name: newName }).eq("id", id);
     if (error) {
-      window.alert("Erreur rename groupe: " + error.message);
+      window.alert("Erreur rename group: " + error.message);
     } else {
       addLog(`Groupe ${id} renommé en ${newName}`);
       await refetchGroupsOnly();
@@ -928,10 +894,7 @@ export default function App() {
       return;
     }
     // 2. suppr le groupe
-    const { error: e2 } = await sb
-      .from("groups")
-      .delete()
-      .eq("id", id);
+    const { error: e2 } = await sb.from("groups").delete().eq("id", id);
     if (e2) {
       window.alert("Erreur suppr groupe: " + e2.message);
       return;
@@ -948,18 +911,15 @@ export default function App() {
       window.alert("Non connecté.");
       return;
     }
-    const r = await fetch(
-      `${SUPABASE_URL}/functions/v1/create_pair_code`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ ttl_minutes: 10 }),
-      }
-    );
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ ttl_minutes: 10 }),
+    });
     if (!r.ok) {
       const txt = await r.text();
       window.alert("Erreur pair-code: " + txt);
@@ -994,7 +954,7 @@ export default function App() {
   function renameAccountLabel() {
     const newLabel = window.prompt(
       "Nom du compte ?",
-      accountName || user?.email || ""
+      accountName || (user?.email || "")
     );
     if (!newLabel) return;
     setAccountName(newLabel);
@@ -1039,18 +999,19 @@ export default function App() {
 
   // quand on ouvre l'éditeur membres -> précocher les slaves existants
   useEffect(() => {
+    // On ne sync que AU MOMENT où la modale passe open = true.
     if (!groupMembersOpen.open) return;
-    const g = groupsData.find(
-      (gg) => gg.id === groupMembersOpen.groupId
-    );
-    if (g) {
-      const map = {};
-      for (const m of g.members || []) {
-        map[m.mac] = true;
-      }
-      setEditMembersChecked(map);
+
+    const g = groupsData.find((gg) => gg.id === groupMembersOpen.groupId);
+    if (!g) return;
+
+    const initialMap = {};
+    for (const m of g.members || []) {
+      initialMap[m.mac] = true;
     }
-  }, [groupMembersOpen, groupsData]);
+    setEditMembersChecked(initialMap);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupMembersOpen.open]);
 
   function toggleCheckMac(mac) {
     setEditMembersChecked((old) => ({
@@ -1079,9 +1040,7 @@ export default function App() {
         slave_mac: mac,
       }));
     if (rows.length > 0) {
-      const { error: insErr } = await sb
-        .from("group_members")
-        .insert(rows);
+      const { error: insErr } = await sb.from("group_members").insert(rows);
       if (insErr) {
         window.alert("Erreur insert membres: " + insErr.message);
         return;
@@ -1103,16 +1062,14 @@ export default function App() {
   const currentGroupForOnList = useMemo(() => {
     if (!groupOnListOpen.open) return null;
     return (
-      groupsData.find((g) => g.id === groupOnListOpen.groupId) ||
-      null
+      groupsData.find((g) => g.id === groupOnListOpen.groupId) || null
     );
   }, [groupOnListOpen, groupsData]);
 
   const currentGroupForMembers = useMemo(() => {
     if (!groupMembersOpen.open) return null;
     return (
-      groupsData.find((g) => g.id === groupMembersOpen.groupId) ||
-      null
+      groupsData.find((g) => g.id === groupMembersOpen.groupId) || null
     );
   }, [groupMembersOpen, groupsData]);
 
@@ -1176,9 +1133,7 @@ export default function App() {
       <div className="mastersSection">
         <div className="sectionTitleRow">
           <div className="sectionTitle">Masters</div>
-          <div className="sectionSub">
-            Chaque master pilote ses machines
-          </div>
+          <div className="sectionSub">Chaque master pilote ses slaves</div>
         </div>
 
         {!devices.length ? (
@@ -1201,9 +1156,7 @@ export default function App() {
                   value: 1,
                 })
               }
-              onSlaveReset={(mid, mac) =>
-                sendCmd(mid, mac, "SLV_RESET", {})
-              }
+              onSlaveReset={(mid, mac) => sendCmd(mid, mac, "SLV_RESET", {})}
               onSlaveMore={(mid, mac) => {
                 const act = window.prompt(
                   "Action ?\n1 = HARD OFF\n2 = HARD RESET",
@@ -1278,24 +1231,15 @@ export default function App() {
             <div className="userMail smallText">
               {isLogged ? (accountName || user.email) : "non connecté"}
             </div>
-
             {isLogged ? (
               <>
                 <SubtleButton onClick={renameAccountLabel}>
                   Renommer compte
                 </SubtleButton>
-                <SubtleButton onClick={handleLogout}>
-                  Déconnexion
-                </SubtleButton>
-                <SubtleButton onClick={askAddMaster}>
-                  + MASTER
-                </SubtleButton>
-                <SubtleButton onClick={askAddGroup}>
-                  + Groupe
-                </SubtleButton>
-                <SubtleButton onClick={fullReload}>
-                  Rafraîchir
-                </SubtleButton>
+                <SubtleButton onClick={handleLogout}>Déconnexion</SubtleButton>
+                <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
+                <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
+                <SubtleButton onClick={fullReload}>Rafraîchir</SubtleButton>
               </>
             ) : (
               <SubtleButton onClick={handleLogin}>
@@ -1321,16 +1265,10 @@ export default function App() {
         onClose={closeSlaveInfo}
         slaveMac={slaveInfoOpen.mac}
         masterId={slaveInfoOpen.masterId}
-        currentName={
-          currentSlaveInfo?.friendly_name || slaveInfoOpen.mac
-        }
+        currentName={currentSlaveInfo?.friendly_name || slaveInfoOpen.mac}
         pcOn={!!currentSlaveInfo?.pc_on}
         onRename={(newName) => {
-          doRenameSlave(
-            slaveInfoOpen.masterId,
-            slaveInfoOpen.mac,
-            newName
-          );
+          doRenameSlave(slaveInfoOpen.masterId, slaveInfoOpen.mac, newName);
           closeSlaveInfo();
         }}
       />
@@ -1358,28 +1296,25 @@ export default function App() {
 
 /* =========================================================
    STYLES
-   (sans ombre agressive, glass doux)
 ========================================================= */
 const STYLES = `
 :root{
   --bg-page:#0d0f10;
   --glass-bg:rgba(255,255,255,0.08);
-  --glass-bg-mid:rgba(255,255,255,0.12);
-  --glass-border:rgba(255,255,255,0.16);
+  --glass-border:rgba(255,255,255,0.14);
   --glass-inner-bg:rgba(255,255,255,0.22);
-
   --text-main:#fff;
   --text-dim:rgba(255,255,255,0.75);
   --text-soft:rgba(255,255,255,0.55);
-
   --bubble-bg:rgba(255,255,255,0.06);
   --bubble-bg-hover:rgba(255,255,255,0.10);
   --bubble-border:rgba(255,255,255,0.20);
-
   --online-green:#4ade80;
   --online-red:#f87171;
-
   --modal-bg:rgba(0,0,0,0.45);
+
+  --shadow-card:none;
+  --shadow-small:none;
 
   --transition-fast:0.15s ease;
 
@@ -1388,10 +1323,7 @@ const STYLES = `
   color-scheme:dark;
   -webkit-font-smoothing:antialiased;
 }
-*{
-  box-sizing:border-box;
-  -webkit-tap-highlight-color:transparent;
-}
+*{box-sizing:border-box;}
 html,body,#root{
   margin:0;
   padding:0;
@@ -1399,403 +1331,374 @@ html,body,#root{
   color:var(--text-main);
   font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Ubuntu,sans-serif;
 }
+
 .smallText{
   font-size:12px;
   color:var(--text-soft);
 }
 
-/* HEADER sticky bande pleine largeur */
+/* HEADER sticky */
 .topHeader{
   position:sticky;
   top:0;
   left:0;
   right:0;
-  z-index:1000;
-  background:rgba(0,0,0,0.6);
-  backdrop-filter:blur(10px);
+  z-index:2000;
+  backdrop-filter:blur(20px) saturate(140%);
+  -webkit-backdrop-filter:blur(20px) saturate(140%);
+  background:rgba(20,20,20,0.55);
   border-bottom:1px solid rgba(255,255,255,0.12);
+  box-shadow:var(--shadow-card);
+  padding:12px 16px;
+  color:#fff;
 }
 .topHeaderInner{
-  max-width:1400px;
-  margin:0 auto;
-  padding:12px 16px;
   display:flex;
-  flex-wrap:wrap;
-  align-items:flex-start;
   justify-content:space-between;
-  gap:12px;
-}
-.leftBlock{
-  display:flex;
-  flex-direction:column;
-  gap:4px;
+  align-items:flex-start;
+  flex-wrap:wrap;
+  max-width:1200px;
+  margin:0 auto;
+  row-gap:8px;
 }
 .appTitleRow{
   display:flex;
-  align-items:center;
+  align-items:baseline;
   gap:8px;
-  font-size:16px;
-  font-weight:600;
-  color:var(--text-main);
 }
 .appName{
-  font-size:16px;
   font-weight:600;
+  font-size:16px;
+  color:var(--text-main);
+  letter-spacing:.02em;
 }
 .appStatus{
   font-size:12px;
+  color:var(--online-green);
   font-weight:500;
-  color:var(--text-main);
-  background:var(--bubble-bg);
-  border:1px solid var(--bubble-border);
-  padding:2px 8px;
-  border-radius:999px;
 }
 .appSubtitle{
+  color:var(--text-soft);
   font-size:12px;
 }
-
 .rightBlock{
   display:flex;
-  align-items:center;
   flex-wrap:wrap;
   gap:8px;
-  color:var(--text-main);
-  font-size:13px;
+  align-items:center;
+  justify-content:flex-end;
 }
 .userMail{
-  font-size:12px;
-  min-width:140px;
   color:var(--text-dim);
-}
-
-/* BOUTONS TOP HEADER ET GÉNÉRIQUES */
-.subtleBtn{
-  appearance:none;
-  background:var(--bubble-bg);
-  color:var(--text-main);
-  border:1px solid var(--bubble-border);
-  border-radius:999px;
-  padding:6px 10px;
+  margin-right:4px;
   font-size:12px;
-  line-height:1.2;
-  cursor:pointer;
-  transition:background var(--transition-fast),border var(--transition-fast),color var(--transition-fast);
-}
-.subtleBtn:hover{
-  background:var(--bubble-bg-hover);
-}
-.subtleBtn:disabled{
-  opacity:0.4;
-  cursor:default;
 }
 
-/* PAGE BG : dégradés + photo plein écran */
+/* BG full-screen */
 .pageBg{
   min-height:100vh;
   background:
-    radial-gradient(circle at 20% 20%, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 60%),
-    radial-gradient(circle at 80% 30%, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0) 70%),
-    url("https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1600&q=60");
+    radial-gradient(circle at 20% 20%, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0) 60%),
+    radial-gradient(circle at 80% 30%, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 70%),
+    url("https://4kwallpapers.com/images/walls/thumbs_3t/9729.jpg");
   background-size:cover;
   background-position:center;
-  background-repeat:no-repeat;
-  padding:24px 16px 64px;
+  padding:24px 16px 80px;
+  position:relative;
+}
+.pageBg::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:rgba(0,0,0,0.28);
 }
 .pageContent{
-  max-width:1400px;
+  position:relative;
+  z-index:10;
+  max-width:1200px;
   margin:0 auto;
   display:flex;
-  flex-wrap:wrap;
-  align-items:flex-start;
-  justify-content:center;
+  flex-direction:column;
   gap:24px;
+  padding-bottom:96px;
+  color:var(--text-main);
 }
 
-/* SECTIONS PRINCIPALES: Groupes / Masters / Journal */
+/* Sections : Groupes / Masters / Journal */
 .groupsSection,
 .mastersSection,
 .journalSection{
   background:var(--glass-bg);
   border:1px solid var(--glass-border);
-  border-radius:20px;
+  border-radius:16px;
+  box-shadow:var(--shadow-card);
+  backdrop-filter:blur(18px) saturate(140%);
+  -webkit-backdrop-filter:blur(18px) saturate(140%);
   padding:16px;
   color:var(--text-main);
-  min-width:260px;
-  backdrop-filter:blur(20px);
-}
-
-.groupsSection{
-  flex:0 1 320px;
-  max-width:360px;
-}
-.mastersSection{
-  flex:1 1 600px;
-  min-width:480px;
-  max-width:800px;
-}
-.journalSection{
-  flex:0 1 300px;
-  max-width:320px;
 }
 
 /* Titres de section */
 .sectionTitleRow{
   display:flex;
   flex-direction:column;
-  gap:2px;
   margin-bottom:12px;
 }
 .sectionTitle{
-  font-size:14px;
-  font-weight:600;
   color:var(--text-main);
+  font-weight:600;
+  font-size:14px;
 }
 .sectionSub{
-  font-size:12px;
   color:var(--text-soft);
+  font-size:12px;
+}
+.noGroupsNote{
+  color:var(--text-soft);
+  font-size:12px;
 }
 
-/* Groupes */
+/* GROUPS */
 .groupListWrap{
   display:flex;
-  flex-direction:column;
-  gap:12px;
+  flex-wrap:wrap;
+  gap:16px;
 }
 .groupCard{
-  background:var(--glass-bg-mid);
-  border:1px solid var(--glass-border);
+  min-width:260px;
+  flex:1 1 260px;
+  background:rgba(255,255,255,0.07);
+  border:1px solid rgba(255,255,255,0.16);
   border-radius:16px;
-  padding:12px 12px 10px;
-  display:flex;
-  flex-direction:column;
-  gap:12px;
-  backdrop-filter:blur(20px);
+  padding:16px;
+  color:var(--text-main);
+  position:relative;
+  box-shadow:var(--shadow-card);
+  backdrop-filter:blur(18px) saturate(140%);
+  -webkit-backdrop-filter:blur(18px) saturate(140%);
 }
 .groupHeadRow{
   display:flex;
-  justify-content:space-between;
   flex-wrap:wrap;
-  gap:8px;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:12px;
 }
 .groupMainInfo{
-  min-width:160px;
+  flex:1;
+  min-width:150px;
 }
 .groupNameLine{
-  font-size:14px;
+  font-size:15px;
   font-weight:600;
   color:var(--text-main);
+  letter-spacing:.02em;
 }
 .groupSubLine{
   font-size:12px;
-  color:var(--text-soft);
+  color:var(--text-dim);
+  margin-top:4px;
   display:flex;
   flex-wrap:wrap;
   align-items:center;
-  gap:6px;
 }
-.chipBtn{
-  appearance:none;
-  background:var(--bubble-bg);
-  color:var(--text-main);
-  border:1px solid var(--bubble-border);
-  border-radius:999px;
-  padding:4px 8px;
-  font-size:11px;
-  line-height:1.2;
-  cursor:pointer;
-}
-.chipBtn:disabled{
-  opacity:0.4;
-  cursor:default;
-}
-
 .groupMiniActions{
   display:flex;
   flex-wrap:wrap;
-  gap:6px;
+  gap:8px;
+  justify-content:flex-end;
 }
 .groupCmdRow{
   display:flex;
   flex-wrap:wrap;
-  gap:6px;
+  gap:8px;
   font-size:12px;
 }
 
-/* Master card */
+/* Masters */
+.mastersSection > .sectionTitleRow + .noGroupsNote{
+  margin-bottom:8px;
+}
 .masterCard{
-  background:var(--glass-bg-mid);
-  border:1px solid var(--glass-border);
-  border-radius:20px;
+  background:rgba(255,255,255,0.07);
+  border:1px solid rgba(255,255,255,0.16);
+  border-radius:16px;
   padding:16px;
-  display:flex;
-  flex-direction:column;
-  gap:16px;
+  margin-bottom:16px;
   color:var(--text-main);
-  backdrop-filter:blur(20px);
+  box-shadow:var(--shadow-card);
+  backdrop-filter:blur(18px) saturate(140%);
+  -webkit-backdrop-filter:blur(18px) saturate(140%);
 }
 .masterTopRow{
   display:flex;
   flex-wrap:wrap;
   justify-content:space-between;
   gap:12px;
+  margin-bottom:16px;
 }
 .masterTitleLeft{
-  display:flex;
-  flex-direction:column;
-  gap:6px;
-  min-width:220px;
-  flex:1 1 auto;
+  min-width:200px;
+  flex:1;
 }
 .masterNameLine{
   display:flex;
   flex-wrap:wrap;
   align-items:center;
   gap:8px;
+  margin-bottom:6px;
 }
 .masterCardTitle{
   font-size:15px;
   font-weight:600;
   color:var(--text-main);
+  letter-spacing:.02em;
 }
 .onlineBadge{
   font-size:11px;
   font-weight:500;
-  line-height:1.2;
+  border-radius:9999px;
   padding:2px 8px;
-  border-radius:999px;
-  border:1px solid var(--bubble-border);
+  line-height:1.2;
+  border:1px solid rgba(255,255,255,0.18);
 }
 .onlineYes{
-  background:rgba(16,185,129,0.12);
   color:var(--online-green);
-  border-color:rgba(16,185,129,0.4);
+  background:rgba(16,185,129,0.10);
+  border-color:rgba(16,185,129,0.32);
 }
 .onlineNo{
-  background:rgba(239,68,68,0.12);
   color:var(--online-red);
-  border-color:rgba(239,68,68,0.4);
+  background:rgba(239,68,68,0.10);
+  border-color:rgba(239,68,68,0.32);
 }
 .masterMeta{
-  font-size:12px;
-  color:var(--text-soft);
   display:flex;
   flex-wrap:wrap;
-  gap:4px 8px;
+  gap:6px;
+  font-size:12px;
+  line-height:1.3;
+  color:var(--text-soft);
 }
 .kv .k{
   color:var(--text-soft);
+  font-weight:500;
+  font-size:12px;
 }
 .kv .v{
-  color:var(--text-dim);
+  color:var(--text-main);
+  font-size:12px;
 }
-
 .masterActionsRow{
   display:flex;
   flex-wrap:wrap;
+  gap:8px;
+  justify-content:flex-end;
   align-items:flex-start;
-  gap:6px;
-  min-width:200px;
-  flex-shrink:0;
-  font-size:12px;
 }
 
-/* zone slaves dans un master */
+/* grille de slaves centrée */
 .slavesWrap{
-  width:100%;
-}
-.slavesGrid{
-  /* on centre les cartes */
   display:flex;
-  flex-wrap:wrap;
-  gap:16px;
   justify-content:center;
 }
+.slavesGrid{
+  width:100%;
+  max-width:1000px;
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:16px;
+  justify-items:center;
+}
 
-/* Slave Card */
+/* Slave card */
 .slaveCard{
   position:relative;
-  background:var(--glass-bg);
-  border:1px solid var(--glass-border);
-  border-radius:16px;
-  padding:16px 12px 12px;
-  width:150px;
-  max-width:180px;
-  min-width:140px;
+  width:100%;
+  max-width:200px;
+  min-width:160px;
+  background:rgba(255,255,255,0.09);
+  border:1px solid rgba(255,255,255,0.20);
+  border-radius:20px;
+  box-shadow:var(--shadow-card);
+  backdrop-filter:blur(18px) saturate(140%);
+  -webkit-backdrop-filter:blur(18px) saturate(140%);
+  padding:18px 14px 14px;
   display:flex;
   flex-direction:column;
   align-items:center;
   text-align:center;
   color:var(--text-main);
-  backdrop-filter:blur(20px);
 }
 .infoChip{
   position:absolute;
-  top:8px;
-  right:8px;
-  font-size:11px;
-  font-weight:500;
-  line-height:1;
+  top:10px;
+  right:10px;
   width:20px;
   height:20px;
-  border-radius:999px;
+  font-size:12px;
+  line-height:20px;
+  border-radius:9999px;
   background:var(--bubble-bg);
+  color:var(--text-dim);
   border:1px solid var(--bubble-border);
-  color:var(--text-main);
-  display:flex;
-  align-items:center;
-  justify-content:center;
+  text-align:center;
   cursor:pointer;
+  user-select:none;
+  transition:all var(--transition-fast);
+  box-shadow:var(--shadow-small);
 }
 .infoChip:hover{
   background:var(--bubble-bg-hover);
+  color:var(--text-main);
 }
 .slaveNameMain{
-  font-size:15px;
+  font-size:16px;
   font-weight:600;
-  line-height:1.2;
   color:var(--text-main);
-  margin-top:20px; /* pour éviter de se battre avec le i */
-  word-break:break-word;
+  margin-top:26px;
+  margin-bottom:6px;
+  min-height:2.6em;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  text-align:center;
+  line-height:1.2;
+  letter-spacing:.02em;
 }
 .slaveSub{
   font-size:12px;
   line-height:1.3;
   color:var(--text-soft);
-  margin-top:4px;
-  min-height:16px;
+  margin-bottom:10px;
+  min-height:1.4em;
+  letter-spacing:.02em;
 }
-
-/* Barre d'action sous l'état PC */
 .actionBarWrapper{
-  position:relative;
   width:100%;
   height:4px;
   border-radius:999px;
-  background:rgba(0,0,0,0.5);
+  background:rgba(0,0,0,0.4);
+  border:1px solid rgba(255,255,255,0.12);
+  position:relative;
   overflow:hidden;
-  margin-top:8px;
   margin-bottom:12px;
+  box-shadow:var(--shadow-small);
 }
 .actionBarFill{
   position:absolute;
-  top:0;left:0;bottom:0;
+  top:0;
+  left:0;
+  bottom:0;
   background:#000;
-  width:20%;
 }
 .queueAnim{
-  animation:queuePulse 0.8s infinite alternate;
-}
-@keyframes queuePulse{
-  0%{opacity:0.4;width:20%}
-  100%{opacity:0.8;width:30%}
+  width:30%;
+  animation:pulseBar 1.2s infinite;
 }
 .sendAnim{
-  animation:sendFill 1s infinite linear;
-}
-@keyframes sendFill{
-  0%{width:0%}
-  100%{width:100%}
+  width:100%;
+  animation:fillBar 1s forwards;
 }
 .ackedFill{
   width:100%;
@@ -1803,132 +1706,192 @@ html,body,#root{
 }
 .actionBarAck{
   position:absolute;
+  right:6px;
   top:-18px;
-  right:4px;
-  font-size:11px;
+  font-size:10px;
+  font-weight:600;
   color:#000;
   background:#fff;
   border-radius:6px;
   padding:2px 4px;
-  font-weight:500;
-  line-height:1.2;
+  box-shadow:var(--shadow-small);
 }
-
-/* Boutons ronds en bas de la carte */
+@keyframes pulseBar{
+  0%{opacity:0.4;}
+  50%{opacity:1;}
+  100%{opacity:0.4;}
+}
+@keyframes fillBar{
+  0%{width:0%;}
+  100%{width:100%;}
+}
 .slaveBtnsRow{
   display:flex;
   flex-wrap:nowrap;
   align-items:flex-end;
   justify-content:center;
   gap:12px;
-  width:100%;
+  margin-top:auto;
 }
 .circleBtn{
-  appearance:none;
+  width:44px;
+  height:44px;
+  border-radius:9999px;
   background:var(--bubble-bg);
   border:1px solid var(--bubble-border);
-  border-radius:999px;
-  width:36px;
-  height:36px;
-  font-size:16px;
-  line-height:1;
+  box-shadow:var(--shadow-small);
   color:var(--text-main);
-  cursor:pointer;
   display:flex;
   align-items:center;
   justify-content:center;
+  cursor:pointer;
+  transition:all var(--transition-fast);
   padding:0;
 }
 .circleBtn:hover{
   background:var(--bubble-bg-hover);
 }
-.circleBtn.moreBtn{
-  font-size:18px;
-  line-height:0.8;
+.circleBtn:active{
+  transform:scale(.96);
 }
-.circleBtn:disabled{
-  opacity:0.4;
-  cursor:default;
+.circleBtn.moreBtn{
+  font-weight:500;
+}
+.circleBtnInner{
+  font-size:16px;
+  line-height:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  margin-top:0;
 }
 
 /* Journal */
-.logBox{
-  white-space:pre-wrap;
-  background:rgba(0,0,0,0.35);
+.journalSection .logBox{
+  width:100%;
+  min-height:120px;
+  max-height:200px;
+  background:rgba(0,0,0,0.45);
   border:1px solid rgba(255,255,255,0.15);
   border-radius:12px;
-  padding:10px;
-  height:200px;
-  overflow:auto;
+  padding:12px;
   font-size:12px;
   line-height:1.4;
-  color:var(--text-main);
+  color:var(--text-dim);
+  white-space:pre-wrap;
+  overflow:auto;
+  box-shadow:none;
 }
-.noGroupsNote{
+
+/* Boutons "capsule" */
+.subtleBtn{
+  appearance:none;
+  background:var(--bubble-bg);
+  border:1px solid var(--bubble-border);
+  border-radius:9999px;
   font-size:12px;
-  color:var(--text-soft);
+  line-height:1.2;
+  color:var(--text-main);
+  cursor:pointer;
+  padding:6px 10px;
+  min-height:28px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:var(--shadow-small);
+  transition:all var(--transition-fast);
+}
+.subtleBtn:hover{
+  background:var(--bubble-bg-hover);
+}
+.subtleBtn:active{
+  transform:scale(.97);
+}
+
+.chipBtn{
+  appearance:none;
+  background:var(--bubble-bg);
+  border:1px solid var(--bubble-border);
+  border-radius:9999px;
+  font-size:11px;
+  line-height:1.2;
+  color:var(--text-main);
+  cursor:pointer;
+  padding:4px 8px;
+  box-shadow:var(--shadow-small);
+  transition:all var(--transition-fast);
+}
+.chipBtn:hover{
+  background:var(--bubble-bg-hover);
+}
+.chipBtn:active{
+  transform:scale(.97);
 }
 
 /* MODALES */
 .modalOverlay{
   position:fixed;
-  left:0;top:0;right:0;bottom:0;
+  inset:0;
   background:var(--modal-bg);
   backdrop-filter:blur(4px);
+  -webkit-backdrop-filter:blur(4px);
+  z-index:3000;
   display:flex;
   align-items:center;
   justify-content:center;
   padding:16px;
-  z-index:2000;
 }
 .modalCard{
-  background:var(--glass-bg-mid);
-  border:1px solid var(--glass-border);
-  border-radius:16px;
-  max-width:320px;
   width:100%;
+  max-width:360px;
+  background:rgba(20,20,20,0.8);
+  border:1px solid rgba(255,255,255,0.16);
+  border-radius:16px;
+  box-shadow:var(--shadow-card);
   color:var(--text-main);
-  backdrop-filter:blur(20px);
-  padding:12px 12px 16px;
+  backdrop-filter:blur(18px) saturate(140%);
+  -webkit-backdrop-filter:blur(18px) saturate(140%);
   display:flex;
   flex-direction:column;
-  gap:12px;
+  padding:16px;
 }
 .modalHeader{
   display:flex;
   justify-content:space-between;
   align-items:flex-start;
-  gap:8px;
+  margin-bottom:12px;
 }
 .modalTitle{
   font-size:14px;
   font-weight:600;
   color:var(--text-main);
-  line-height:1.3;
 }
 .smallCloseBtn{
   appearance:none;
   background:var(--bubble-bg);
   border:1px solid var(--bubble-border);
-  border-radius:999px;
-  width:24px;
-  height:24px;
+  border-radius:8px;
   color:var(--text-main);
-  font-size:12px;
-  line-height:1;
   cursor:pointer;
-  display:flex;
-  align-items:center;
-  justify-content:center;
+  line-height:1;
+  font-size:12px;
+  padding:4px 6px;
+  min-width:28px;
+  text-align:center;
+  box-shadow:var(--shadow-small);
 }
 .smallCloseBtn:hover{
   background:var(--bubble-bg-hover);
 }
-
+.smallCloseBtn:active{
+  transform:scale(.97);
+}
 .modalBody{
+  font-size:13px;
   display:flex;
   flex-direction:column;
   gap:16px;
+  color:var(--text-main);
 }
 .modalSection{
   display:flex;
@@ -1937,112 +1900,122 @@ html,body,#root{
 }
 .modalLabel{
   font-size:12px;
-  color:var(--text-dim);
+  color:var(--text-soft);
 }
 .modalInput{
-  appearance:none;
-  background:rgba(0,0,0,0.4);
+  width:100%;
+  background:rgba(0,0,0,0.6);
+  border:1px solid rgba(255,255,255,0.2);
   color:var(--text-main);
-  border:1px solid var(--bubble-border);
-  border-radius:10px;
-  padding:8px 10px;
   font-size:13px;
-  line-height:1.3;
+  border-radius:8px;
+  padding:8px;
   outline:none;
 }
 .modalInput:focus{
-  border-color:var(--text-main);
+  border-color:rgba(255,255,255,0.4);
 }
 .modalInfoRow{
   display:flex;
-  flex-wrap:wrap;
   justify-content:space-between;
-  font-size:12px;
+  font-size:13px;
+  line-height:1.4;
   color:var(--text-main);
-  border-bottom:1px solid rgba(255,255,255,0.1);
-  padding:4px 0;
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.15);
+  border-radius:8px;
+  padding:6px 8px;
 }
 .modalInfoKey{
   color:var(--text-soft);
   margin-right:8px;
 }
 .modalInfoVal{
+  color:var(--text-main);
   font-weight:500;
+  text-align:right;
+  word-break:break-all;
 }
 .modalEmpty{
   font-size:12px;
   color:var(--text-soft);
   text-align:center;
-  padding:8px 0;
+  padding:12px;
 }
-
-/* Edit membres groupe */
 .checkRow{
   display:flex;
   align-items:center;
   justify-content:space-between;
-  font-size:12px;
-  border:1px solid rgba(255,255,255,0.1);
-  border-radius:10px;
-  padding:6px 8px;
   gap:8px;
+  font-size:13px;
+  line-height:1.4;
+  padding:6px 8px;
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.15);
+  border-radius:8px;
+  color:var(--text-main);
   margin-bottom:6px;
-  background:rgba(0,0,0,0.3);
 }
 .checkName{
   flex:1;
+  margin-left:6px;
   color:var(--text-main);
-  font-size:12px;
   font-weight:500;
 }
 .checkState{
   color:var(--text-soft);
   font-size:12px;
 }
-.checkRow input[type="checkbox"]{
-  margin-right:6px;
+
+/* Scrollbars */
+.logBox::-webkit-scrollbar,
+.modalBody::-webkit-scrollbar,
+.pageContent::-webkit-scrollbar{
+  width:6px;
+  height:6px;
+}
+.logBox::-webkit-scrollbar-track,
+.modalBody::-webkit-scrollbar-track,
+.pageContent::-webkit-scrollbar-track{
+  background:rgba(255,255,255,0.05);
+  border-radius:999px;
+}
+.logBox::-webkit-scrollbar-thumb,
+.modalBody::-webkit-scrollbar-thumb,
+.pageContent::-webkit-scrollbar-thumb{
+  background:rgba(255,255,255,0.2);
+  border-radius:999px;
 }
 
-/* responsive tweaks */
-@media(max-width:900px){
-  .mastersSection{
-    min-width:300px;
-  }
-  .slavesGrid{
-    justify-content:center;
-  }
-  .slaveCard{
-    min-width:130px;
-    width:140px;
-  }
-  .masterActionsRow{
-    justify-content:flex-start;
-  }
-}
+/* responsive petits écrans */
 @media(max-width:600px){
   .topHeaderInner{
     flex-direction:column;
     align-items:flex-start;
   }
   .rightBlock{
-    flex-wrap:wrap;
-    justify-content:flex-start;
-  }
-  .pageContent{
-    flex-direction:column;
-    align-items:stretch;
-  }
-  .groupsSection,
-  .mastersSection,
-  .journalSection{
-    max-width:100%;
     width:100%;
+    justify-content:flex-start;
+    flex-wrap:wrap;
   }
-  .mastersSection{
+  .groupCard{
+    flex:1 1 100%;
     min-width:0;
   }
-  .journalSection .logBox{
-    height:160px;
+  .slavesGrid{
+    grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+    gap:12px;
+  }
+  .slaveCard{
+    max-width:190px;
+    min-width:160px;
+  }
+  .circleBtn{
+    width:42px;
+    height:42px;
+  }
+  .circleBtnInner{
+    font-size:15px;
   }
 }
 `;
