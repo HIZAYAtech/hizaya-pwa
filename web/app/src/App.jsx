@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-// Empêche d'attacher le realtime plusieurs fois dans le même onglet
-const realtimeAttached = useRef(false);
-
 /* =========================================
    CONFIG SUPABASE
    ========================================= */
@@ -67,7 +64,7 @@ function CircleBtn({ children, onClick, disabled, extraClass }) {
    - "idle": rien → barre cachée
    - "queue": en attente → petite anim pulsée
    - "send": envoi → anim de remplissage
-   - "acked": succès → plein + ✓ puis disparaît
+   - "acked": succès → plein + texte "succès" au-dessus
 ----------------------------------------- */
 function ActionBar({ phase }) {
   if (!phase || phase === "idle") return null;
@@ -75,12 +72,7 @@ function ActionBar({ phase }) {
 
   return (
     <div className="actionBarBlock">
-      {/* texte au-dessus */}
-      {isAck && (
-        <div className="actionStatusText">succès</div>
-      )}
-
-      {/* barre elle-même */}
+      {isAck && <div className="actionStatusText">succès</div>}
       <div className="actionBarWrapper">
         <div
           className={
@@ -193,7 +185,9 @@ function GroupOnListModal({ open, onClose, members }) {
       {(members || []).map((m) => (
         <div key={m.mac} className="modalInfoRow">
           <span className="modalInfoKey">{m.friendly_name || m.mac}</span>
-          <span className="modalInfoVal">{m.pc_on ? "Allumé" : "Éteint"}</span>
+          <span className="modalInfoVal">
+            {m.pc_on ? "Allumé" : "Éteint"}
+          </span>
         </div>
       ))}
     </ModalShell>
@@ -252,33 +246,22 @@ function SlaveCard({
 }) {
   return (
     <div className="slaveCard">
-      {/* bouton info en haut à droite */}
       <div className="infoChip" onClick={onInfoClick} title="Infos / renommer">
         i
       </div>
 
-      {/* nom du slave en gros */}
       <div className="slaveNameMain">{friendlyName || mac}</div>
 
-      {/* état PC */}
       <div className="slaveSub">
         {pcOn ? "Ordinateur allumé" : "Ordinateur éteint"}
       </div>
 
-      {/* barre d'action (progression) */}
       <ActionBar phase={actionBarPhase} />
 
-      {/* boutons ronds bas de carte */}
       <div className="slaveBtnsRow">
-        <CircleBtn onClick={onIO} disabled={false}>
-          ⏻
-        </CircleBtn>
-        <CircleBtn onClick={onReset} disabled={false}>
-          ↺
-        </CircleBtn>
-        <CircleBtn extraClass="moreBtn" onClick={onMore} disabled={false}>
-          ⋯
-        </CircleBtn>
+        <CircleBtn onClick={onIO} disabled={false}>⏻</CircleBtn>
+        <CircleBtn onClick={onReset} disabled={false}>↺</CircleBtn>
+        <CircleBtn extraClass="moreBtn" onClick={onMore} disabled={false}>⋯</CircleBtn>
       </div>
     </div>
   );
@@ -308,67 +291,45 @@ function MasterCard({
         <div className="masterTitleLeft">
           <div className="masterNameLine">
             <span className="masterCardTitle">{device.name || device.id}</span>
-            <span
-              className={"onlineBadge " + (live ? "onlineYes" : "onlineNo")}
-            >
+            <span className={"onlineBadge " + (live ? "onlineYes" : "onlineNo")}>
               {live ? "EN LIGNE" : "HORS LIGNE"}
             </span>
           </div>
 
           <div className="masterMeta smallText">
             <span className="kv">
-              <span className="k">ID :</span>{" "}
-              <span className="v">{device.id}</span>
+              <span className="k">ID :</span> <span className="v">{device.id}</span>
             </span>{" "}
             ·{" "}
             <span className="kv">
-              <span className="k">MAC :</span>{" "}
-              <span className="v">{device.master_mac || "—"}</span>
+              <span className="k">MAC :</span> <span className="v">{device.master_mac || "—"}</span>
             </span>{" "}
             ·{" "}
             <span className="kv">
               <span className="k">Dernier contact :</span>{" "}
-              <span className="v">
-                {device.last_seen ? fmtTS(device.last_seen) : "jamais"}
-              </span>
+              <span className="v">{device.last_seen ? fmtTS(device.last_seen) : "jamais"}</span>
             </span>
           </div>
         </div>
 
-        {/* actions globales master */}
         <div className="masterActionsRow">
-          <SubtleButton onClick={() => onMasterRename(device.id)}>
-            Renommer
-          </SubtleButton>
-          <SubtleButton onClick={() => onMasterDelete(device.id)}>
-            Supprimer
-          </SubtleButton>
-          <SubtleButton
-            onClick={() =>
-              onSendMasterCmd(device.id, null, "PULSE", { ms: 500 })
-            }
-          >
+          <SubtleButton onClick={() => onMasterRename(device.id)}>Renommer</SubtleButton>
+          <SubtleButton onClick={() => onMasterDelete(device.id)}>Supprimer</SubtleButton>
+          <SubtleButton onClick={() => onSendMasterCmd(device.id, null, "PULSE", { ms: 500 })}>
             Pulse 500ms
           </SubtleButton>
-          <SubtleButton
-            onClick={() => onSendMasterCmd(device.id, null, "POWER_ON", {})}
-          >
+          <SubtleButton onClick={() => onSendMasterCmd(device.id, null, "POWER_ON", {})}>
             Power ON
           </SubtleButton>
-          <SubtleButton
-            onClick={() => onSendMasterCmd(device.id, null, "POWER_OFF", {})}
-          >
+          <SubtleButton onClick={() => onSendMasterCmd(device.id, null, "POWER_OFF", {})}>
             Power OFF
           </SubtleButton>
-          <SubtleButton
-            onClick={() => onSendMasterCmd(device.id, null, "RESET", {})}
-          >
+          <SubtleButton onClick={() => onSendMasterCmd(device.id, null, "RESET", {})}>
             Reset
           </SubtleButton>
         </div>
       </div>
 
-      {/* zone slaves */}
       <div className="slavesWrap">
         <div className="slavesGrid">
           {(slaves || []).map((sl) => (
@@ -382,9 +343,7 @@ function MasterCard({
               onInfoClick={() => {
                 openSlaveInfoFor(device.id, sl.mac);
               }}
-              onIO={() =>
-                onSlaveIO(device.id, sl.mac) /* IO ON impulse */
-              }
+              onIO={() => onSlaveIO(device.id, sl.mac)}
               onReset={() => onSlaveReset(device.id, sl.mac)}
               onMore={() => onSlaveMore(device.id, sl.mac)}
             />
@@ -428,28 +387,16 @@ function GroupCard({
         <div className="groupMiniActions">
           <SubtleButton onClick={() => onRenameGroup(id)}>Renommer</SubtleButton>
           <SubtleButton onClick={() => onDeleteGroup(id)}>Supprimer</SubtleButton>
-          <SubtleButton onClick={() => onOpenMembersEdit(id)}>
-            Membres
-          </SubtleButton>
+          <SubtleButton onClick={() => onOpenMembersEdit(id)}>Membres</SubtleButton>
         </div>
       </div>
 
       <div className="groupCmdRow">
-        <SubtleButton onClick={() => onGroupCmd(id, "SLV_IO_ON")}>
-          IO ON
-        </SubtleButton>
-        <SubtleButton onClick={() => onGroupCmd(id, "RESET")}>
-          RESET
-        </SubtleButton>
-        <SubtleButton onClick={() => onGroupCmd(id, "SLV_IO_OFF")}>
-          OFF
-        </SubtleButton>
-        <SubtleButton onClick={() => onGroupCmd(id, "SLV_FORCE_OFF")}>
-          HARD OFF
-        </SubtleButton>
-        <SubtleButton onClick={() => onGroupCmd(id, "SLV_HARD_RESET")}>
-          HARD RESET
-        </SubtleButton>
+        <SubtleButton onClick={() => onGroupCmd(id, "SLV_IO_ON")}>IO ON</SubtleButton>
+        <SubtleButton onClick={() => onGroupCmd(id, "RESET")}>RESET</SubtleButton>
+        <SubtleButton onClick={() => onGroupCmd(id, "SLV_IO_OFF")}>OFF</SubtleButton>
+        <SubtleButton onClick={() => onGroupCmd(id, "SLV_FORCE_OFF")}>HARD OFF</SubtleButton>
+        <SubtleButton onClick={() => onGroupCmd(id, "SLV_HARD_RESET")}>HARD RESET</SubtleButton>
       </div>
     </div>
   );
@@ -462,19 +409,13 @@ export default function App() {
   /* ----------- AUTH -------------- */
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState(null);
-  // nom personnalisable du compte (affiché dans le header)
-  const [accountName, setAccountName] = useState("");
+  const [accountName, setAccountName] = useState(""); // nom affiché dans le header
 
   /* ----------- DATA STATE -------- */
   const [devices, setDevices] = useState([]); // masters
-  // nodesByMaster = { [master_id]: [ { mac, friendly_name, pc_on }, ...] }
-  const [nodesByMaster, setNodesByMaster] = useState({});
-  // état visuel d’action pour chaque slave_mac
-  const [slavePhases, setSlavePhases] = useState({});
-  // groupsData = [
-  //   { id, name, statsOn, statsTotal, members:[{mac, master_id, friendly_name, pc_on}] }
-  // ]
-  const [groupsData, setGroupsData] = useState([]);
+  const [nodesByMaster, setNodesByMaster] = useState({}); // { master_id: [ {mac,friendly_name,pc_on}, ...] }
+  const [slavePhases, setSlavePhases] = useState({}); // { mac: 'idle'|'queue'|'send'|'acked' }
+  const [groupsData, setGroupsData] = useState([]); // [{id,name,statsOn,statsTotal,members:[{mac,master_id,...}]}]
 
   /* journal */
   const [logs, setLogs] = useState([]);
@@ -487,181 +428,164 @@ export default function App() {
   }
 
   /* Modales */
-  const [slaveInfoOpen, setSlaveInfoOpen] = useState({
-    open: false,
-    masterId: "",
-    mac: "",
-  });
-  const [groupOnListOpen, setGroupOnListOpen] = useState({
-    open: false,
-    groupId: "",
-  });
-  const [groupMembersOpen, setGroupMembersOpen] = useState({
-    open: false,
-    groupId: "",
-  });
+  const [slaveInfoOpen, setSlaveInfoOpen] = useState({ open: false, masterId: "", mac: "" });
+  const [groupOnListOpen, setGroupOnListOpen] = useState({ open: false, groupId: "" });
+  const [groupMembersOpen, setGroupMembersOpen] = useState({ open: false, groupId: "" });
   const [editMembersChecked, setEditMembersChecked] = useState({}); // { mac: true }
-
-  /* ------------- AUTH FLOW ---------------- */
-  useEffect(() => {
-    // écoute auth
-    const { data: sub } = sb.auth.onAuthStateChange(
-      async (_event, session) => {
-        setUser(session?.user || null);
-        setAuthReady(true);
-        if (session?.user) {
-          await fullReload();
-          attachRealtime();
-        } else {
-          cleanupRealtime();
-          setDevices([]);
-          setNodesByMaster({});
-          setGroupsData([]);
-        }
-      }
-    );
-
-    // init
-    (async () => {
-      const { data } = await sb.auth.getSession();
-      setUser(data.session?.user || null);
-      setAuthReady(true);
-      if (data.session?.user) {
-        await fullReload();
-        attachRealtime();
-      }
-    })();
-
-    return () => {
-      sub?.subscription?.unsubscribe();
-      cleanupRealtime();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   /* ---------- REALTIME ---------- */
   const chDevices = useRef(null);
   const chNodes = useRef(null);
   const chCmds = useRef(null);
   const chGroups = useRef(null);
+  const realtimeAttachedRef = useRef(false); // garde locale au composant
 
-function cleanupRealtime() {
-  if (chDevices.current) sb.removeChannel(chDevices.current);
-  if (chNodes.current)   sb.removeChannel(chNodes.current);
-  if (chCmds.current)    sb.removeChannel(chCmds.current);
-  if (chGroups.current)  sb.removeChannel(chGroups.current);
+  function cleanupRealtime() {
+    if (chDevices.current) sb.removeChannel(chDevices.current);
+    if (chNodes.current) sb.removeChannel(chNodes.current);
+    if (chCmds.current) sb.removeChannel(chCmds.current);
+    if (chGroups.current) sb.removeChannel(chGroups.current);
 
-  chDevices.current = null;
-  chNodes.current   = null;
-  chCmds.current    = null;
-  chGroups.current  = null;
-
-  realtimeAttached.current = false;
-}
-
-function attachRealtime() {
-  // si déjà attaché dans cet onglet => on ne refait rien
-  if (realtimeAttached.current) {
-    return;
+    chDevices.current = null;
+    chNodes.current = null;
+    chCmds.current = null;
+    chGroups.current = null;
+    realtimeAttachedRef.current = false;
   }
 
-  cleanupRealtime(); // au cas où, on part propre
+  function attachRealtime() {
+    if (realtimeAttachedRef.current) return; // déjà attaché pour cet onglet
+    cleanupRealtime(); // propre
 
-  // devices
-  chDevices.current = sb
-    .channel("rt:devices")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "devices" },
-      () => {
-        addLog("[RT] devices changed");
-        refetchDevicesOnly();
-      }
-    )
-    .subscribe();
+    // devices
+    chDevices.current = sb
+      .channel("rt:devices")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "devices" },
+        () => {
+          addLog("[RT] devices changed");
+          refetchDevicesOnly();
+        }
+      )
+      .subscribe();
 
-  // nodes
-  chNodes.current = sb
-    .channel("rt:nodes")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "nodes" },
-      () => {
-        addLog("[RT] nodes changed");
-        refetchNodesOnly();
-        refetchGroupsOnly(); // car les groupes affichent aussi l'état des slaves
-      }
-    )
-    .subscribe();
+    // nodes
+    chNodes.current = sb
+      .channel("rt:nodes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "nodes" },
+        () => {
+          addLog("[RT] nodes changed");
+          refetchNodesOnly();
+          refetchGroupsOnly(); // groupes affichent l'état des slaves
+        }
+      )
+      .subscribe();
 
-  // commands
-  chCmds.current = sb
-    .channel("rt:commands")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "commands" },
-      (payload) => {
-        const row = payload.new;
+    // commands
+    chCmds.current = sb
+      .channel("rt:commands")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "commands" },
+        (payload) => {
+          const row = payload.new;
 
-        // si la commande touche un slave particulier → gérer barre d'action
-        if (row && row.target_mac) {
-          if (row.status === "acked") {
-            // on passe en acked visuel (et on reviendra à idle après 2s)
-            setSlavePhases((old) => ({
-              ...old,
-              [row.target_mac]: "acked",
-            }));
-            setTimeout(() => {
-              setSlavePhases((old2) => ({
-                ...old2,
-                [row.target_mac]: "idle",
-              }));
-            }, 2000);
+          if (row && row.target_mac) {
+            if (row.status === "acked") {
+              setSlavePhases((old) => ({ ...old, [row.target_mac]: "acked" }));
+              setTimeout(() => {
+                setSlavePhases((old2) => ({ ...old2, [row.target_mac]: "idle" }));
+              }, 2000);
+            }
+          }
+
+          if (row?.status === "acked") {
+            addLog(`[SUCCESS] ${row?.action} → ${row?.master_id}${row?.target_mac ? " ▶ " + row?.target_mac : ""}`);
+          } else {
+            addLog(`[cmd ${payload.eventType}] ${row?.action} (${row?.status}) → ${row?.master_id}`);
           }
         }
+      )
+      .subscribe();
 
-        // log plus clair
-        if (row?.status === "acked") {
-          addLog(
-            `[SUCCESS] ${row?.action} → ${row?.master_id}${
-              row?.target_mac ? " ▶ " + row?.target_mac : ""
-            }`
-          );
-        } else {
-          addLog(
-            `[cmd ${payload.eventType}] ${row?.action} (${row?.status}) → ${row?.master_id}`
-          );
+    // groups + members
+    chGroups.current = sb
+      .channel("rt:groups+members")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "groups" },
+        () => {
+          addLog("[RT] groups changed");
+          refetchGroupsOnly();
         }
-      }
-    )
-    .subscribe();
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "group_members" },
+        () => {
+          addLog("[RT] group_members changed");
+          refetchGroupsOnly();
+        }
+      )
+      .subscribe();
 
-  // groups + members
-  chGroups.current = sb
-    .channel("rt:groups+members")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "groups" },
-      () => {
-        addLog("[RT] groups changed");
-        refetchGroupsOnly();
-      }
-    )
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "group_members" },
-      () => {
-        addLog("[RT] group_members changed");
-        refetchGroupsOnly();
-      }
-    )
-    .subscribe();
+    realtimeAttachedRef.current = true;
+  }
 
-  realtimeAttached.current = true;
-}
+  /* ------------- AUTH FLOW ---------------- */
+  useEffect(() => {
+    let isMounted = true;
+
+    async function initSessionOnce() {
+      const { data } = await sb.auth.getSession();
+      const sess = data.session;
+      if (!isMounted) return;
+
+      if (sess?.user) {
+        setUser(sess.user);
+        setAuthReady(true);
+        await fullReload();
+        attachRealtime();
+      } else {
+        setUser(null);
+        setAuthReady(true);
+      }
+    }
+
+    const { data: sub } = sb.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+
+      if (event === "SIGNED_IN") {
+        setUser(session?.user || null);
+        await fullReload();
+        attachRealtime();
+      } else if (event === "SIGNED_OUT") {
+        setUser(null);
+        setDevices([]);
+        setNodesByMaster({});
+        setGroupsData([]);
+        setSlavePhases({});
+        cleanupRealtime();
+      } else if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
+        setUser(session?.user || null);
+      }
+      setAuthReady(true);
+    });
+
+    initSessionOnce();
+
+    return () => {
+      isMounted = false;
+      sub?.subscription?.unsubscribe();
+      cleanupRealtime();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* ---------- FETCHERS ---------- */
-
   async function refetchDevicesOnly() {
     const { data: devs, error } = await sb
       .from("devices")
@@ -671,7 +595,6 @@ function attachRealtime() {
   }
 
   async function refetchNodesOnly() {
-    // récupère tous les slaves
     const { data: rows, error } = await sb
       .from("nodes")
       .select("master_id,slave_mac,friendly_name,pc_on");
@@ -691,25 +614,19 @@ function attachRealtime() {
     setNodesByMaster(map);
   }
 
-  // groupes + membres + status ON
   async function refetchGroupsOnly() {
-    // 1. lire groupes
-    const { data: gs, error: gErr } = await sb
-      .from("groups")
-      .select("id,name");
+    const { data: gs, error: gErr } = await sb.from("groups").select("id,name");
     if (gErr) {
       addLog("Err groups: " + gErr.message);
       return;
     }
-    // 2. lire membres
     const { data: membs, error: mErr } = await sb
       .from("group_members")
-      .select("group_id,slave_mac");
+      .select("group_id,slave_mac,master_id");
     if (mErr) {
       addLog("Err group_members: " + mErr.message);
       return;
     }
-    // 3. lire nodes pour friendly_name + pc_on + master_id
     const { data: allNodes, error: nErr } = await sb
       .from("nodes")
       .select("master_id,slave_mac,friendly_name,pc_on");
@@ -720,15 +637,11 @@ function attachRealtime() {
 
     const membersByGroup = {};
     for (const gm of membs || []) {
-      if (!membersByGroup[gm.group_id]) {
-        membersByGroup[gm.group_id] = [];
-      }
-      const nodeInfo = (allNodes || []).find(
-        (nd) => nd.slave_mac === gm.slave_mac
-      );
+      if (!membersByGroup[gm.group_id]) membersByGroup[gm.group_id] = [];
+      const nodeInfo = (allNodes || []).find((nd) => nd.slave_mac === gm.slave_mac);
       membersByGroup[gm.group_id].push({
         mac: gm.slave_mac,
-        master_id: nodeInfo?.master_id,
+        master_id: nodeInfo?.master_id || gm.master_id || null,
         friendly_name: nodeInfo?.friendly_name || gm.slave_mac,
         pc_on: !!nodeInfo?.pc_on,
       });
@@ -750,16 +663,10 @@ function attachRealtime() {
   }
 
   async function fullReload() {
-    await Promise.all([
-      refetchDevicesOnly(),
-      refetchNodesOnly(),
-      refetchGroupsOnly(),
-    ]);
+    await Promise.all([refetchDevicesOnly(), refetchNodesOnly(), refetchGroupsOnly()]);
   }
 
   /* ---------- COMMANDES / ACTIONS ---------- */
-
-  // Master rename
   async function renameMaster(id) {
     const newName = window.prompt("Nouveau nom du master ?", "");
     if (!newName) return;
@@ -772,7 +679,6 @@ function attachRealtime() {
     }
   }
 
-  // Master delete
   async function deleteMaster(id) {
     if (!window.confirm(`Supprimer le master ${id} ?`)) return;
 
@@ -800,7 +706,6 @@ function attachRealtime() {
     await fullReload();
   }
 
-  // Slave rename
   async function doRenameSlave(masterId, mac, newName) {
     const { error } = await sb
       .from("nodes")
@@ -816,14 +721,9 @@ function attachRealtime() {
     }
   }
 
-  // Envoi d'une commande master/slave
   async function sendCmd(masterId, targetMac, action, payload = {}) {
-    // effet visuel "queue" → "send"
     if (targetMac) {
-      setSlavePhases((old) => ({
-        ...old,
-        [targetMac]: "queue",
-      }));
+      setSlavePhases((old) => ({ ...old, [targetMac]: "queue" }));
     }
 
     const { error } = await sb.from("commands").insert({
@@ -835,47 +735,26 @@ function attachRealtime() {
 
     if (error) {
       addLog("cmd err: " + error.message);
-      if (targetMac) {
-        setSlavePhases((old) => ({
-          ...old,
-          [targetMac]: "idle",
-        }));
-      }
+      if (targetMac) setSlavePhases((old) => ({ ...old, [targetMac]: "idle" }));
     } else {
-      addLog(
-        `[cmd] ${action} → ${masterId}${targetMac ? " ▶ " + targetMac : ""}`
-      );
-      if (targetMac) {
-        setSlavePhases((old) => ({
-          ...old,
-          [targetMac]: "send",
-        }));
-      }
+      addLog(`[cmd] ${action} → ${masterId}${targetMac ? " ▶ " + targetMac : ""}`);
+      if (targetMac) setSlavePhases((old) => ({ ...old, [targetMac]: "send" }));
     }
   }
 
-  // Commandes groupées
   async function sendGroupCmd(groupId, actionKey) {
     const g = groupsData.find((x) => x.id === groupId);
     if (!g) return;
 
     for (const m of g.members) {
-      if (!m.master_id) continue; // sécurité
+      if (!m.master_id) continue;
 
       switch (actionKey) {
         case "SLV_IO_ON":
-          await sendCmd(m.master_id, m.mac, "SLV_IO", {
-            pin: DEFAULT_IO_PIN,
-            mode: "OUT",
-            value: 1,
-          });
+          await sendCmd(m.master_id, m.mac, "SLV_IO", { pin: DEFAULT_IO_PIN, mode: "OUT", value: 1 });
           break;
         case "SLV_IO_OFF":
-          await sendCmd(m.master_id, m.mac, "SLV_IO", {
-            pin: DEFAULT_IO_PIN,
-            mode: "OUT",
-            value: 0,
-          });
+          await sendCmd(m.master_id, m.mac, "SLV_IO", { pin: DEFAULT_IO_PIN, mode: "OUT", value: 0 });
           break;
         case "RESET":
           await sendCmd(m.master_id, m.mac, "SLV_RESET", {});
@@ -884,9 +763,7 @@ function attachRealtime() {
           await sendCmd(m.master_id, m.mac, "SLV_FORCE_OFF", {});
           break;
         case "SLV_HARD_RESET":
-          await sendCmd(m.master_id, m.mac, "SLV_HARD_RESET", {
-            ms: 3000,
-          });
+          await sendCmd(m.master_id, m.mac, "SLV_HARD_RESET", { ms: 3000 });
           break;
         default:
           break;
@@ -894,7 +771,6 @@ function attachRealtime() {
     }
   }
 
-  // Renommer un groupe
   async function renameGroup(id) {
     const newName = window.prompt("Nouveau nom du groupe ?", "");
     if (!newName) return;
@@ -907,19 +783,13 @@ function attachRealtime() {
     }
   }
 
-  // Supprimer un groupe
   async function deleteGroup(id) {
     if (!window.confirm("Supprimer ce groupe ?")) return;
-    // 1. purge membres
-    const { error: e1 } = await sb
-      .from("group_members")
-      .delete()
-      .eq("group_id", id);
+    const { error: e1 } = await sb.from("group_members").delete().eq("group_id", id);
     if (e1) {
       window.alert("Erreur suppr membres groupe: " + e1.message);
       return;
     }
-    // 2. suppr le groupe
     const { error: e2 } = await sb.from("groups").delete().eq("id", id);
     if (e2) {
       window.alert("Erreur suppr groupe: " + e2.message);
@@ -929,7 +799,6 @@ function attachRealtime() {
     await refetchGroupsOnly();
   }
 
-  // +MASTER = récupérer un pair-code
   async function askAddMaster() {
     const { data: sessionRes } = await sb.auth.getSession();
     const token = sessionRes?.session?.access_token;
@@ -954,12 +823,10 @@ function attachRealtime() {
     const { code, expires_at } = await r.json();
     const end = new Date(expires_at).getTime();
     const ttlSec = Math.floor((end - Date.now()) / 1000);
-    window.alert(
-      `Code: ${String(code).padStart(6, "0")} (expire dans ~${ttlSec}s)\nSaisis ce code dans le portail Wi-Fi du MASTER.`
-    );
+    window.alert(`Code: ${String(code).padStart(6, "0")} (expire dans ~${ttlSec}s)
+Saisis ce code dans le portail Wi-Fi du MASTER.`);
   }
 
-  // +Groupe
   async function askAddGroup() {
     const gname = window.prompt("Nom du nouveau groupe ?", "");
     if (!gname) return;
@@ -976,44 +843,26 @@ function attachRealtime() {
     await refetchGroupsOnly();
   }
 
-  // renommer le compte (affichage header côté UI uniquement pour l'instant)
-// renommer le compte (affichage header uniquement côté UI pour l'instant)
-function renameAccountLabel() {
-  const newLabel = window.prompt("Nom du compte ?", accountName || (user?.email || ""));
-  if (!newLabel) return;
-  setAccountName(newLabel);
-  addLog(`Compte nommé : ${newLabel}`);
-}
-
-  // Logout / Login
-  function handleLogout() {
-    sb.auth.signOut();
-  }
-  function handleLogin() {
-    sb.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: location.href,
-        queryParams: { prompt: "select_account" },
-      },
-    });
+  function renameAccountLabel() {
+    const newLabel = window.prompt("Nom du compte ?", accountName || (user?.email || ""));
+    if (!newLabel) return;
+    setAccountName(newLabel);
+    addLog(`Compte nommé : ${newLabel}`);
   }
 
-  /* ---------- Modales ouvr/ferm ---------- */
+  // Modales open/close
   function openSlaveInfo(masterId, mac) {
     setSlaveInfoOpen({ open: true, masterId, mac });
   }
   function closeSlaveInfo() {
     setSlaveInfoOpen({ open: false, masterId: "", mac: "" });
   }
-
   function openGroupOnListModal(groupId) {
     setGroupOnListOpen({ open: true, groupId });
   }
   function closeGroupOnListModal() {
     setGroupOnListOpen({ open: false, groupId: "" });
   }
-
   function openGroupMembersModal(groupId) {
     setGroupMembersOpen({ open: true, groupId });
   }
@@ -1021,72 +870,52 @@ function renameAccountLabel() {
     setGroupMembersOpen({ open: false, groupId: "" });
   }
 
-useEffect(() => {
-  let isMounted = true;
+  // Pré-cocher uniquement à l'ouverture (évite d’écraser pendant édition)
+  useEffect(() => {
+    if (!groupMembersOpen.open) return;
+    const g = groupsData.find((gg) => gg.id === groupMembersOpen.groupId);
+    if (!g) return;
+    const initialMap = {};
+    for (const m of g.members || []) initialMap[m.mac] = true;
+    setEditMembersChecked(initialMap);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupMembersOpen.open]);
 
-  async function initSessionOnce() {
-    // 1. Récupère la session existante au démarrage
-    const { data } = await sb.auth.getSession();
-    const sess = data.session;
-
-    if (!isMounted) return;
-
-    if (sess?.user) {
-      setUser(sess.user);
-      setAuthReady(true);
-
-      // on ne recharge les données / realtime
-      // QUE si on est vraiment loggé au début
-      await fullReload();
-      attachRealtime();
-    } else {
-      setUser(null);
-      setAuthReady(true);
-    }
+  function toggleCheckMac(mac) {
+    setEditMembersChecked((old) => ({ ...old, [mac]: !old[mac] }));
   }
 
-  // écoute les changements d'auth
-  const { data: sub } = sb.auth.onAuthStateChange(
-    async (event, session) => {
-      if (!isMounted) return;
+  async function saveGroupMembers() {
+    const gid = groupMembersOpen.groupId;
+    if (!gid) return;
 
-      if (event === "SIGNED_IN") {
-        // nouvel utilisateur loggé (ex: tu viens de cliquer Google)
-        setUser(session?.user || null);
-        // on recharge les données une bonne fois
-        await fullReload();
-        attachRealtime();
-      } else if (event === "SIGNED_OUT") {
-        // déco volontaire
-        setUser(null);
-        // on vide l'état UI lié aux données
-        setDevices([]);
-        setNodesByMaster({});
-        setGroupsData([]);
-        setSlavePhases({});
-        cleanupRealtime();
-      } else if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
-        // session toujours valide, juste rafraîchie
-        // => on met à jour user pour l'UI (email, etc.)
-        setUser(session?.user || null);
-        // MAIS on ne touche pas au realtime, ni au state courant.
-      }
+    // { MAC -> master_id }
+    const macToMaster = {};
+    for (const s of allSlavesFlat) macToMaster[s.mac] = s.master_id;
 
-      // authReady doit passer à true dans tous les cas
-      setAuthReady(true);
+    const { error: delErr } = await sb.from("group_members").delete().eq("group_id", gid);
+    if (delErr) {
+      window.alert("Erreur clear membres: " + delErr.message);
+      return;
     }
-  );
 
-  // init au mount
-  initSessionOnce();
+    const rows = Object.entries(editMembersChecked)
+      .filter(([, ok]) => ok)
+      .map(([mac]) => ({ group_id: gid, slave_mac: mac, master_id: macToMaster[mac] || null }))
+      .filter((r) => r.master_id);
 
-  return () => {
-    isMounted = false;
-    sub?.subscription?.unsubscribe();
-    cleanupRealtime();
-  };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+    if (rows.length) {
+      const { error: insErr } = await sb.from("group_members").insert(rows);
+      if (insErr) {
+        window.alert("Erreur insert membres: " + insErr.message);
+        return;
+      }
+    }
+
+    addLog(`Membres groupe ${gid} mis à jour.`);
+    closeGroupMembersModal();
+    await refetchGroupsOnly();
+  }
 
   // infos courantes pour les modales
   const currentSlaveInfo = useMemo(() => {
@@ -1098,33 +927,29 @@ useEffect(() => {
 
   const currentGroupForOnList = useMemo(() => {
     if (!groupOnListOpen.open) return null;
-    return (
-      groupsData.find((g) => g.id === groupOnListOpen.groupId) || null
-    );
+    return groupsData.find((g) => g.id === groupOnListOpen.groupId) || null;
   }, [groupOnListOpen, groupsData]);
 
   const currentGroupForMembers = useMemo(() => {
     if (!groupMembersOpen.open) return null;
-    return (
-      groupsData.find((g) => g.id === groupMembersOpen.groupId) || null
-    );
+    return groupsData.find((g) => g.id === groupMembersOpen.groupId) || null;
   }, [groupMembersOpen, groupsData]);
 
   // tous les slaves (pour modale membres)
-const allSlavesFlat = useMemo(() => {
-  const arr = [];
-  for (const mid of Object.keys(nodesByMaster)) {
-    for (const sl of nodesByMaster[mid]) {
-      arr.push({
-        mac: sl.mac,
-        master_id: mid, // << on garde le master_id ici
-        friendly_name: sl.friendly_name,
-        pc_on: sl.pc_on,
-      });
+  const allSlavesFlat = useMemo(() => {
+    const arr = [];
+    for (const mid of Object.keys(nodesByMaster)) {
+      for (const sl of nodesByMaster[mid]) {
+        arr.push({
+          mac: sl.mac,
+          master_id: mid,
+          friendly_name: sl.friendly_name,
+          pc_on: sl.pc_on,
+        });
+      }
     }
-  }
-  return arr;
-}, [nodesByMaster]);
+    return arr;
+  }, [nodesByMaster]);
 
   /* ---------- Sections UI ---------- */
   function renderGroupsSection() {
@@ -1132,15 +957,11 @@ const allSlavesFlat = useMemo(() => {
       <div className="groupsSection">
         <div className="sectionTitleRow">
           <div className="sectionTitle">Groupes</div>
-          <div className="sectionSub">
-            Contrôler plusieurs machines en même temps
-          </div>
+          <div className="sectionSub">Contrôler plusieurs machines en même temps</div>
         </div>
 
         {!groupsData.length ? (
-          <div className="noGroupsNote smallText">
-            Aucun groupe pour l’instant
-          </div>
+          <div className="noGroupsNote smallText">Aucun groupe pour l’instant</div>
         ) : (
           <div className="groupListWrap">
             {groupsData.map((g) => (
@@ -1149,15 +970,9 @@ const allSlavesFlat = useMemo(() => {
                 group={g}
                 onRenameGroup={renameGroup}
                 onDeleteGroup={deleteGroup}
-                onOpenMembersEdit={(id) => {
-                  openGroupMembersModal(id);
-                }}
-                onOpenOnList={(id) => {
-                  openGroupOnListModal(id);
-                }}
-                onGroupCmd={(id, act) => {
-                  sendGroupCmd(id, act);
-                }}
+                onOpenMembersEdit={(id) => openGroupMembersModal(id)}
+                onOpenOnList={(id) => openGroupOnListModal(id)}
+                onGroupCmd={(id, act) => sendGroupCmd(id, act)}
               />
             ))}
           </div>
@@ -1188,24 +1003,15 @@ const allSlavesFlat = useMemo(() => {
               openSlaveInfoFor={openSlaveInfo}
               onSlaveRename={doRenameSlave}
               onSlaveIO={(mid, mac) =>
-                sendCmd(mid, mac, "SLV_IO", {
-                  pin: DEFAULT_IO_PIN,
-                  mode: "OUT",
-                  value: 1,
-                })
+                sendCmd(mid, mac, "SLV_IO", { pin: DEFAULT_IO_PIN, mode: "OUT", value: 1 })
               }
               onSlaveReset={(mid, mac) => sendCmd(mid, mac, "SLV_RESET", {})}
               onSlaveMore={(mid, mac) => {
-                const act = window.prompt(
-                  "Action ?\n1 = HARD OFF\n2 = HARD RESET",
-                  "1"
-                );
+                const act = window.prompt("Action ?\n1 = HARD OFF\n2 = HARD RESET", "1");
                 if (act === "1") {
                   sendCmd(mid, mac, "SLV_FORCE_OFF", {});
                 } else if (act === "2") {
-                  sendCmd(mid, mac, "SLV_HARD_RESET", {
-                    ms: 3000,
-                  });
+                  sendCmd(mid, mac, "SLV_HARD_RESET", { ms: 3000 });
                 }
               }}
               slavePhases={slavePhases}
@@ -1254,36 +1060,37 @@ const allSlavesFlat = useMemo(() => {
     <>
       <style>{STYLES}</style>
 
-<header className="topHeader">
-  <div className="topHeaderInner">
-    <div className="leftBlock">
-      <div className="appTitleRow">
-        <div className="appName">HIZAYA SWITCH</div>
-        <div className="appStatus">Actif</div>
-      </div>
-      <div className="appSubtitle smallText">tableau de contrôle</div>
-    </div>
+      {/* HEADER STICKY */}
+      <header className="topHeader">
+        <div className="topHeaderInner">
+          <div className="leftBlock">
+            <div className="appTitleRow">
+              <div className="appName">HIZAYA SWITCH</div>
+              <div className="appStatus">Actif</div>
+            </div>
+            <div className="appSubtitle smallText">tableau de contrôle</div>
+          </div>
 
-    <div className="rightBlock">
-      <div className="userMail smallText">
-        {isLogged ? (accountName || user.email) : "non connecté"}
-      </div>
-      {isLogged ? (
-        <>
-          <SubtleButton onClick={renameAccountLabel}>Renommer compte</SubtleButton>
-          <SubtleButton onClick={handleLogout}>Déconnexion</SubtleButton>
-          <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
-          <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
-          <SubtleButton onClick={fullReload}>Rafraîchir</SubtleButton>
-        </>
-      ) : (
-        <SubtleButton onClick={handleLogin}>Connexion Google</SubtleButton>
-      )}
-    </div>
-  </div>
-</header>
+          <div className="rightBlock">
+            <div className="userMail smallText">
+              {isLogged ? (accountName || user.email) : "non connecté"}
+            </div>
+            {isLogged ? (
+              <>
+                <SubtleButton onClick={renameAccountLabel}>Renommer compte</SubtleButton>
+                <SubtleButton onClick={handleLogout}>Déconnexion</SubtleButton>
+                <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
+                <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
+                <SubtleButton onClick={fullReload}>Rafraîchir</SubtleButton>
+              </>
+            ) : (
+              <SubtleButton onClick={handleLogin}>Connexion Google</SubtleButton>
+            )}
+          </div>
+        </div>
+      </header>
 
-      {/* CONTENU PAGE (fond photo + cartes alignées) */}
+      {/* CONTENU PAGE */}
       <div className="pageBg">
         <div className="pageContent">
           {renderGroupsSection()}
@@ -1346,6 +1153,7 @@ const STYLES = `
   --online-red:#f87171;
   --modal-bg:rgba(0,0,0,0.45);
 
+  /* pas d'ombres */
   --shadow-card:none;
   --shadow-small:none;
 
@@ -1365,12 +1173,17 @@ html,body,#root{
   font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Ubuntu,sans-serif;
 }
 
-.smallText{ font-size:12px; color:var(--text-soft); }
+.smallText{
+  font-size:12px;
+  color:var(--text-soft);
+}
 
 /* HEADER sticky */
 .topHeader{
   position:sticky;
-  top:0; left:0; right:0;
+  top:0;
+  left:0;
+  right:0;
   z-index:2000;
   backdrop-filter:blur(20px) saturate(140%);
   -webkit-backdrop-filter:blur(20px) saturate(140%);
@@ -1381,15 +1194,46 @@ html,body,#root{
   color:#fff;
 }
 .topHeaderInner{
-  display:flex; justify-content:space-between; align-items:flex-start;
-  flex-wrap:wrap; max-width:1200px; margin:0 auto; row-gap:8px;
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  flex-wrap:wrap;
+  max-width:1200px;
+  margin:0 auto;
+  row-gap:8px;
 }
-.appTitleRow{ display:flex; align-items:baseline; gap:8px; }
-.appName{ font-weight:600; font-size:16px; color:var(--text-main); letter-spacing:.02em; }
-.appStatus{ font-size:12px; color:var(--online-green); font-weight:500; }
-.appSubtitle{ color:var(--text-soft); font-size:12px; }
-.rightBlock{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:flex-end; }
-.userMail{ color:var(--text-dim); margin-right:4px; font-size:12px; }
+.appTitleRow{
+  display:flex;
+  align-items:baseline;
+  gap:8px;
+}
+.appName{
+  font-weight:600;
+  font-size:16px;
+  color:var(--text-main);
+  letter-spacing:.02em;
+}
+.appStatus{
+  font-size:12px;
+  color:var(--online-green);
+  font-weight:500;
+}
+.appSubtitle{
+  color:var(--text-soft);
+  font-size:12px;
+}
+.rightBlock{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  align-items:center;
+  justify-content:flex-end;
+}
+.userMail{
+  color:var(--text-dim);
+  margin-right:4px;
+  font-size:12px;
+}
 
 /* BG full-screen */
 .pageBg{
@@ -1398,216 +1242,626 @@ html,body,#root{
     radial-gradient(circle at 20% 20%, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0) 60%),
     radial-gradient(circle at 80% 30%, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 70%),
     url("https://4kwallpapers.com/images/walls/thumbs_3t/9729.jpg");
-  background-size:cover; background-position:center;
-  padding:24px 16px 80px; position:relative;
+  background-size:cover;
+  background-position:center;
+  padding:24px 16px 80px;
+  position:relative;
 }
-.pageBg::after{ content:""; position:absolute; inset:0; background:rgba(0,0,0,0.28); }
+.pageBg::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:rgba(0,0,0,0.28);
+}
 .pageContent{
-  position:relative; z-index:10; max-width:1200px; margin:0 auto;
-  display:flex; flex-direction:column; gap:24px; padding-bottom:96px; color:var(--text-main);
+  position:relative;
+  z-index:10;
+  max-width:1200px;
+  margin:0 auto;
+  display:flex;
+  flex-direction:column;
+  gap:24px;
+  padding-bottom:96px;
+  color:var(--text-main);
 }
 
-/* Sections */
-.groupsSection,.mastersSection,.journalSection{
+/* Sections : Groupes / Masters / Journal */
+.groupsSection,
+.mastersSection,
+.journalSection{
   background:var(--glass-bg);
   border:1px solid var(--glass-border);
   border-radius:16px;
   box-shadow:var(--shadow-card);
   backdrop-filter:blur(18px) saturate(140%);
   -webkit-backdrop-filter:blur(18px) saturate(140%);
-  padding:16px; color:var(--text-main);
+  padding:16px;
+  color:var(--text-main);
 }
-.sectionTitleRow{ display:flex; flex-direction:column; margin-bottom:12px; }
-.sectionTitle{ color:var(--text-main); font-weight:600; font-size:14px; }
-.sectionSub{ color:var(--text-soft); font-size:12px; }
-.noGroupsNote{ color:var(--text-soft); font-size:12px; }
+
+/* Titres de section */
+.sectionTitleRow{
+  display:flex;
+  flex-direction:column;
+  margin-bottom:12px;
+}
+.sectionTitle{
+  color:var(--text-main);
+  font-weight:600;
+  font-size:14px;
+}
+.sectionSub{
+  color:var(--text-soft);
+  font-size:12px;
+}
+.noGroupsNote{
+  color:var(--text-soft);
+  font-size:12px;
+}
 
 /* GROUPS */
-.groupListWrap{ display:flex; flex-wrap:wrap; gap:16px; }
+.groupListWrap{
+  display:flex;
+  flex-wrap:wrap;
+  gap:16px;
+}
 .groupCard{
-  min-width:260px; flex:1 1 260px;
+  min-width:260px;
+  flex:1 1 260px;
   background:rgba(255,255,255,0.07);
   border:1px solid rgba(255,255,255,0.16);
-  border-radius:16px; padding:16px; color:var(--text-main);
-  position:relative; box-shadow:var(--shadow-card);
+  border-radius:16px;
+  padding:16px;
+  color:var(--text-main);
+  position:relative;
+  box-shadow:var(--shadow-card);
   backdrop-filter:blur(18px) saturate(140%);
   -webkit-backdrop-filter:blur(18px) saturate(140%);
 }
-.groupHeadRow{ display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; margin-bottom:12px; }
-.groupMainInfo{ flex:1; min-width:150px; }
-.groupNameLine{ font-size:15px; font-weight:600; color:var(--text-main); letter-spacing:.02em; }
-.groupSubLine{ font-size:12px; color:var(--text-dim); margin-top:4px; display:flex; flex-wrap:wrap; align-items:center; }
-.groupMiniActions{ display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
-.groupCmdRow{ display:flex; flex-wrap:wrap; gap:8px; font-size:12px; }
+.groupHeadRow{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:12px;
+}
+.groupMainInfo{
+  flex:1;
+  min-width:150px;
+}
+.groupNameLine{
+  font-size:15px;
+  font-weight:600;
+  color:var(--text-main);
+  letter-spacing:.02em;
+}
+.groupSubLine{
+  font-size:12px;
+  color:var(--text-dim);
+  margin-top:4px;
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+}
+.groupMiniActions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  justify-content:flex-end;
+}
+.groupCmdRow{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  font-size:12px;
+}
 
-/* MASTERS */
-.mastersSection > .sectionTitleRow + .noGroupsNote{ margin-bottom:8px; }
+/* Masters */
+.mastersSection > .sectionTitleRow + .noGroupsNote{
+  margin-bottom:8px;
+}
 .masterCard{
   background:rgba(255,255,255,0.07);
   border:1px solid rgba(255,255,255,0.16);
-  border-radius:16px; padding:16px; margin-bottom:16px;
-  color:var(--text-main); box-shadow:var(--shadow-card);
+  border-radius:16px;
+  padding:16px;
+  margin-bottom:16px;
+  color:var(--text-main);
+  box-shadow:var(--shadow-card);
   backdrop-filter:blur(18px) saturate(140%);
   -webkit-backdrop-filter:blur(18px) saturate(140%);
 }
-.masterTopRow{ display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; margin-bottom:16px; }
-.masterTitleLeft{ min-width:200px; flex:1; }
-.masterNameLine{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:6px; }
-.masterCardTitle{ font-size:15px; font-weight:600; color:var(--text-main); letter-spacing:.02em; }
-.onlineBadge{ font-size:11px; font-weight:500; border-radius:9999px; padding:2px 8px; line-height:1.2; border:1px solid rgba(255,255,255,0.18); }
-.onlineYes{ color:var(--online-green); background:rgba(16,185,129,0.10); border-color:rgba(16,185,129,0.32); }
-.onlineNo{ color:var(--online-red); background:rgba(239,68,68,0.10); border-color:rgba(239,68,68,0.32); }
-.masterMeta{ display:flex; flex-wrap:wrap; gap:6px; font-size:12px; line-height:1.3; color:var(--text-soft); }
-.kv .k{ color:var(--text-soft); font-weight:500; font-size:12px; }
-.kv .v{ color:var(--text-main); font-size:12px; }
-.masterActionsRow{ display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; align-items:flex-start; }
-
-/* Slaves grid */
-.slavesWrap{ display:flex; justify-content:center; }
-.slavesGrid{
-  width:100%; max-width:1000px;
-  display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-  gap:16px; justify-items:center;
+.masterTopRow{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:16px;
+}
+.masterTitleLeft{
+  min-width:200px;
+  flex:1;
+}
+.masterNameLine{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:8px;
+  margin-bottom:6px;
+}
+.masterCardTitle{
+  font-size:15px;
+  font-weight:600;
+  color:var(--text-main);
+  letter-spacing:.02em;
+}
+.onlineBadge{
+  font-size:11px;
+  font-weight:500;
+  border-radius:9999px;
+  padding:2px 8px;
+  line-height:1.2;
+  border:1px solid rgba(255,255,255,0.18);
+}
+.onlineYes{
+  color:var(--online-green);
+  background:rgba(16,185,129,0.10);
+  border-color:rgba(16,185,129,0.32);
+}
+.onlineNo{
+  color:var(--online-red);
+  background:rgba(239,68,68,0.10);
+  border-color:rgba(239,68,68,0.32);
+}
+.masterMeta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  font-size:12px;
+  line-height:1.3;
+  color:var(--text-soft);
+}
+.kv .k{
+  color:var(--text-soft);
+  font-weight:500;
+  font-size:12px;
+}
+.kv .v{
+  color:var(--text-main);
+  font-size:12px;
+}
+.masterActionsRow{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  justify-content:flex-end;
+  align-items:flex-start;
 }
 
-/* Slave Card */
+/* grille de slaves centrée */
+.slavesWrap{
+  display:flex;
+  justify-content:center;
+}
+.slavesGrid{
+  width:100%;
+  max-width:1000px;
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:16px;
+  justify-items:center;
+}
+
+/* Slave card */
 .slaveCard{
-  position:relative; width:100%; max-width:200px; min-width:160px;
+  position:relative;
+  width:100%;
+  max-width:200px;
+  min-width:160px;
   background:rgba(255,255,255,0.09);
   border:1px solid rgba(255,255,255,0.20);
-  border-radius:20px; box-shadow:var(--shadow-card);
+  border-radius:20px;
+  box-shadow:var(--shadow-card);
   backdrop-filter:blur(18px) saturate(140%);
   -webkit-backdrop-filter:blur(18px) saturate(140%);
-  padding:18px 14px 14px; display:flex; flex-direction:column; align-items:center; text-align:center; color:var(--text-main);
+  padding:18px 14px 14px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  text-align:center;
+  color:var(--text-main);
 }
 .infoChip{
-  position:absolute; top:10px; right:10px; width:20px; height:20px;
-  font-size:12px; line-height:20px; border-radius:9999px;
-  background:var(--bubble-bg); color:var(--text-dim); border:1px solid var(--bubble-border);
-  text-align:center; cursor:pointer; user-select:none; transition:all var(--transition-fast); box-shadow:var(--shadow-small);
+  position:absolute;
+  top:10px;
+  right:10px;
+  width:20px;
+  height:20px;
+  font-size:12px;
+  line-height:20px;
+  border-radius:9999px;
+  background:var(--bubble-bg);
+  color:var(--text-dim);
+  border:1px solid var(--bubble-border);
+  text-align:center;
+  cursor:pointer;
+  user-select:none;
+  transition:all var(--transition-fast);
+  box-shadow:var(--shadow-small);
 }
-.infoChip:hover{ background:var(--bubble-bg-hover); color:var(--text-main); }
+.infoChip:hover{
+  background:var(--bubble-bg-hover);
+  color:var(--text-main);
+}
 .slaveNameMain{
-  font-size:16px; font-weight:600; color:var(--text-main);
-  margin-top:26px; margin-bottom:6px; min-height:2.6em;
-  display:flex; align-items:flex-end; justify-content:center; text-align:center; line-height:1.2; letter-spacing:.02em;
+  font-size:16px;
+  font-weight:600;
+  color:var(--text-main);
+  margin-top:26px;
+  margin-bottom:6px;
+  min-height:2.6em;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  text-align:center;
+  line-height:1.2;
+  letter-spacing:.02em;
 }
-.slaveSub{ font-size:12px; line-height:1.3; color:var(--text-soft); margin-bottom:10px; min-height:1.4em; letter-spacing:.02em; }
+.slaveSub{
+  font-size:12px;
+  line-height:1.3;
+  color:var(--text-soft);
+  margin-bottom:10px;
+  min-height:1.4em;
+  letter-spacing:.02em;
+}
 
 /* Action bar */
+.actionBarBlock{
+  width:100%;
+  margin-bottom:12px;
+}
+.actionStatusText{
+  text-align:center;
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:.02em;
+  color:#fff;
+  margin-bottom:6px;
+  text-transform:uppercase;
+}
 .actionBarWrapper{
-  width:100%; height:4px; border-radius:999px; background:rgba(0,0,0,0.4);
-  border:1px solid rgba(255,255,255,0.12); position:relative; overflow:hidden; margin-bottom:12px; box-shadow:var(--shadow-small);
+  width:100%;
+  height:4px;
+  border-radius:999px;
+  background:rgba(0,0,0,0.4);
+  border:1px solid rgba(255,255,255,0.12);
+  position:relative;
+  overflow:hidden;
+  box-shadow:var(--shadow-small);
 }
-.actionBarFill{ position:absolute; top:0; left:0; bottom:0; background:#000; }
-.queueAnim{ width:30%; animation:pulseBar 1.2s infinite; }
-.sendAnim{ width:100%; animation:fillBar 1s forwards; }
-.ackedFill{ width:100%; background:#000; }
-.actionBarAck{
-  position:absolute; right:6px; top:-18px; font-size:10px; font-weight:600; color:#000;
-  background:#fff; border-radius:6px; padding:2px 4px; box-shadow:var(--shadow-small);
+.actionBarFill{
+  position:absolute;
+  top:0;
+  left:0;
+  bottom:0;
+  background:#000;
 }
-@keyframes pulseBar{ 0%{opacity:0.4;} 50%{opacity:1;} 100%{opacity:0.4;} }
-@keyframes fillBar{ 0%{width:0%;} 100%{width:100%;} }
+.queueAnim{
+  width:30%;
+  animation:pulseBar 1.2s infinite;
+}
+.sendAnim{
+  width:100%;
+  animation:fillBar 1s forwards;
+}
+.ackedFill{
+  width:100%;
+  background:#000;
+}
+@keyframes pulseBar{
+  0%{opacity:0.4;}
+  50%{opacity:1;}
+  100%{opacity:0.4;}
+}
+@keyframes fillBar{
+  0%{width:0%;}
+  100%{width:100%;}
+}
 
-/* Buttons */
-.slaveBtnsRow{ display:flex; flex-wrap:nowrap; align-items:flex-end; justify-content:center; gap:12px; margin-top:auto; }
-.circleBtn{
-  width:44px; height:44px; border-radius:9999px; background:var(--bubble-bg);
-  border:1px solid var(--bubble-border); box-shadow:var(--shadow-small);
-  color:var(--text-main); display:flex; align-items:center; justify-content:center; cursor:pointer;
-  transition:all var(--transition-fast); padding:0;
+/* Boutons "capsule" & ronds */
+.slaveBtnsRow{
+  display:flex;
+  flex-wrap:nowrap;
+  align-items:flex-end;
+  justify-content:center;
+  gap:12px;
+  margin-top:auto;
 }
-.circleBtn:hover{ background:var(--bubble-bg-hover); }
-.circleBtn:active{ transform:scale(.96); }
-.circleBtn.moreBtn{ font-weight:500; }
-.circleBtn > span, .circleBtnInner{ font-size:16px; line-height:1; display:flex; align-items:center; justify-content:center; margin-top:0; }
+.circleBtn{
+  width:44px;
+  height:44px;
+  border-radius:9999px;
+  background:var(--bubble-bg);
+  border:1px solid var(--bubble-border);
+  box-shadow:var(--shadow-small);
+  color:var(--text-main);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  transition:all var(--transition-fast);
+  padding:0;
+}
+.circleBtn:hover{
+  background:var(--bubble-bg-hover);
+}
+.circleBtn:active{
+  transform:scale(.96);
+}
+.circleBtn.moreBtn{
+  font-weight:500;
+}
+.circleBtn > span,
+.circleBtnInner{
+  font-size:16px;
+  line-height:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  margin-top:0;
+}
 
 /* Journal */
 .journalSection .logBox{
-  width:100%; min-height:120px; max-height:200px;
-  background:rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.15);
-  border-radius:12px; padding:12px; font-size:12px; line-height:1.4; color:var(--text-dim);
-  white-space:pre-wrap; overflow:auto; box-shadow:none;
+  width:100%;
+  min-height:120px;
+  max-height:200px;
+  background:rgba(0,0,0,0.45);
+  border:1px solid rgba(255,255,255,0.15);
+  border-radius:12px;
+  padding:12px;
+  font-size:12px;
+  line-height:1.4;
+  color:var(--text-dim);
+  white-space:pre-wrap;
+  overflow:auto;
+  box-shadow:none;
 }
 
 /* Capsule buttons */
 .subtleBtn{
-  appearance:none; background:var(--bubble-bg); border:1px solid var(--bubble-border); border-radius:9999px;
-  font-size:12px; line-height:1.2; color:var(--text-main); cursor:pointer; padding:6px 10px; min-height:28px;
-  display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow-small); transition:all var(--transition-fast);
-}
-.subtleBtn:hover{ background:var(--bubble-bg-hover); }
-.subtleBtn:active{ transform:scale(.97); }
-
-.chipBtn{
-  appearance:none; background:var(--bubble-bg); border:1px solid var(--bubble-border); border-radius:9999px;
-  font-size:11px; line-height:1.2; color:var(--text-main); cursor:pointer; padding:4px 8px; box-shadow:var(--shadow-small);
+  appearance:none;
+  background:var(--bubble-bg);
+  border:1px solid var(--bubble-border);
+  border-radius:9999px;
+  font-size:12px;
+  line-height:1.2;
+  color:var(--text-main);
+  cursor:pointer;
+  padding:6px 10px;
+  min-height:28px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:var(--shadow-small);
   transition:all var(--transition-fast);
 }
-.chipBtn:hover{ background:var(--bubble-bg-hover); }
-.chipBtn:active{ transform:scale(.97); }
+.subtleBtn:hover{
+  background:var(--bubble-bg-hover);
+}
+.subtleBtn:active{
+  transform:scale(.97);
+}
 
-/* Modals */
+.chipBtn{
+  appearance:none;
+  background:var(--bubble-bg);
+  border:1px solid var(--bubble-border);
+  border-radius:9999px;
+  font-size:11px;
+  line-height:1.2;
+  color:var(--text-main);
+  cursor:pointer;
+  padding:4px 8px;
+  box-shadow:var(--shadow-small);
+  transition:all var(--transition-fast);
+}
+.chipBtn:hover{
+  background:var(--bubble-bg-hover);
+}
+.chipBtn:active{
+  transform:scale(.97);
+}
+
+/* MODALES */
 .modalOverlay{
-  position:fixed; inset:0; background:var(--modal-bg);
-  backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
-  z-index:3000; display:flex; align-items:center; justify-content:center; padding:16px;
+  position:fixed;
+  inset:0;
+  background:var(--modal-bg);
+  backdrop-filter:blur(4px);
+  -webkit-backdrop-filter:blur(4px);
+  z-index:3000;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:16px;
 }
 .modalCard{
-  width:100%; max-width:360px; background:rgba(20,20,20,0.8);
-  border:1px solid rgba(255,255,255,0.16); border-radius:16px; box-shadow:var(--shadow-card);
-  color:var(--text-main); backdrop-filter:blur(18px) saturate(140%); -webkit-backdrop-filter:blur(18px) saturate(140%);
-  display:flex; flex-direction:column; padding:16px;
+  width:100%;
+  max-width:360px;
+  background:rgba(20,20,20,0.8);
+  border:1px solid rgba(255,255,255,0.16);
+  border-radius:16px;
+  box-shadow:var(--shadow-card);
+  color:var(--text-main);
+  backdrop-filter:blur(18px) saturate(140%);
+  -webkit-backdrop-filter:blur(18px) saturate(140%);
+  display:flex;
+  flex-direction:column;
+  padding:16px;
 }
-.modalHeader{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
-.modalTitle{ font-size:14px; font-weight:600; color:var(--text-main); }
+.modalHeader{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  margin-bottom:12px;
+}
+.modalTitle{
+  font-size:14px;
+  font-weight:600;
+  color:var(--text-main);
+}
 .smallCloseBtn{
-  appearance:none; background:var(--bubble-bg); border:1px solid var(--bubble-border); border-radius:8px; color:var(--text-main);
-  cursor:pointer; line-height:1; font-size:12px; padding:4px 6px; min-width:28px; text-align:center; box-shadow:var(--shadow-small);
+  appearance:none;
+  background:var(--bubble-bg);
+  border:1px solid var(--bubble-border);
+  border-radius:8px;
+  color:var(--text-main);
+  cursor:pointer;
+  line-height:1;
+  font-size:12px;
+  padding:4px 6px;
+  min-width:28px;
+  text-align:center;
+  box-shadow:var(--shadow-small);
 }
-.smallCloseBtn:hover{ background:var(--bubble-bg-hover); }
-.smallCloseBtn:active{ transform:scale(.97); }
-.modalBody{ font-size:13px; display:flex; flex-direction:column; gap:16px; color:var(--text-main); }
-.modalSection{ display:flex; flex-direction:column; gap:8px; }
-.modalLabel{ font-size:12px; color:var(--text-soft); }
+.smallCloseBtn:hover{
+  background:var(--bubble-bg-hover);
+}
+.smallCloseBtn:active{
+  transform:scale(.97);
+}
+.modalBody{
+  font-size:13px;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  color:var(--text-main);
+}
+.modalSection{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.modalLabel{
+  font-size:12px;
+  color:var(--text-soft);
+}
 .modalInput{
-  width:100%; background:rgba(0,0,0,0.6); border:1px solid rgba(255,255,255,0.2); color:var(--text-main);
-  font-size:13px; border-radius:8px; padding:8px; outline:none;
+  width:100%;
+  background:rgba(0,0,0,0.6);
+  border:1px solid rgba(255,255,255,0.2);
+  color:var(--text-main);
+  font-size:13px;
+  border-radius:8px;
+  padding:8px;
+  outline:none;
 }
-.modalInput:focus{ border-color:rgba(255,255,255,0.4); }
+.modalInput:focus{
+  border-color:rgba(255,255,255,0.4);
+}
 .modalInfoRow{
-  display:flex; justify-content:space-between; font-size:13px; line-height:1.4; color:var(--text-main);
-  background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.15); border-radius:8px; padding:6px 8px;
+  display:flex;
+  justify-content:space-between;
+  font-size:13px;
+  line-height:1.4;
+  color:var(--text-main);
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.15);
+  border-radius:8px;
+  padding:6px 8px;
 }
-.modalInfoKey{ color:var(--text-soft); margin-right:8px; }
-.modalInfoVal{ color:var(--text-main); font-weight:500; text-align:right; word-break:break-all; }
-.modalEmpty{ font-size:12px; color:var(--text-soft); text-align:center; padding:12px; }
+.modalInfoKey{
+  color:var(--text-soft);
+  margin-right:8px;
+}
+.modalInfoVal{
+  color:var(--text-main);
+  font-weight:500;
+  text-align:right;
+  word-break:break-all;
+}
+.modalEmpty{
+  font-size:12px;
+  color:var(--text-soft);
+  text-align:center;
+  padding:12px;
+}
 .checkRow{
-  display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:13px; line-height:1.4;
-  padding:6px 8px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.15);
-  border-radius:8px; color:var(--text-main); margin-bottom:6px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  font-size:13px;
+  line-height:1.4;
+  padding:6px 8px;
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.15);
+  border-radius:8px;
+  color:var(--text-main);
+  margin-bottom:6px;
 }
-.checkName{ flex:1; margin-left:6px; color:var(--text-main); font-weight:500; }
-.checkState{ color:var(--text-soft); font-size:12px; }
+.checkName{
+  flex:1;
+  margin-left:6px;
+  color:var(--text-main);
+  font-weight:500;
+}
+.checkState{
+  color:var(--text-soft);
+  font-size:12px;
+}
 
 /* Scrollbars */
-.logBox::-webkit-scrollbar,.modalBody::-webkit-scrollbar,.pageContent::-webkit-scrollbar{ width:6px; height:6px; }
-.logBox::-webkit-scrollbar-track,.modalBody::-webkit-scrollbar-track,.pageContent::-webkit-scrollbar-track{
-  background:rgba(255,255,255,0.05); border-radius:999px;
+.logBox::-webkit-scrollbar,
+.modalBody::-webkit-scrollbar,
+.pageContent::-webkit-scrollbar{
+  width:6px;
+  height:6px;
 }
-.logBox::-webkit-scrollbar-thumb,.modalBody::-webkit-scrollbar-thumb,.pageContent::-webkit-scrollbar-thumb{
-  background:rgba(255,255,255,0.2); border-radius:999px;
+.logBox::-webkit-scrollbar-track,
+.modalBody::-webkit-scrollbar-track,
+.pageContent::-webkit-scrollbar-track{
+  background:rgba(255,255,255,0.05);
+  border-radius:999px;
+}
+.logBox::-webkit-scrollbar-thumb,
+.modalBody::-webkit-scrollbar-thumb,
+.pageContent::-webkit-scrollbar-thumb{
+  background:rgba(255,255,255,0.2);
+  border-radius:999px;
 }
 
-/* Responsive */
+/* responsive petits écrans */
 @media(max-width:600px){
-  .topHeaderInner{ flex-direction:column; align-items:flex-start; }
-  .rightBlock{ width:100%; justify-content:flex-start; flex-wrap:wrap; }
-  .groupCard{ flex:1 1 100%; min-width:0; }
-  .slavesGrid{ grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; }
-  .slaveCard{ max-width:190px; min-width:160px; }
-  .circleBtn{ width:42px; height:42px; }
-  .circleBtnInner{ font-size:15px; }
+  .topHeaderInner{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+  .rightBlock{
+    width:100%;
+    justify-content:flex-start;
+    flex-wrap:wrap;
+  }
+  .groupCard{
+    flex:1 1 100%;
+    min-width:0;
+  }
+  .slavesGrid{
+    grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+    gap:12px;
+  }
+  .slaveCard{
+    max-width:190px;
+    min-width:160px;
+  }
+  .circleBtn{
+    width:42px;
+    height:42px;
+  }
+  .circleBtnInner{
+    font-size:15px;
+  }
 }
 `;
