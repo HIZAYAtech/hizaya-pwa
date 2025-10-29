@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 
+// Empêche d'attacher le realtime plusieurs fois dans le même onglet
+const realtimeAttached = useRef(false);
+
 /* =========================================
    CONFIG SUPABASE
    ========================================= */
@@ -542,105 +545,120 @@ export default function App() {
   const chCmds = useRef(null);
   const chGroups = useRef(null);
 
-  function cleanupRealtime() {
-    if (chDevices.current) sb.removeChannel(chDevices.current);
-    if (chNodes.current) sb.removeChannel(chNodes.current);
-    if (chCmds.current) sb.removeChannel(chCmds.current);
-    if (chGroups.current) sb.removeChannel(chGroups.current);
-    chDevices.current = chNodes.current = chCmds.current = chGroups.current =
-      null;
+function cleanupRealtime() {
+  if (chDevices.current) sb.removeChannel(chDevices.current);
+  if (chNodes.current)   sb.removeChannel(chNodes.current);
+  if (chCmds.current)    sb.removeChannel(chCmds.current);
+  if (chGroups.current)  sb.removeChannel(chGroups.current);
+
+  chDevices.current = null;
+  chNodes.current   = null;
+  chCmds.current    = null;
+  chGroups.current  = null;
+
+  realtimeAttached.current = false;
+}
+
+function attachRealtime() {
+  // si déjà attaché dans cet onglet => on ne refait rien
+  if (realtimeAttached.current) {
+    return;
   }
 
-  function attachRealtime() {
-    cleanupRealtime();
-    // devices
-    chDevices.current = sb
-      .channel("rt:devices")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "devices" },
-        () => {
-          addLog("[RT] devices changed");
-          refetchDevicesOnly();
-        }
-      )
-      .subscribe();
+  cleanupRealtime(); // au cas où, on part propre
 
-    // nodes
-    chNodes.current = sb
-      .channel("rt:nodes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "nodes" },
-        () => {
-          addLog("[RT] nodes changed");
-          refetchNodesOnly();
-          refetchGroupsOnly(); // groupes utilisent slaves
-        }
-      )
-      .subscribe();
+  // devices
+  chDevices.current = sb
+    .channel("rt:devices")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "devices" },
+      () => {
+        addLog("[RT] devices changed");
+        refetchDevicesOnly();
+      }
+    )
+    .subscribe();
 
-    // commands
-    chCmds.current = sb
-      .channel("rt:commands")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "commands" },
-        (payload) => {
-          const row = payload.new;
-          if (row && row.target_mac) {
-            if (row.status === "acked") {
-              // barre -> acked -> puis retour idle
-              setSlavePhases((old) => ({
-                ...old,
-                [row.target_mac]: "acked",
+  // nodes
+  chNodes.current = sb
+    .channel("rt:nodes")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "nodes" },
+      () => {
+        addLog("[RT] nodes changed");
+        refetchNodesOnly();
+        refetchGroupsOnly(); // car les groupes affichent aussi l'état des slaves
+      }
+    )
+    .subscribe();
+
+  // commands
+  chCmds.current = sb
+    .channel("rt:commands")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "commands" },
+      (payload) => {
+        const row = payload.new;
+
+        // si la commande touche un slave particulier → gérer barre d'action
+        if (row && row.target_mac) {
+          if (row.status === "acked") {
+            // on passe en acked visuel (et on reviendra à idle après 2s)
+            setSlavePhases((old) => ({
+              ...old,
+              [row.target_mac]: "acked",
+            }));
+            setTimeout(() => {
+              setSlavePhases((old2) => ({
+                ...old2,
+                [row.target_mac]: "idle",
               }));
-              setTimeout(() => {
-                setSlavePhases((old2) => ({
-                  ...old2,
-                  [row.target_mac]: "idle",
-                }));
-              }, 2000);
-            }
-          }
-
-          // journal lisible : si acked => SUCCESS
-          if (row?.status === "acked") {
-            addLog(
-              `[SUCCESS] ${row?.action} → ${row?.master_id}${
-                row?.target_mac ? " ▶ " + row?.target_mac : ""
-              }`
-            );
-          } else {
-            addLog(
-              `[cmd ${payload.eventType}] ${row?.action} (${row?.status}) → ${row?.master_id}`
-            );
+            }, 2000);
           }
         }
-      )
-      .subscribe();
 
-    // groups + group_members
-    chGroups.current = sb
-      .channel("rt:groups+members")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "groups" },
-        () => {
-          addLog("[RT] groups changed");
-          refetchGroupsOnly();
+        // log plus clair
+        if (row?.status === "acked") {
+          addLog(
+            `[SUCCESS] ${row?.action} → ${row?.master_id}${
+              row?.target_mac ? " ▶ " + row?.target_mac : ""
+            }`
+          );
+        } else {
+          addLog(
+            `[cmd ${payload.eventType}] ${row?.action} (${row?.status}) → ${row?.master_id}`
+          );
         }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "group_members" },
-        () => {
-          addLog("[RT] group_members changed");
-          refetchGroupsOnly();
-        }
-      )
-      .subscribe();
-  }
+      }
+    )
+    .subscribe();
+
+  // groups + members
+  chGroups.current = sb
+    .channel("rt:groups+members")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "groups" },
+      () => {
+        addLog("[RT] groups changed");
+        refetchGroupsOnly();
+      }
+    )
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "group_members" },
+      () => {
+        addLog("[RT] group_members changed");
+        refetchGroupsOnly();
+      }
+    )
+    .subscribe();
+
+  realtimeAttached.current = true;
+}
 
   /* ---------- FETCHERS ---------- */
 
@@ -1005,76 +1023,72 @@ export default function App() {
     setGroupMembersOpen({ open: false, groupId: "" });
   }
 
-  // quand on ouvre l'éditeur membres -> précocher les slaves existants
-  useEffect(() => {
-    // On ne sync que AU MOMENT où la modale passe open = true.
-    if (!groupMembersOpen.open) return;
+useEffect(() => {
+  let isMounted = true;
 
-    const g = groupsData.find((gg) => gg.id === groupMembersOpen.groupId);
-    if (!g) return;
+  async function initSessionOnce() {
+    // 1. Récupère la session existante au démarrage
+    const { data } = await sb.auth.getSession();
+    const sess = data.session;
 
-    const initialMap = {};
-    for (const m of g.members || []) {
-      initialMap[m.mac] = true;
-    }
-    setEditMembersChecked(initialMap);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupMembersOpen.open]);
+    if (!isMounted) return;
 
-  function toggleCheckMac(mac) {
-    setEditMembersChecked((old) => ({
-      ...old,
-      [mac]: !old[mac],
-    }));
-  }
+    if (sess?.user) {
+      setUser(sess.user);
+      setAuthReady(true);
 
-async function saveGroupMembers() {
-  const gid = groupMembersOpen.groupId;
-  if (!gid) return;
-
-  // 1. construire un index { MAC -> master_id }
-  const macToMaster = {};
-  for (const s of allSlavesFlat) {
-    macToMaster[s.mac] = s.master_id;
-  }
-
-  // 2. on supprime les anciens membres du groupe
-  const { error: delErr } = await sb
-    .from("group_members")
-    .delete()
-    .eq("group_id", gid);
-
-  if (delErr) {
-    window.alert("Erreur clear membres: " + delErr.message);
-    return;
-  }
-
-  // 3. on prépare les nouvelles lignes avec master_id obligatoire
-  const rows = Object.entries(editMembersChecked)
-    .filter(([_, ok]) => ok) // seulement les cases cochées
-    .map(([mac]) => ({
-      group_id: gid,
-      slave_mac: mac,
-      master_id: macToMaster[mac] || null, // IMPORTANT
-    }))
-    .filter(r => r.master_id); // on enlève ceux sans master_id par sécurité
-
-  // 4. INSERT
-  if (rows.length > 0) {
-    const { error: insErr } = await sb
-      .from("group_members")
-      .insert(rows);
-
-    if (insErr) {
-      window.alert("Erreur insert membres: " + insErr.message);
-      return;
+      // on ne recharge les données / realtime
+      // QUE si on est vraiment loggé au début
+      await fullReload();
+      attachRealtime();
+    } else {
+      setUser(null);
+      setAuthReady(true);
     }
   }
 
-  addLog(`Membres groupe ${gid} mis à jour.`);
-  closeGroupMembersModal();
-  await refetchGroupsOnly();
-}
+  // écoute les changements d'auth
+  const { data: sub } = sb.auth.onAuthStateChange(
+    async (event, session) => {
+      if (!isMounted) return;
+
+      if (event === "SIGNED_IN") {
+        // nouvel utilisateur loggé (ex: tu viens de cliquer Google)
+        setUser(session?.user || null);
+        // on recharge les données une bonne fois
+        await fullReload();
+        attachRealtime();
+      } else if (event === "SIGNED_OUT") {
+        // déco volontaire
+        setUser(null);
+        // on vide l'état UI lié aux données
+        setDevices([]);
+        setNodesByMaster({});
+        setGroupsData([]);
+        setSlavePhases({});
+        cleanupRealtime();
+      } else if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
+        // session toujours valide, juste rafraîchie
+        // => on met à jour user pour l'UI (email, etc.)
+        setUser(session?.user || null);
+        // MAIS on ne touche pas au realtime, ni au state courant.
+      }
+
+      // authReady doit passer à true dans tous les cas
+      setAuthReady(true);
+    }
+  );
+
+  // init au mount
+  initSessionOnce();
+
+  return () => {
+    isMounted = false;
+    sub?.subscription?.unsubscribe();
+    cleanupRealtime();
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   // infos courantes pour les modales
   const currentSlaveInfo = useMemo(() => {
