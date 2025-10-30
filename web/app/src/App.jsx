@@ -1,12 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from "react";
-import { createClient } from "@supabase/supabase-js";
-
-/* =========================================
-   CONFIG SUPABASE
-   ========================================= */
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+import { sb, SUPABASE_URL, SUPABASE_ANON_KEY } from "./supabaseClient";
 
 /* règles de "online": un master est "en ligne" si last_seen < 8s */
 const LIVE_TTL_MS = 8_000;
@@ -77,7 +70,6 @@ function CircleBtn({ children, onClick, disabled, extraClass }) {
 
 /* -----------------------------------------
    Barre de progression / statut d'action
-   phase: "idle" | "queue" | "send" | "acked"
 ----------------------------------------- */
 function ActionBar({ phase }) {
   if (!phase || phase === "idle") return null;
@@ -104,7 +96,7 @@ function ActionBar({ phase }) {
 }
 
 /* =========================================================
-   MODALE FLOTTANTE GÉNÉRIQUE
+   MODALES
 ========================================================= */
 function ModalShell({ open, onClose, children, title }) {
   if (!open) return null;
@@ -126,9 +118,6 @@ function ModalShell({ open, onClose, children, title }) {
   );
 }
 
-/* =========================================================
-   MODALE INFOS SLAVE (renommer + détails)
-========================================================= */
 function SlaveInfoModal({
   open,
   onClose,
@@ -176,9 +165,6 @@ function SlaveInfoModal({
   );
 }
 
-/* =========================================================
-   MODALE "Machines allumées" d'un groupe
-========================================================= */
 function GroupOnListModal({ open, onClose, members }) {
   return (
     <ModalShell open={open} onClose={onClose} title="Machines allumées">
@@ -193,9 +179,6 @@ function GroupOnListModal({ open, onClose, members }) {
   );
 }
 
-/* =========================================================
-   MODALE "Éditer les membres d'un groupe"
-========================================================= */
 function GroupMembersModal({
   open,
   onClose,
@@ -224,7 +207,7 @@ function GroupMembersModal({
 }
 
 /* =========================================================
-   SlaveCard
+   Cartes
 ========================================================= */
 function SlaveCard({
   masterId,
@@ -252,9 +235,6 @@ function SlaveCard({
   );
 }
 
-/* =========================================================
-   MasterCard
-========================================================= */
 function MasterCard({
   device,
   slaves,
@@ -341,9 +321,6 @@ function MasterCard({
   );
 }
 
-/* =========================================================
-   GroupCard
-========================================================= */
 function GroupCard({
   group,
   onRenameGroup,
@@ -828,7 +805,7 @@ export default function App() {
     setGroupMembersOpen({ open: false, groupId: "" });
   }
 
-  // Pré-cocher uniquement à l'ouverture (évite d'écraser pendant édition)
+  // Pré-cocher uniquement à l'ouverture
   useEffect(() => {
     if (!groupMembersOpen.open) return;
     const g = groupsData.find((gg) => gg.id === groupMembersOpen.groupId);
@@ -998,19 +975,16 @@ export default function App() {
   /* ---------- Rendu global ---------- */
   if (!authReady) {
     return (
-      <>
-        <style>{STYLES}</style>
-        <div
-          style={{
-            color: "#fff",
-            fontFamily:
-              'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif',
-            padding: "2rem",
-          }}
-        >
-          Chargement…
-        </div>
-      </>
+      <div
+        style={{
+          color: "#fff",
+          fontFamily:
+            'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif',
+          padding: "2rem",
+        }}
+      >
+        Chargement…
+      </div>
     );
   }
 
@@ -1018,8 +992,6 @@ export default function App() {
 
   return (
     <>
-      <style>{STYLES}</style>
-
       {/* HEADER STICKY */}
       <header className="topHeader">
         <div className="topHeaderInner">
@@ -1059,7 +1031,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* MODALE SLAVE INFO */}
+      {/* MODALES */}
       <SlaveInfoModal
         open={slaveInfoOpen.open}
         onClose={closeSlaveInfo}
@@ -1073,14 +1045,12 @@ export default function App() {
         }}
       />
 
-      {/* MODALE LISTE ALLUMÉS */}
       <GroupOnListModal
         open={groupOnListOpen.open}
         onClose={closeGroupOnListModal}
         members={currentGroupForOnList?.members || []}
       />
 
-      {/* MODALE EDIT MEMBRES */}
       <GroupMembersModal
         open={groupMembersOpen.open}
         onClose={closeGroupMembersModal}
@@ -1093,286 +1063,3 @@ export default function App() {
     </>
   );
 }
-
-/* =========================================================
-   STYLES
-========================================================= */
-const STYLES = `
-:root{
-  --bg-page:#0d0f10;
-  --glass-bg:rgba(255,255,255,0.08);
-  --glass-border:rgba(255,255,255,0.14);
-  --glass-inner-bg:rgba(255,255,255,0.22);
-  --text-main:#fff;
-  --text-dim:rgba(255,255,255,0.75);
-  --text-soft:rgba(255,255,255,0.55);
-  --bubble-bg:rgba(255,255,255,0.06);
-  --bubble-bg-hover:rgba(255,255,255,0.10);
-  --bubble-border:rgba(255,255,255,0.20);
-  --online-green:#4ade80;
-  --online-red:#f87171;
-  --modal-bg:rgba(0,0,0,0.45);
-
-  --shadow-card:none;
-  --shadow-small:none;
-
-  --transition-fast:0.15s ease;
-
-  font-size:14px;
-  line-height:1.4;
-  color-scheme:dark;
-  -webkit-font-smoothing:antialiased;
-}
-*{box-sizing:border-box;}
-html,body,#root{
-  margin:0;
-  padding:0;
-  background:var(--bg-page);
-  color:var(--text-main);
-  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Ubuntu,sans-serif;
-}
-
-.smallText{ font-size:12px; color:var(--text-soft); }
-
-/* HEADER sticky */
-.topHeader{
-  position:sticky;
-  top:0; left:0; right:0;
-  z-index:2000;
-  backdrop-filter:blur(20px) saturate(140%);
-  -webkit-backdrop-filter:blur(20px) saturate(140%);
-  background:rgba(20,20,20,0.55);
-  border-bottom:1px solid rgba(255,255,255,0.12);
-  box-shadow:var(--shadow-card);
-  padding:12px 16px;
-  color:#fff;
-}
-.topHeaderInner{
-  display:flex; justify-content:space-between; align-items:flex-start;
-  flex-wrap:wrap; max-width:1200px; margin:0 auto; row-gap:8px;
-}
-.appTitleRow{ display:flex; align-items:baseline; gap:8px; }
-.appName{ font-weight:600; font-size:16px; color:var(--text-main); letter-spacing:.02em; }
-.appStatus{ font-size:12px; color:var(--online-green); font-weight:500; }
-.appSubtitle{ color:var(--text-soft); font-size:12px; }
-.rightBlock{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:flex-end; }
-.userMail{ color:var(--text-dim); margin-right:4px; font-size:12px; }
-
-/* BG full-screen */
-.pageBg{
-  min-height:100vh;
-  background:
-    radial-gradient(circle at 20% 20%, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0) 60%),
-    radial-gradient(circle at 80% 30%, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 70%),
-    url("https://4kwallpapers.com/images/walls/thumbs_3t/9729.jpg");
-  background-size:cover; background-position:center;
-  padding:24px 16px 80px; position:relative;
-}
-.pageBg::after{ content:""; position:absolute; inset:0; background:rgba(0,0,0,0.28); }
-.pageContent{
-  position:relative; z-index:10; max-width:1200px; margin:0 auto;
-  display:flex; flex-direction:column; gap:24px; padding-bottom:96px; color:var(--text-main);
-}
-
-/* Sections */
-.groupsSection,.mastersSection,.journalSection{
-  background:var(--glass-bg);
-  border:1px solid var(--glass-border);
-  border-radius:16px;
-  box-shadow:var(--shadow-card);
-  backdrop-filter:blur(18px) saturate(140%);
-  -webkit-backdrop-filter:blur(18px) saturate(140%);
-  padding:16px; color:var(--text-main);
-}
-.sectionTitleRow{ display:flex; flex-direction:column; margin-bottom:12px; }
-.sectionTitle{ color:var(--text-main); font-weight:600; font-size:14px; }
-.sectionSub{ color:var(--text-soft); font-size:12px; }
-.noGroupsNote{ color:var(--text-soft); font-size:12px; }
-
-/* GROUPS */
-.groupListWrap{ display:flex; flex-wrap:wrap; gap:16px; }
-.groupCard{
-  min-width:260px; flex:1 1 260px;
-  background:rgba(255,255,255,0.07);
-  border:1px solid rgba(255,255,255,0.16);
-  border-radius:16px; padding:16px; color:var(--text-main);
-  position:relative; box-shadow:var(--shadow-card);
-  backdrop-filter:blur(18px) saturate(140%);
-  -webkit-backdrop-filter:blur(18px) saturate(140%);
-}
-.groupHeadRow{ display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; margin-bottom:12px; }
-.groupMainInfo{ flex:1; min-width:150px; }
-.groupNameLine{ font-size:15px; font-weight:600; color:var(--text-main); letter-spacing:.02em; }
-.groupSubLine{ font-size:12px; color:var(--text-dim); margin-top:4px; display:flex; flex-wrap:wrap; align-items:center; }
-.groupMiniActions{ display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
-.groupCmdRow{ display:flex; flex-wrap:wrap; gap:8px; font-size:12px; }
-
-/* MASTERS */
-.masterCard{
-  background:rgba(255,255,255,0.07);
-  border:1px solid rgba(255,255,255,0.16);
-  border-radius:16px; padding:16px; margin-bottom:16px;
-  color:var(--text-main); box-shadow:var(--shadow-card);
-  backdrop-filter:blur(18px) saturate(140%);
-  -webkit-backdrop-filter:blur(18px) saturate(140%);
-}
-.masterTopRow{ display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; margin-bottom:16px; }
-.masterTitleLeft{ min-width:200px; flex:1; }
-.masterNameLine{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:6px; }
-.masterCardTitle{ font-size:15px; font-weight:600; color:var(--text-main); letter-spacing:.02em; }
-.onlineBadge{ font-size:11px; font-weight:500; border-radius:9999px; padding:2px 8px; line-height:1.2; border:1px solid rgba(255,255,255,0.18); }
-.onlineYes{ color:var(--online-green); background:rgba(16,185,129,0.10); border-color:rgba(16,185,129,0.32); }
-.onlineNo{ color:var(--online-red); background:rgba(239,68,68,0.10); border-color:rgba(239,68,68,0.32); }
-.masterMeta{ display:flex; flex-wrap:wrap; gap:6px; font-size:12px; line-height:1.3; color:var(--text-soft); }
-.kv .k{ color:var(--text-soft); font-weight:500; font-size:12px; }
-.kv .v{ color:var(--text-main); font-size:12px; }
-.masterActionsRow{ display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; align-items:flex-start; }
-
-/* Slaves grid */
-.slavesWrap{ display:flex; justify-content:center; }
-.slavesGrid{
-  width:100%; max-width:1000px;
-  display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-  gap:16px; justify-items:center;
-}
-
-/* Slave Card */
-.slaveCard{
-  position:relative; width:100%; max-width:200px; min-width:160px;
-  background:rgba(255,255,255,0.09);
-  border:1px solid rgba(255,255,255,0.20);
-  border-radius:20px; box-shadow:var(--shadow-card);
-  backdrop-filter:blur(18px) saturate(140%);
-  -webkit-backdrop-filter:blur(18px) saturate(140%);
-  padding:18px 14px 14px; display:flex; flex-direction:column; align-items:center; text-align:center; color:var(--text-main);
-}
-.infoChip{
-  position:absolute; top:10px; right:10px; width:20px; height:20px;
-  font-size:12px; line-height:20px; border-radius:9999px;
-  background:var(--bubble-bg); color:var(--text-dim); border:1px solid var(--bubble-border);
-  text-align:center; cursor:pointer; user-select:none; transition:all var(--transition-fast); box-shadow:var(--shadow-small);
-}
-.infoChip:hover{ background:var(--bubble-bg-hover); color:var(--text-main); }
-.slaveNameMain{
-  font-size:16px; font-weight:600; color:var(--text-main);
-  margin-top:26px; margin-bottom:6px; min-height:2.6em;
-  display:flex; align-items:flex-end; justify-content:center; text-align:center; line-height:1.2; letter-spacing:.02em;
-}
-.slaveSub{ font-size:12px; line-height:1.3; color:var(--text-soft); margin-bottom:10px; min-height:1.4em; letter-spacing:.02em; }
-
-/* Action bar */
-.actionBarBlock{ width:100%; display:flex; flex-direction:column; align-items:center; margin-bottom:12px; }
-.actionStatusText{ font-size:11px; font-weight:600; line-height:1.2; color:#fff; background:#000; border-radius:6px; padding:2px 6px; margin-bottom:6px; }
-.actionBarWrapper{
-  width:100%; height:4px; border-radius:999px; background:rgba(0,0,0,0.4);
-  border:1px solid rgba(255,255,255,0.12); position:relative; overflow:hidden; margin-bottom:12px; box-shadow:var(--shadow-small);
-}
-.actionBarFill{ position:absolute; top:0; left:0; bottom:0; background:#000; }
-.queueAnim{ width:30%; animation:pulseBar 1.2s infinite; }
-.sendAnim{ width:100%; animation:fillBar 1s forwards; }
-.ackedFill{ width:100%; background:#000; }
-@keyframes pulseBar{ 0%{opacity:0.4;} 50%{opacity:1;} 100%{opacity:0.4;} }
-@keyframes fillBar{ 0%{width:0%;} 100%{width:100%;} }
-
-/* Buttons */
-.slaveBtnsRow{ display:flex; flex-wrap:nowrap; align-items:flex-end; justify-content:center; gap:12px; margin-top:auto; }
-.circleBtn{
-  width:44px; height:44px; border-radius:9999px; background:var(--bubble-bg);
-  border:1px solid var(--bubble-border); box-shadow:var(--shadow-small);
-  color:var(--text-main); display:flex; align-items:center; justify-content:center; cursor:pointer;
-  transition:all var(--transition-fast); padding:0;
-}
-.circleBtn:hover{ background:var(--bubble-bg-hover); }
-.circleBtn:active{ transform:scale(.96); }
-.circleBtn.moreBtn{ font-weight:500; }
-.circleBtn > span, .circleBtnInner{ font-size:16px; line-height:1; display:flex; align-items:center; justify-content:center; margin-top:0; }
-
-/* Journal */
-.journalSection .logBox{
-  width:100%; min-height:120px; max-height:200px;
-  background:rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.15);
-  border-radius:12px; padding:12px; font-size:12px; line-height:1.4; color:var(--text-dim);
-  white-space:pre-wrap; overflow:auto; box-shadow:none;
-  font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-/* Capsule buttons */
-.subtleBtn{
-  appearance:none; background:var(--bubble-bg); border:1px solid var(--bubble-border); border-radius:9999px;
-  font-size:12px; line-height:1.2; color:var(--text-main); cursor:pointer; padding:6px 10px; min-height:28px;
-  display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow-small); transition:all var(--transition-fast);
-}
-.subtleBtn:hover{ background:var(--bubble-bg-hover); }
-.subtleBtn:active{ transform:scale(.97); }
-
-.chipBtn{
-  appearance:none; background:var(--bubble-bg); border:1px solid var(--bubble-border); border-radius:9999px;
-  font-size:11px; line-height:1.2; color:var(--text-main); cursor:pointer; padding:4px 8px; box-shadow:var(--shadow-small);
-  transition:all var(--transition-fast);
-}
-.chipBtn:hover{ background:var(--bubble-bg-hover); }
-.chipBtn:active{ transform:scale(.97); }
-
-/* Modals */
-.modalOverlay{
-  position:fixed; inset:0; background:var(--modal-bg);
-  backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
-  z-index:3000; display:flex; align-items:center; justify-content:center; padding:16px;
-}
-.modalCard{
-  width:100%; max-width:360px; background:rgba(20,20,20,0.8);
-  border:1px solid rgba(255,255,255,0.16); border-radius:16px; box-shadow:var(--shadow-card);
-  color:var(--text-main); backdrop-filter:blur(18px) saturate(140%); -webkit-backdrop-filter:blur(18px) saturate(140%);
-  display:flex; flex-direction:column; padding:16px;
-}
-.modalHeader{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
-.modalTitle{ font-size:14px; font-weight:600; color:var(--text-main); }
-.smallCloseBtn{
-  appearance:none; background:var(--bubble-bg); border:1px solid var(--bubble-border); border-radius:8px; color:var(--text-main);
-  cursor:pointer; line-height:1; font-size:12px; padding:4px 6px; min-width:28px; text-align:center; box-shadow:var(--shadow-small);
-}
-.smallCloseBtn:hover{ background:var(--bubble-bg-hover); }
-.smallCloseBtn:active{ transform:scale(.97); }
-.modalBody{ font-size:13px; display:flex; flex-direction:column; gap:16px; color:var(--text-main); }
-.modalSection{ display:flex; flex-direction:column; gap:8px; }
-.modalLabel{ font-size:12px; color:var(--text-soft); }
-.modalInput{
-  width:100%; background:rgba(0,0,0,0.6); border:1px solid rgba(255,255,255,0.2); color:var(--text-main);
-  font-size:13px; border-radius:8px; padding:8px; outline:none;
-}
-.modalInput:focus{ border-color:rgba(255,255,255,0.4); }
-.modalInfoRow{
-  display:flex; justify-content:space-between; font-size:13px; line-height:1.4; color:var(--text-main);
-  background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.15); border-radius:8px; padding:6px 8px;
-}
-.modalInfoKey{ color:var(--text-soft); margin-right:8px; }
-.modalInfoVal{ color:var(--text-main); font-weight:500; text-align:right; word-break:break-all; }
-.modalEmpty{ font-size:12px; color:var(--text-soft); text-align:center; padding:12px; }
-.checkRow{
-  display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:13px; line-height:1.4;
-  padding:6px 8px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.15);
-  border-radius:8px; color:var(--text-main); margin-bottom:6px;
-}
-.checkName{ flex:1; margin-left:6px; color:var(--text-main); font-weight:500; }
-.checkState{ color:var(--text-soft); font-size:12px; }
-
-/* Scrollbars */
-.logBox::-webkit-scrollbar,.modalBody::-webkit-scrollbar,.pageContent::-webkit-scrollbar{ width:6px; height:6px; }
-.logBox::-webkit-scrollbar-track,.modalBody::-webkit-scrollbar-track,.pageContent::-webkit-scrollbar-track{
-  background:rgba(255,255,255,0.05); border-radius:999px;
-}
-.logBox::-webkit-scrollbar-thumb,.modalBody::-webkit-scrollbar-thumb,.pageContent::-webkit-scrollbar-thumb{
-  background:rgba(255,255,255,0.2); border-radius:999px;
-}
-
-/* Responsive */
-@media(max-width:600px){
-  .topHeaderInner{ flex-direction:column; align-items:flex-start; }
-  .rightBlock{ width:100%; justify-content:flex-start; flex-wrap:wrap; }
-  .groupCard{ flex:1 1 100%; min-width:0; }
-  .slavesGrid{ grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; }
-  .slaveCard{ max-width:190px; min-width:160px; }
-  .circleBtn{ width:42px; height:42px; }
-  .circleBtnInner{ font-size:15px; }
-}
-`;
