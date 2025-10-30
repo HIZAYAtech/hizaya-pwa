@@ -1,4 +1,4 @@
-// src/utils/stripOAuth.js
+// src/utils/stripOAuth.js------
 export function stripOAuthParams() {
   try {
     const url = new URL(window.location.href);
