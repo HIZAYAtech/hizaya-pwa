@@ -1,8 +1,4 @@
-// src/pages/Login.jsx
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { sb } from "../lib/supabase";
-import { stripOAuthParams } from "../utils/stripOAuth";
+
 
 export default function Login() {
   const navigate = useNavigate();
