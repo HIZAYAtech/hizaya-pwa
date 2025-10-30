@@ -21,7 +21,6 @@ jobs:
       run:
         working-directory: web/app
 
-    # <-- Secrets injectés au niveau du job (visibles par tous les steps)
     env:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
@@ -29,17 +28,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
 
-      - name: Setup Node
+      # Cache npm UNIQUEMENT si le lockfile existe
+      - name: Setup Node (with cache)
+        if: ${{ hashFiles('web/app/package-lock.json') != '' }}
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: npm
           cache-dependency-path: web/app/package-lock.json
 
-      - name: Install deps
-        run: npm install --no-audit --no-fund
+      - name: Setup Node (no cache)
+        if: ${{ hashFiles('web/app/package-lock.json') == '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Node & npm versions
+        run: |
+          node -v
+          npm -v
 
       - name: Check required secrets
         run: |
@@ -49,12 +57,23 @@ jobs:
             echo "❌ Missing VITE_* secrets. Go to Settings → Secrets and variables → Actions."; exit 1;
           fi
 
+      - name: Install deps
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+
       - name: Build
         run: |
           npm run build
-          # SPA 404 fallback
+          # SPA fallback pour 404 (GitHub Pages)
           cp -f dist/index.html dist/404.html || true
           ls -la dist
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
 
       - name: Upload artifact for Pages
         uses: actions/upload-pages-artifact@v3
