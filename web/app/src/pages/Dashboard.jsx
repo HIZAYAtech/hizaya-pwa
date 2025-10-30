@@ -1,7 +1,4 @@
-// src/pages/Dashboard.jsx
-import { useEffect, useRef, useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { sb, SUPABASE_URL, SUPABASE_ANON_KEY } from "../lib/supabase";
+
 
 /* Flag module pour éviter d'attacher le realtime plusieurs fois */
 const realtimeAttached = { current: false };
