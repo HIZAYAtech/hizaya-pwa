@@ -1,11 +1,3 @@
-import { useEffect, useRef, useState, useMemo } from "react";
-import { sb, SUPABASE_URL, SUPABASE_ANON_KEY } from "./supabaseClient";
-
-/* règles de "online": un master est "en ligne" si last_seen < 8s */
-const LIVE_TTL_MS = 8_000;
-
-/* pin par défaut pour IO sur le SLAVE */
-const DEFAULT_IO_PIN = 26;
 
 /* -----------------------------------------
    helpers formatage / status
