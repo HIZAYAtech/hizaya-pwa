@@ -35,13 +35,15 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install deps (no cache)
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: web/app/package-lock.json
+
+      - name: Install deps
+        run: npm install --no-audit --no-fund
 
       - name: Check required secrets
         run: |
