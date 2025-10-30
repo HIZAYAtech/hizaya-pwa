@@ -12,7 +12,7 @@ const LIVE_TTL_MS = 8_000;
 /* pin par défaut pour IO sur le SLAVE */
 const DEFAULT_IO_PIN = 26;
 
-/* -----------------------------------------
+/* ------------------------
    helpers formatage / status
 ----------------------------------------- */
 function fmtTS(s) {
