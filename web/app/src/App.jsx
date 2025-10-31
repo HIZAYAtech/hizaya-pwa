@@ -1,19 +1,8 @@
 import { useEffect, useRef, useState, useMemo } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { sb } from "./supabaseClient";
 
-/* =========================================
-   CONFIG SUPABASE
-   ========================================= */
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-/* -------- Live/online rules --------
-   On élargit la fenêtre à 30s pour éviter les faux "offline"
-   si un tick rate backend saute ou si le realtime dort. */
-const LIVE_TTL_MS = 30_000;
-
-/* pin par défaut pour IO sur le SLAVE */
+/* -------- Live/online rules -------- */
+const LIVE_TTL_MS = 30_000; // évite les faux "offline" si un tick rate saute
 const DEFAULT_IO_PIN = 26;
 
 /* ========= Helpers ========= */
@@ -26,7 +15,7 @@ function isLiveDevice(dev) {
   if (!dev?.last_seen) return false;
   return Date.now() - new Date(dev.last_seen).getTime() < LIVE_TTL_MS;
 }
-// Nettoie l’URL après OAuth (évite 404/hash moches)
+// Nettoie l’URL après OAuth (seulement après l’échange !)
 function stripOAuthParams() {
   try {
     const url = new URL(window.location.href);
@@ -233,7 +222,7 @@ function GroupCard({ group, onRenameGroup, onDeleteGroup, onOpenMembersEdit, onO
   );
 }
 
-/* ========== Login plein écran (par défaut si non connecté) ========== */
+/* ========== Login plein écran ========== */
 function LoginScreen({ onLogin, disabled }) {
   return (
     <div className="loginScreen">
@@ -246,10 +235,6 @@ function LoginScreen({ onLogin, disabled }) {
   );
 }
 
-/* =========================================================
-   APP PRINCIPALE
-========================================================= */
-
 // Flag module-level pour éviter d’attacher plusieurs fois
 let realtimeAttached = false;
 
@@ -260,10 +245,10 @@ export default function App() {
   const [accountName, setAccountName] = useState("");
 
   /* ----------- DATA STATE -------- */
-  const [devices, setDevices] = useState([]);               // masters
-  const [nodesByMaster, setNodesByMaster] = useState({});   // { master_id: [ ... ] }
-  const [slavePhases, setSlavePhases] = useState({});       // { mac: phase }
-  const [groupsData, setGroupsData] = useState([]);         // groupes
+  const [devices, setDevices] = useState([]);
+  const [nodesByMaster, setNodesByMaster] = useState({});
+  const [slavePhases, setSlavePhases] = useState({});
+  const [groupsData, setGroupsData] = useState([]);
 
   /* journal */
   const [logs, setLogs] = useState([]);
@@ -276,7 +261,7 @@ export default function App() {
   const [slaveInfoOpen, setSlaveInfoOpen] = useState({ open: false, masterId: "", mac: "" });
   const [groupOnListOpen, setGroupOnListOpen] = useState({ open: false, groupId: "" });
   const [groupMembersOpen, setGroupMembersOpen] = useState({ open: false, groupId: "" });
-  const [editMembersChecked, setEditMembersChecked] = useState({}); // { mac: true }
+  const [editMembersChecked, setEditMembersChecked] = useState({});
 
   /* ---------- REALTIME ---------- */
   const chDevices = useRef(null);
@@ -345,11 +330,23 @@ export default function App() {
     let isMounted = true;
 
     const initSessionOnce = async () => {
-      stripOAuthParams(); // d’abord
       try {
+        // 1) ÉCHANGE DU CODE PKCE (avant tout strip)
+        const href = window.location.href;
+        const hasCode = href.includes("code=") && href.includes("state=");
+        if (hasCode) {
+          const { error: exErr } = await sb.auth.exchangeCodeForSession(href);
+          if (exErr) console.error("[auth] exchange error:", exErr);
+        }
+
+        // 2) Maintenant on peut nettoyer l’URL
+        stripOAuthParams();
+
+        // 3) Lecture session
         const { data } = await sb.auth.getSession();
         if (!isMounted) return;
         const sess = data?.session;
+
         if (sess?.user) {
           setUser(sess.user);
           await fullReload();
@@ -358,9 +355,8 @@ export default function App() {
           setUser(null);
         }
       } catch (e) {
-        console.error("[auth] getSession error:", e);
-        // On part en invité si l’appel a échoué : évite le loader bloqué
-        setUser(null);
+        console.error("[auth] init error:", e);
+        setUser(null); // évite le loader bloqué
       } finally {
         if (isMounted) setAuthReady(true);
       }
@@ -369,16 +365,14 @@ export default function App() {
     const { data: sub } = sb.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
       if (event === "SIGNED_IN") {
+        // (au cas où) nettoyer les paramètres résiduels
         stripOAuthParams();
         setUser(session?.user || null);
         await fullReload();
         attachRealtime();
       } else if (event === "SIGNED_OUT") {
         setUser(null);
-        setDevices([]);
-        setNodesByMaster({});
-        setGroupsData([]);
-        setSlavePhases({});
+        setDevices([]); setNodesByMaster({}); setGroupsData([]); setSlavePhases({});
         cleanupRealtime();
       } else if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
         setUser(session?.user || null);
@@ -387,39 +381,31 @@ export default function App() {
 
     initSessionOnce();
 
-    // Quand l’onglet revient au premier plan → on se ré-attache et on rafraîchit.
+    // Re-attach / refresh quand tu reviens sur l’onglet
     const onFocus = () => {
       if (!user) return;
-      cleanupRealtime();
-      attachRealtime();
-      refetchDevicesOnly();
-      refetchNodesOnly();
+      cleanupRealtime(); attachRealtime();
+      refetchDevicesOnly(); refetchNodesOnly();
     };
-    window.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") onFocus();
-    });
+    const onVis = () => { if (document.visibilityState === "visible") onFocus(); };
     window.addEventListener("focus", onFocus);
+    window.addEventListener("visibilitychange", onVis);
 
     return () => {
       isMounted = false;
       sub?.subscription?.unsubscribe();
       window.removeEventListener("focus", onFocus);
-      window.removeEventListener("visibilitychange", onFocus);
+      window.removeEventListener("visibilitychange", onVis);
       cleanupRealtime();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* -------- Watchdog léger : refresh devices toutes 20s --------
-     Utile si Realtime “dort” (onglet inactif, réseau) : on met
-     au moins à jour last_seen → statut EN LIGNE/HORS LIGNE correct. */
+  /* --- Watchdog de refresh devices toutes 20s --- */
   useEffect(() => {
     if (!user) return;
-    const t = setInterval(() => {
-      refetchDevicesOnly();
-    }, 20000);
+    const t = setInterval(() => { refetchDevicesOnly(); }, 20000);
     return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   /* ---------- FETCHERS ---------- */
@@ -430,7 +416,6 @@ export default function App() {
       .order("created_at", { ascending: false });
     if (!error && devs) setDevices(devs);
   }
-
   async function refetchNodesOnly() {
     const { data: rows, error } = await sb
       .from("nodes")
@@ -443,7 +428,6 @@ export default function App() {
     }
     setNodesByMaster(map);
   }
-
   async function refetchGroupsOnly() {
     const { data: gs, error: gErr } = await sb.from("groups").select("id,name");
     if (gErr) { addLog("Err groups: " + gErr.message); return; }
@@ -472,7 +456,6 @@ export default function App() {
 
     setGroupsData(final);
   }
-
   async function fullReload() {
     await Promise.all([refetchDevicesOnly(), refetchNodesOnly(), refetchGroupsOnly()]);
   }
@@ -490,9 +473,9 @@ export default function App() {
     const { data: sessionRes } = await sb.auth.getSession();
     const token = sessionRes?.session?.access_token;
     if (!token) { window.alert("Non connecté."); return; }
-    const r = await fetch(`${SUPABASE_URL}/functions/v1/release_and_delete`, {
+    const r = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/release_and_delete`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json", apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
       body: JSON.stringify({ master_id: id }),
     });
     if (!r.ok) { const txt = await r.text(); addLog("❌ Suppression : " + txt); }
@@ -540,35 +523,16 @@ export default function App() {
     if (e2) { window.alert("Erreur suppr groupe: " + e2.message); return; }
     addLog(`Groupe ${id} supprimé`); await refetchGroupsOnly();
   }
-  async function askAddMaster() {
-    const { data: sessionRes } = await sb.auth.getSession();
-    const token = sessionRes?.session?.access_token;
-    if (!token) { window.alert("Non connecté."); return; }
-    const r = await fetch(`${SUPABASE_URL}/functions/v1/create_pair_code`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ ttl_minutes: 10 }),
-    });
-    if (!r.ok) { const txt = await r.text(); window.alert("Erreur pair-code: " + txt); return; }
-    const { code, expires_at } = await r.json();
-    const end = new Date(expires_at).getTime(); const ttlSec = Math.floor((end - Date.now()) / 1000);
-    window.alert(`Code: ${String(code).padStart(6, "0")} (expire dans ~${ttlSec}s)\nSaisis ce code dans le portail Wi-Fi du MASTER.`);
-  }
-  async function askAddGroup() {
-    const gname = window.prompt("Nom du nouveau groupe ?", ""); if (!gname) return;
-    const { data: ins, error } = await sb.from("groups").insert({ name: gname }).select("id").single();
-    if (error) { window.alert("Erreur création groupe: " + error.message); return; }
-    addLog(`Groupe créé (${ins?.id || "?"}): ${gname}`); await refetchGroupsOnly();
-  }
-  function renameAccountLabel() {
-    const newLabel = window.prompt("Nom du compte ?", accountName || (user?.email || ""));
-    if (!newLabel) return; setAccountName(newLabel); addLog(`Compte nommé : ${newLabel}`);
+
+  // URL de retour pour GH Pages (pas besoin de router)
+  function computeReturnTo() {
+    // Exemple: https://<user>.github.io/<repo>/
+    return window.location.origin + window.location.pathname.replace(/index\.html?$/i, "");
   }
 
-  // Login/Logout
   function handleLogout() { sb.auth.signOut(); }
   function handleLogin() {
-    const returnTo = window.location.origin + window.location.pathname; // URL propre (GH Pages)
+    const returnTo = computeReturnTo();
     sb.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: returnTo, queryParams: { prompt: "select_account" } }
@@ -578,8 +542,10 @@ export default function App() {
   /* ---------- Modales ---------- */
   function openSlaveInfo(masterId, mac) { setSlaveInfoOpen({ open: true, masterId, mac }); }
   function closeSlaveInfo() { setSlaveInfoOpen({ open: false, masterId: "", mac: "" }); }
+
   function openGroupOnListModal(groupId) { setGroupOnListOpen({ open: true, groupId }); }
   function closeGroupOnListModal() { setGroupOnListOpen({ open: false, groupId: "" }); }
+
   function openGroupMembersModal(groupId) { setGroupMembersOpen({ open: true, groupId }); }
   function closeGroupMembersModal() { setGroupMembersOpen({ open: false, groupId: "" }); }
 
@@ -595,7 +561,10 @@ export default function App() {
   function toggleCheckMac(mac) { setEditMembersChecked((old) => ({ ...old, [mac]: !old[mac] })); }
   async function saveGroupMembers() {
     const gid = groupMembersOpen.groupId; if (!gid) return;
-    const macToMaster = {}; for (const s of allSlavesFlat) macToMaster[s.mac] = s.master_id;
+    const macToMaster = {};
+    for (const mid of Object.keys(nodesByMaster)) {
+      for (const sl of nodesByMaster[mid]) macToMaster[sl.mac] = mid;
+    }
     const { error: delErr } = await sb.from("group_members").delete().eq("group_id", gid);
     if (delErr) { window.alert("Erreur clear membres: " + delErr.message); return; }
     const rows = Object.entries(editMembersChecked)
@@ -606,7 +575,9 @@ export default function App() {
       const { error: insErr } = await sb.from("group_members").insert(rows);
       if (insErr) { window.alert("Erreur insert membres: " + insErr.message); return; }
     }
-    addLog(`Membres groupe ${gid} mis à jour.`); closeGroupMembersModal(); await refetchGroupsOnly();
+    addLog(`Membres groupe ${gid} mis à jour.`);
+    closeGroupMembersModal();
+    await refetchGroupsOnly();
   }
 
   // Sélections mémo
@@ -637,23 +608,18 @@ export default function App() {
 
   /* ---------- Rendu ---------- */
   if (!authReady) {
-    return (
-      <div style={{ color: "#fff", padding: "2rem" }}>
-        Chargement…
-      </div>
-    );
+    return <div style={{ color: "#fff", padding: "2rem" }}>Chargement…</div>;
   }
 
   const isLogged = !!user;
 
   if (!isLogged) {
-    // Bouton login désactivé si une autre auth est en cours (rare, mais évite double-clic)
     return <LoginScreen onLogin={handleLogin} disabled={false} />;
   }
 
   return (
     <>
-      {/* HEADER STICKY */}
+      {/* HEADER */}
       <header className="topHeader">
         <div className="topHeaderInner">
           <div className="leftBlock">
@@ -663,19 +629,42 @@ export default function App() {
             </div>
             <div className="appSubtitle smallText">tableau de contrôle</div>
           </div>
-
           <div className="rightBlock">
             <div className="userMail smallText">{accountName || user.email}</div>
-            <SubtleButton onClick={renameAccountLabel}>Renommer compte</SubtleButton>
-            <SubtleButton onClick={handleLogout}>Déconnexion</SubtleButton>
-            <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
-            <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
-            <SubtleButton onClick={fullReload}>Rafraîchir</SubtleButton>
+            <SubtleButton onClick={() => {
+              const newLabel = window.prompt("Nom du compte ?", accountName || (user?.email || ""));
+              if (!newLabel) return;
+              setAccountName(newLabel);
+              addLog(`Compte nommé : ${newLabel}`);
+            }}>Renommer compte</SubtleButton>
+            <SubtleButton onClick={() => sb.auth.signOut()}>Déconnexion</SubtleButton>
+            <SubtleButton onClick={async () => {
+              const { data: sessionRes } = await sb.auth.getSession();
+              const token = sessionRes?.session?.access_token;
+              if (!token) { window.alert("Non connecté."); return; }
+              const r = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create_pair_code`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ ttl_minutes: 10 }),
+              });
+              if (!r.ok) { const txt = await r.text(); window.alert("Erreur pair-code: " + txt); return; }
+              const { code, expires_at } = await r.json();
+              const end = new Date(expires_at).getTime(); const ttlSec = Math.floor((end - Date.now()) / 1000);
+              window.alert(`Code: ${String(code).padStart(6, "0")} (expire dans ~${ttlSec}s)\nSaisis ce code dans le portail Wi-Fi du MASTER.`);
+            }}>+ MASTER</SubtleButton>
+            <SubtleButton onClick={async () => {
+              const gname = window.prompt("Nom du nouveau groupe ?", ""); if (!gname) return;
+              const { data: ins, error } = await sb.from("groups").insert({ name: gname }).select("id").single();
+              if (error) { window.alert("Erreur création groupe: " + error.message); return; }
+              addLog(`Groupe créé (${ins?.id || "?"}): ${gname}`);
+              await refetchGroupsOnly();
+            }}>+ Groupe</SubtleButton>
+            <SubtleButton onClick={() => fullReload()}>Rafraîchir</SubtleButton>
           </div>
         </div>
       </header>
 
-      {/* CONTENU PAGE */}
+      {/* CONTENU */}
       <div className="pageBg">
         <div className="pageContent">
           {/* Groupes */}
@@ -692,11 +681,30 @@ export default function App() {
                   <GroupCard
                     key={g.id}
                     group={g}
-                    onRenameGroup={renameGroup}
-                    onDeleteGroup={deleteGroup}
+                    onRenameGroup={async (id) => {
+                      const newName = window.prompt("Nouveau nom du groupe ?", "");
+                      if (!newName) return;
+                      const { error } = await sb.from("groups").update({ name: newName }).eq("id", id);
+                      if (error) window.alert("Erreur rename group: " + error.message);
+                      else { addLog(`Groupe ${id} renommé en ${newName}`); await refetchGroupsOnly(); }
+                    }}
+                    onDeleteGroup={async (id) => {
+                      if (!window.confirm("Supprimer ce groupe ?")) return;
+                      const { error: e1 } = await sb.from("group_members").delete().eq("group_id", id);
+                      if (e1) { window.alert("Erreur suppr membres groupe: " + e1.message); return; }
+                      const { error: e2 } = await sb.from("groups").delete().eq("id", id);
+                      if (e2) { window.alert("Erreur suppr groupe: " + e2.message); return; }
+                      addLog(`Groupe ${id} supprimé`); await refetchGroupsOnly();
+                    }}
                     onOpenMembersEdit={(id) => setGroupMembersOpen({ open: true, groupId: id })}
                     onOpenOnList={(id) => setGroupOnListOpen({ open: true, groupId: id })}
-                    onGroupCmd={(id, act) => sendGroupCmd(id, act)}
+                    onGroupCmd={(id, act) => {
+                      if (act === "SLV_IO_ON") sendGroupCmd(id, "SLV_IO_ON");
+                      else if (act === "SLV_IO_OFF") sendGroupCmd(id, "SLV_IO_OFF");
+                      else if (act === "RESET") sendGroupCmd(id, "RESET");
+                      else if (act === "SLV_FORCE_OFF") sendGroupCmd(id, "SLV_FORCE_OFF");
+                      else if (act === "SLV_HARD_RESET") sendGroupCmd(id, "SLV_HARD_RESET");
+                    }}
                   />
                 ))}
               </div>
@@ -718,7 +726,7 @@ export default function App() {
                   device={dev}
                   slaves={nodesByMaster[dev.id] || []}
                   onMasterRename={renameMaster}
-                  onMasterDelete={deleteMaster}
+                  onMasterDelete={deleteGroup}
                   onSendMasterCmd={sendCmd}
                   openSlaveInfoFor={(mid, mac) => setSlaveInfoOpen({ open: true, masterId: mid, mac })}
                   onSlaveIO={(mid, mac) => sendCmd(mid, mac, "SLV_IO", { pin: DEFAULT_IO_PIN, mode: "OUT", value: 1 })}
@@ -750,7 +758,10 @@ export default function App() {
         masterId={slaveInfoOpen.masterId}
         currentName={(nodesByMaster[slaveInfoOpen.masterId] || []).find((s) => s.mac === slaveInfoOpen.mac)?.friendly_name || slaveInfoOpen.mac}
         pcOn={!!(nodesByMaster[slaveInfoOpen.masterId] || []).find((s) => s.mac === slaveInfoOpen.mac)?.pc_on}
-        onRename={(newName) => { doRenameSlave(slaveInfoOpen.masterId, slaveInfoOpen.mac, newName); setSlaveInfoOpen({ open: false, masterId: "", mac: "" }); }}
+        onRename={async (newName) => {
+          await doRenameSlave(slaveInfoOpen.masterId, slaveInfoOpen.mac, newName);
+          setSlaveInfoOpen({ open: false, masterId: "", mac: "" });
+        }}
       />
       <GroupOnListModal
         open={groupOnListOpen.open}
@@ -763,25 +774,14 @@ export default function App() {
         groupName={(groupsData.find((g) => g.id === groupMembersOpen.groupId)?.name) || ""}
         allSlaves={useMemo(() => {
           const arr = [];
-          for (const mid of Object.keys(nodesByMaster)) for (const sl of nodesByMaster[mid]) arr.push({ mac: sl.mac, master_id: mid, friendly_name: sl.friendly_name, pc_on: sl.pc_on });
+          for (const mid of Object.keys(nodesByMaster)) {
+            for (const sl of nodesByMaster[mid]) arr.push({ mac: sl.mac, master_id: mid, friendly_name: sl.friendly_name, pc_on: sl.pc_on });
+          }
           return arr;
         }, [nodesByMaster])}
         checkedMap={editMembersChecked}
         onToggleMac={(mac) => setEditMembersChecked((old) => ({ ...old, [mac]: !old[mac] }))}
-        onSave={async () => {
-          const gid = groupMembersOpen.groupId; if (!gid) return;
-          const macToMaster = {}; for (const s of Object.keys(nodesByMaster).flatMap(mid => nodesByMaster[mid].map(sl => ({ mac: sl.mac, master_id: mid })))) macToMaster[s.mac] = s.master_id;
-          const { error: delErr } = await sb.from("group_members").delete().eq("group_id", gid);
-          if (delErr) { window.alert("Erreur clear membres: " + delErr.message); return; }
-          const rows = Object.entries(editMembersChecked).filter(([, ok]) => ok).map(([mac]) => ({ group_id: gid, slave_mac: mac, master_id: macToMaster[mac] || null })).filter((r) => r.master_id);
-          if (rows.length) {
-            const { error: insErr } = await sb.from("group_members").insert(rows);
-            if (insErr) { window.alert("Erreur insert membres: " + insErr.message); return; }
-          }
-          addLog(`Membres groupe ${gid} mis à jour.`);
-          setGroupMembersOpen({ open: false, groupId: "" });
-          await refetchGroupsOnly();
-        }}
+        onSave={saveGroupMembers}
       />
     </>
   );
