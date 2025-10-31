@@ -257,9 +257,14 @@ function GroupCard({ group, onOpenSettings, onOpenOnList, onGroupCmd, onOpenAdva
           </div>
         </div>
         {/* Réglages (identique visuellement au master) */}
-        <div className="groupMiniActions">
-          <SubtleButton onClick={() => onOpenSettings(id)}>Réglages</SubtleButton>
-        </div>
+<div className="groupMiniActions">
+  <SubtleButton
+    onClick={() => onOpenSettings(id)}
+    style={{ padding: "8px 14px", fontSize: "14px", lineHeight: "1", borderRadius: "9999px" }}
+  >
+    Réglages
+  </SubtleButton>
+</div>
       </div>
       <div className="slaveBtnsRow" style={{ marginTop: 8 }}>
         <CircleBtn onClick={() => onGroupCmd(id, "SLV_IO_ON")}>ON</CircleBtn>
