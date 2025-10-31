@@ -34,9 +34,23 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install deps
+      - name: Show versions
         run: |
-          npm ci
+          node -v
+          npm -v
+
+      # If no lockfile in repo, generate one so we can use `npm ci`
+      - name: Ensure lockfile
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo "No package-lock.json → generating…"
+            npm install --package-lock-only --no-audit --no-fund
+          else
+            echo "package-lock.json present."
+          fi
+
+      - name: Install deps (ci)
+        run: npm ci --no-audit --no-fund
 
       - name: Check required secrets
         run: |
@@ -49,7 +63,7 @@ jobs:
       - name: Build
         run: |
           npm run build
-          # SPA 404 fallback (GitHub Pages)
+          # SPA fallback for GitHub Pages
           cp -f dist/index.html dist/404.html || true
           ls -la dist
 
