@@ -34,20 +34,7 @@ function ModalShell({open,onClose,children,title}){ if(!open) return null; retur
   </div>
 ); }
 
-/* --- Modale actions “dures” (HARD OFF / HARD RESET) --- */
-function HardActionsModal({ open, title, onClose, onHardOff, onHardReset }) {
-  if (!open) return null;
-  return (
-    <ModalShell open={open} onClose={onClose} title={title}>
-      <div className="slaveBtnsRow" style={{ justifyContent:"center" }}>
-        <CircleBtn onClick={onHardOff}>HARD OFF</CircleBtn>
-        <CircleBtn onClick={onHardReset}>HARD RESET</CircleBtn>
-      </div>
-    </ModalShell>
-  );
-}
-
-/* --- Modales infos/groupes déjà existantes --- */
+/* --- Modale infos slave --- */
 function SlaveInfoModal({open,onClose,slaveMac,masterId,currentName,onRename,pcOn}){
   const [nameDraft,setNameDraft]=useState(currentName||"");
   useEffect(()=>{ setNameDraft(currentName||""); },[currentName,slaveMac,open]);
@@ -67,6 +54,7 @@ function SlaveInfoModal({open,onClose,slaveMac,masterId,currentName,onRename,pcO
   );
 }
 
+/* --- Modale liste machines allumées --- */
 function GroupOnListModal({open,onClose,members}){
   return(
     <ModalShell open={open} onClose={onClose} title="Machines allumées">
@@ -81,6 +69,7 @@ function GroupOnListModal({open,onClose,members}){
   );
 }
 
+/* --- Modale “Réglages du groupe” (Renommer / Membres / Supprimer) --- */
 function GroupSettingsModal({ open, onClose, group, onRenameGroup, onOpenMembersEdit, onDeleteGroup }) {
   if (!open || !group) return null;
   return (
@@ -96,6 +85,7 @@ function GroupSettingsModal({ open, onClose, group, onRenameGroup, onOpenMembers
   );
 }
 
+/* --- Modale édition membres --- */
 function GroupMembersModal({open,onClose,groupName,allSlaves,checkedMap,onToggleMac,onSave}){
   return(
     <ModalShell open={open} onClose={onClose} title={`Membres de "${groupName}"`}>
@@ -115,8 +105,8 @@ function GroupMembersModal({open,onClose,groupName,allSlaves,checkedMap,onToggle
   );
 }
 
-/* --- Cartes --- */
-function SlaveCard({masterId,mac,friendlyName,pcOn,onInfoClick,onIO,onReset,onOpenHard,actionBarPhase}){
+/* --- Carte Slave --- */
+function SlaveCard({masterId,mac,friendlyName,pcOn,onInfoClick,onIO,onReset,onMore,actionBarPhase}){
   return(
     <div className="slaveCard">
       <div className="infoChip" onClick={onInfoClick} title="Infos / renommer">i</div>
@@ -126,13 +116,14 @@ function SlaveCard({masterId,mac,friendlyName,pcOn,onInfoClick,onIO,onReset,onOp
       <div className="slaveBtnsRow">
         <CircleBtn onClick={onIO}>⏻</CircleBtn>
         <CircleBtn onClick={onReset}>↺</CircleBtn>
-        <CircleBtn extraClass="moreBtn" onClick={onOpenHard}>⋯</CircleBtn>
+        <CircleBtn extraClass="moreBtn" onClick={onMore}>⋯</CircleBtn>
       </div>
     </div>
   );
 }
 
-function MasterCard({device,slaves,onMasterRename,onMasterDelete,onSendMasterCmd,openSlaveInfoFor,onSlaveIO,onSlaveReset,onOpenSlaveHard,slavePhases}){
+/* --- Carte Master --- */
+function MasterCard({device,slaves,onMasterRename,onMasterDelete,onSendMasterCmd,openSlaveInfoFor,onSlaveIO,onSlaveReset,onSlaveMore,slavePhases}){
   const live=isLiveDevice(device);
   return(
     <section className="masterCard">
@@ -168,8 +159,8 @@ function MasterCard({device,slaves,onMasterRename,onMasterDelete,onSendMasterCmd
               actionBarPhase={slavePhases[sl.mac]||"idle"}
               onInfoClick={()=>openSlaveInfoFor(device.id,sl.mac)}
               onIO={()=>onSlaveIO(device.id,sl.mac)}
-              onReset={()=>onSendMasterCmd(device.id,sl.mac,"SLV_RESET",{})}
-              onOpenHard={()=>onOpenSlaveHard(device.id,sl.mac)}
+              onReset={()=>onSlaveReset(device.id,sl.mac)}
+              onMore={()=>onSlaveMore(device.id,sl.mac)}
             />
           ))}
         </div>
@@ -178,7 +169,13 @@ function MasterCard({device,slaves,onMasterRename,onMasterDelete,onSendMasterCmd
   );
 }
 
-function GroupCard({ group, onOpenSettings, onOpenOnList, onGroupCmd, onOpenHard }){
+/* --- Carte Groupe (nouvelle UI) --- */
+function GroupCard({
+  group,
+  onOpenSettings,   // ouvre la modale “Réglages”
+  onOpenOnList,
+  onGroupCmd
+}){
   const { id, name, statsOn, statsTotal } = group;
   return (
     <div className="groupCard">
@@ -187,22 +184,33 @@ function GroupCard({ group, onOpenSettings, onOpenOnList, onGroupCmd, onOpenHard
           <div className="groupNameLine">{name}</div>
           <div className="groupSubLine">
             {statsOn}/{statsTotal} allumé(s)
-            <button className="chipBtn" style={{ marginLeft: 6 }} onClick={() => onOpenOnList(id)} disabled={!statsTotal}>
+            <button
+              className="chipBtn"
+              style={{ marginLeft: 6 }}
+              onClick={() => onOpenOnList(id)}
+              disabled={!statsTotal}
+            >
               Voir la liste
             </button>
           </div>
         </div>
+
+        {/* Un seul bouton pour Renommer / Supprimer / Membres */}
         <div className="groupMiniActions">
           <SubtleButton onClick={() => onOpenSettings(id)}>Réglages</SubtleButton>
         </div>
       </div>
 
-      {/* Commandes principales en boutons ronds */}
+      {/* Commandes avec les boutons ronds (même visuel que les slaves) */}
       <div className="slaveBtnsRow" style={{ marginTop: 8 }}>
         <CircleBtn onClick={() => onGroupCmd(id, "SLV_IO_ON")}>ON</CircleBtn>
         <CircleBtn onClick={() => onGroupCmd(id, "RESET")}>↺</CircleBtn>
         <CircleBtn onClick={() => onGroupCmd(id, "SLV_IO_OFF")}>OFF</CircleBtn>
-        <CircleBtn extraClass="moreBtn" onClick={() => onOpenHard(id)}>⋯</CircleBtn>
+        <CircleBtn extraClass="moreBtn" onClick={()=>{
+          const act = window.prompt("Actions avancées:\n1 = HARD OFF\n2 = HARD RESET","1");
+          if (act === "1") onGroupCmd(id, "SLV_FORCE_OFF");
+          else if (act === "2") onGroupCmd(id, "SLV_HARD_RESET");
+        }}>⋯</CircleBtn>
       </div>
     </div>
   );
@@ -237,6 +245,7 @@ export default function App(){
   const [slavePhases,setSlavePhases]=useState({});
 
   const [logs,setLogs]=useState([]);
+  const logRef=useRef(null);
   const addLog=(t)=>setLogs((old)=>[...old.slice(-199), new Date().toLocaleTimeString()+"  "+t]);
 
   const [slaveInfoOpen,setSlaveInfoOpen]=useState({open:false,masterId:"",mac:""});
@@ -244,10 +253,8 @@ export default function App(){
   const [groupMembersOpen,setGroupMembersOpen]=useState({open:false,groupId:""});
   const [editMembersChecked,setEditMembersChecked]=useState({});
 
-  // Réglages groupe + actions “dures”
+  // nouvelle: modale Réglages groupe
   const [groupSettingsOpen, setGroupSettingsOpen] = useState({ open:false, groupId:"" });
-  const [hardSlave, setHardSlave] = useState({ open:false, masterId:"", mac:"" });
-  const [hardGroup, setHardGroup] = useState({ open:false, groupId:"" });
 
   const chDevices=useRef(null); const chNodes=useRef(null); const chCmds=useRef(null); const chGroups=useRef(null);
 
@@ -471,24 +478,17 @@ export default function App(){
     });
   }
 
-  // Ouvertures/fermetures modales
+  // Modales
   const openSlaveInfo=(masterId,mac)=>setSlaveInfoOpen({open:true,masterId,mac});
   const closeSlaveInfo=()=>setSlaveInfoOpen({open:false,masterId:"",mac:""});
-
   const openGroupOnListModal=(groupId)=>setGroupOnListOpen({open:true,groupId});
   const closeGroupOnListModal=()=>setGroupOnListOpen({open:false,groupId:""});
-
   const openGroupMembersModal=(groupId)=>setGroupMembersOpen({open:true,groupId});
   const closeGroupMembersModal=()=>setGroupMembersOpen({open:false,groupId:""});
 
-  const openGroupSettingsModal=(groupId)=>setGroupSettingsOpen({open:true,groupId});
-  const closeGroupSettingsModal=()=>setGroupSettingsOpen({open:false,groupId:""});
-
-  const openSlaveHard=(masterId,mac)=>setHardSlave({open:true,masterId,mac});
-  const closeSlaveHard=()=>setHardSlave({open:false,masterId:"",mac:""});
-
-  const openGroupHard=(groupId)=>setHardGroup({open:true,groupId});
-  const closeGroupHard=()=>setHardGroup({open:false,groupId:""});
+  // Réglages groupe
+  function openGroupSettingsModal(groupId){ setGroupSettingsOpen({ open:true, groupId }); }
+  function closeGroupSettingsModal(){ setGroupSettingsOpen({ open:false, groupId:"" }); }
 
   useEffect(()=>{
     if(!groupMembersOpen.open) return;
@@ -558,7 +558,7 @@ export default function App(){
             <SubtleButton onClick={renameAccountLabel}>Renommer compte</SubtleButton>
             <SubtleButton onClick={handleLogout}>Déconnexion</SubtleButton>
             <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
-            {/* + Groupe déplacé dans la section Groupes */}
+            <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
             <SubtleButton onClick={fullReload}>Rafraîchir</SubtleButton>
           </div>
         </div>
@@ -569,13 +569,8 @@ export default function App(){
           {/* Groupes */}
           <div className="groupsSection">
             <div className="sectionTitleRow">
-              <div>
-                <div className="sectionTitle">Groupes</div>
-                <div className="sectionSub">Contrôler plusieurs machines en même temps</div>
-              </div>
-              <div>
-                <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
-              </div>
+              <div className="sectionTitle">Groupes</div>
+              <div className="sectionSub">Contrôler plusieurs machines en même temps</div>
             </div>
             {!groupsData.length ? (
               <div className="noGroupsNote smallText">Aucun groupe pour l’instant</div>
@@ -588,7 +583,6 @@ export default function App(){
                     onOpenSettings={(id)=>openGroupSettingsModal(id)}
                     onOpenOnList={(id)=>openGroupOnListModal(id)}
                     onGroupCmd={(id,act)=>sendGroupCmd(id,act)}
-                    onOpenHard={(id)=>openGroupHard(id)}
                   />
                 ))}
               </div>
@@ -614,7 +608,11 @@ export default function App(){
                   openSlaveInfoFor={openSlaveInfo}
                   onSlaveIO={(mid,mac)=>sendCmd(mid,mac,"SLV_IO",{pin:DEFAULT_IO_PIN,mode:"OUT",value:1})}
                   onSlaveReset={(mid,mac)=>sendCmd(mid,mac,"SLV_RESET",{})}
-                  onOpenSlaveHard={(mid,mac)=>openSlaveHard(mid,mac)}
+                  onSlaveMore={(mid,mac)=>{
+                    const act=window.prompt("Action ?\n1 = HARD OFF\n2 = HARD RESET","1");
+                    if(act==="1") sendCmd(mid,mac,"SLV_FORCE_OFF",{});
+                    else if(act==="2") sendCmd(mid,mac,"SLV_HARD_RESET",{ms:3000});
+                  }}
                   slavePhases={slavePhases}
                 />
               ))
@@ -624,7 +622,7 @@ export default function App(){
           {/* Journal */}
           <div className="journalSection">
             <div className="sectionTitleRow"><div className="sectionTitle">Journal</div></div>
-            <div className="logBox">{logs.join("\n")}</div>
+            <div className="logBox" ref={logRef}>{logs.join("\n")}</div>
           </div>
         </div>
       </div>
@@ -635,45 +633,24 @@ export default function App(){
         onClose={closeSlaveInfo}
         slaveMac={slaveInfoOpen.mac}
         masterId={slaveInfoOpen.masterId}
-        currentName={(nodesByMaster[slaveInfoOpen.masterId]||[]).find(s=>s.mac===slaveInfoOpen.mac)?.friendly_name || slaveInfoOpen.mac}
-        pcOn={!!(nodesByMaster[slaveInfoOpen.masterId]||[]).find(s=>s.mac===slaveInfoOpen.mac)?.pc_on}
+        currentName={currentSlaveInfo?.friendly_name || slaveInfoOpen.mac}
+        pcOn={!!currentSlaveInfo?.pc_on}
         onRename={(newName)=>{ doRenameSlave(slaveInfoOpen.masterId,slaveInfoOpen.mac,newName); closeSlaveInfo(); }}
       />
       <GroupOnListModal
         open={groupOnListOpen.open}
         onClose={closeGroupOnListModal}
-        members={(groupsData.find(g=>g.id===groupOnListOpen.groupId)?.members)||[]}
+        members={currentGroupForOnList?.members || []}
       />
       <GroupMembersModal
         open={groupMembersOpen.open}
         onClose={closeGroupMembersModal}
         groupName={(groupsData.find((g)=>g.id===groupMembersOpen.groupId)?.name)||""}
-        allSlaves={useMemo(()=>{
-          const arr=[]; for(const mid of Object.keys(nodesByMaster)) for(const sl of nodesByMaster[mid]) arr.push({ mac:sl.mac, master_id:mid, friendly_name:sl.friendly_name, pc_on:sl.pc_on });
-          return arr;
-        },[nodesByMaster])}
+        allSlaves={allSlavesFlat}
         checkedMap={editMembersChecked}
         onToggleMac={toggleCheckMac}
         onSave={saveGroupMembers}
       />
-
-      {/* HARD actions */}
-      <HardActionsModal
-        open={hardSlave.open}
-        title="Actions avancées — Slave"
-        onClose={closeSlaveHard}
-        onHardOff={()=>{ if(hardSlave.open) sendCmd(hardSlave.masterId, hardSlave.mac, "SLV_FORCE_OFF", {}); closeSlaveHard(); }}
-        onHardReset={()=>{ if(hardSlave.open) sendCmd(hardSlave.masterId, hardSlave.mac, "SLV_HARD_RESET", { ms:3000 }); closeSlaveHard(); }}
-      />
-      <HardActionsModal
-        open={hardGroup.open}
-        title="Actions avancées — Groupe"
-        onClose={closeGroupHard}
-        onHardOff={()=>{ if(hardGroup.open) sendGroupCmd(hardGroup.groupId, "SLV_FORCE_OFF"); closeGroupHard(); }}
-        onHardReset={()=>{ if(hardGroup.open) sendGroupCmd(hardGroup.groupId, "SLV_HARD_RESET"); closeGroupHard(); }}
-      />
-
-      {/* Réglages groupe */}
       <GroupSettingsModal
         open={groupSettingsOpen.open}
         onClose={closeGroupSettingsModal}
