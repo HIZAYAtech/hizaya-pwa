@@ -85,6 +85,27 @@ function GroupSettingsModal({ open, onClose, group, onRenameGroup, onOpenMembers
   );
 }
 
+/* --- Modale “Réglages du master” --- */
+function MasterSettingsModal({ open, onClose, device, onPulse, onRename, onDelete }) {
+  if (!open || !device) return null;
+  return (
+    <ModalShell open={open} onClose={onClose} title={`Réglages — ${device.name || device.id}`}>
+      <div className="modalSection">
+        <div className="modalInfoRow"><span className="modalInfoKey">ID :</span><span className="modalInfoVal">{device.id}</span></div>
+        <div className="modalInfoRow"><span className="modalInfoKey">MAC :</span><span className="modalInfoVal">{device.master_mac || "—"}</span></div>
+        <div className="modalInfoRow"><span className="modalInfoKey">Dernier contact :</span><span className="modalInfoVal">{device.last_seen ? fmtTS(device.last_seen) : "jamais"}</span></div>
+      </div>
+      <div className="modalSection">
+        <SubtleButton onClick={() => onRename(device.id)}>Renommer</SubtleButton>
+        <SubtleButton onClick={() => onPulse(device.id)}>Pulse 500ms</SubtleButton>
+        <SubtleButton onClick={() => onDelete(device.id)} style={{background:"rgba(255,0,0,0.08)", borderColor:"rgba(255,0,0,0.25)"}}>
+          Supprimer
+        </SubtleButton>
+      </div>
+    </ModalShell>
+  );
+}
+
 /* --- Modale édition membres --- */
 function GroupMembersModal({open,onClose,groupName,allSlaves,checkedMap,onToggleMac,onSave}){
   return(
@@ -106,7 +127,7 @@ function GroupMembersModal({open,onClose,groupName,allSlaves,checkedMap,onToggle
 }
 
 /* --- Carte Slave --- */
-function SlaveCard({masterId,mac,friendlyName,pcOn,onInfoClick,onIO,onReset,onMore,actionBarPhase}){
+function SlaveCard({masterId,mac,friendlyName,pcOn,onInfoClick,onIO,onReset,onHardOff,onHardReset,actionBarPhase}){
   return(
     <div className="slaveCard">
       <div className="infoChip" onClick={onInfoClick} title="Infos / renommer">i</div>
@@ -116,14 +137,15 @@ function SlaveCard({masterId,mac,friendlyName,pcOn,onInfoClick,onIO,onReset,onMo
       <div className="slaveBtnsRow">
         <CircleBtn onClick={onIO}>⏻</CircleBtn>
         <CircleBtn onClick={onReset}>↺</CircleBtn>
-        <CircleBtn extraClass="moreBtn" onClick={onMore}>⋯</CircleBtn>
+        <CircleBtn extraClass="moreBtn" onClick={onHardOff}>OFF!</CircleBtn>
+        <CircleBtn extraClass="moreBtn" onClick={onHardReset}>RST!</CircleBtn>
       </div>
     </div>
   );
 }
 
 /* --- Carte Master --- */
-function MasterCard({device,slaves,onMasterRename,onMasterDelete,onSendMasterCmd,openSlaveInfoFor,onSlaveIO,onSlaveReset,onSlaveMore,slavePhases}){
+function MasterCard({device,slaves,onOpenMasterSettings,openSlaveInfoFor,onSlaveIO,onSlaveReset,onSlaveHardOff,onSlaveHardReset,slavePhases}){
   const live=isLiveDevice(device);
   return(
     <section className="masterCard">
@@ -140,12 +162,7 @@ function MasterCard({device,slaves,onMasterRename,onMasterDelete,onSendMasterCmd
           </div>
         </div>
         <div className="masterActionsRow">
-          <SubtleButton onClick={()=>onMasterRename(device.id)}>Renommer</SubtleButton>
-          <SubtleButton onClick={()=>onMasterDelete(device.id)}>Supprimer</SubtleButton>
-          <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"PULSE",{ms:500})}>Pulse 500ms</SubtleButton>
-          <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"POWER_ON",{})}>Power ON</SubtleButton>
-          <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"POWER_OFF",{})}>Power OFF</SubtleButton>
-          <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"RESET",{})}>Reset</SubtleButton>
+          <SubtleButton onClick={()=>onOpenMasterSettings(device)}>Réglages</SubtleButton>
         </div>
       </div>
       <div className="slavesWrap">
@@ -160,7 +177,8 @@ function MasterCard({device,slaves,onMasterRename,onMasterDelete,onSendMasterCmd
               onInfoClick={()=>openSlaveInfoFor(device.id,sl.mac)}
               onIO={()=>onSlaveIO(device.id,sl.mac)}
               onReset={()=>onSlaveReset(device.id,sl.mac)}
-              onMore={()=>onSlaveMore(device.id,sl.mac)}
+              onHardOff={()=>onSlaveHardOff(device.id,sl.mac)}
+              onHardReset={()=>onSlaveHardReset(device.id,sl.mac)}
             />
           ))}
         </div>
@@ -194,8 +212,6 @@ function GroupCard({
             </button>
           </div>
         </div>
-
-        {/* Un seul bouton pour Renommer / Supprimer / Membres */}
         <div className="groupMiniActions">
           <SubtleButton onClick={() => onOpenSettings(id)}>Réglages</SubtleButton>
         </div>
@@ -206,11 +222,9 @@ function GroupCard({
         <CircleBtn onClick={() => onGroupCmd(id, "SLV_IO_ON")}>ON</CircleBtn>
         <CircleBtn onClick={() => onGroupCmd(id, "RESET")}>↺</CircleBtn>
         <CircleBtn onClick={() => onGroupCmd(id, "SLV_IO_OFF")}>OFF</CircleBtn>
-        <CircleBtn extraClass="moreBtn" onClick={()=>{
-          const act = window.prompt("Actions avancées:\n1 = HARD OFF\n2 = HARD RESET","1");
-          if (act === "1") onGroupCmd(id, "SLV_FORCE_OFF");
-          else if (act === "2") onGroupCmd(id, "SLV_HARD_RESET");
-        }}>⋯</CircleBtn>
+        {/* Hard actions en boutons, plus de prompt */}
+        <CircleBtn extraClass="moreBtn" onClick={()=>onGroupCmd(id, "SLV_FORCE_OFF")}>OFF!</CircleBtn>
+        <CircleBtn extraClass="moreBtn" onClick={()=>onGroupCmd(id, "SLV_HARD_RESET")}>RST!</CircleBtn>
       </div>
     </div>
   );
@@ -253,20 +267,23 @@ export default function App(){
   const [groupMembersOpen,setGroupMembersOpen]=useState({open:false,groupId:""});
   const [editMembersChecked,setEditMembersChecked]=useState({});
 
-  // nouvelle: modale Réglages groupe
+  // Modale Réglages groupe / master
   const [groupSettingsOpen, setGroupSettingsOpen] = useState({ open:false, groupId:"" });
+  const [masterSettingsOpen, setMasterSettingsOpen] = useState({ open:false, device:null });
 
-  const chDevices=useRef(null); const chNodes=useRef(null); const chCmds=useRef(null); const chGroups=useRef(null);
+  // Realtime channels
+  const chDevices=useRef(null); const chNodes=useRef(null); const chCmds=useRef(null); const chGroups=useRef(null); const chProfile=useRef(null);
 
   function cleanupRealtime(){
     if(chDevices.current) sb.removeChannel(chDevices.current);
     if(chNodes.current) sb.removeChannel(chNodes.current);
     if(chCmds.current) sb.removeChannel(chCmds.current);
     if(chGroups.current) sb.removeChannel(chGroups.current);
-    chDevices.current = chNodes.current = chCmds.current = chGroups.current = null;
+    if(chProfile.current) sb.removeChannel(chProfile.current);
+    chDevices.current = chNodes.current = chCmds.current = chGroups.current = chProfile.current = null;
     realtimeAttached=false;
   }
-  function attachRealtime(){
+  function attachRealtime(uid){
     if(realtimeAttached) return;
     cleanupRealtime();
 
@@ -295,61 +312,43 @@ export default function App(){
       .on("postgres_changes",{event:"*",schema:"public",table:"group_members"},()=>{ addLog("[RT] group_members changed"); refetchGroupsOnly(); })
       .subscribe();
 
+    if (uid) {
+      chProfile.current = sb.channel("rt:profiles:"+uid)
+        .on("postgres_changes",{event:"UPDATE", schema:"public", table:"profiles", filter:`id=eq.${uid}`}, (payload)=>{
+          const n = payload.new;
+          if (n?.account_name) setAccountName(n.account_name);
+        })
+        .subscribe();
+    }
+
     realtimeAttached=true;
   }
 
-  // ---------- PROFIL (account_name) ----------
-  async function loadProfile(){
-    try{
-      const { data: s } = await sb.auth.getSession();
-      const u = s?.session?.user; if(!u) return;
-
-      // 1) table profiles
-      const { data, error } = await sb
-        .from("profiles")
-        .select("account_name")
-        .eq("id", u.id)
-        .maybeSingle();
-
-      // 2) metadata auth
-      const metaName = u?.user_metadata?.account_name;
-
-      // 3) fallback email prefix
-      const emailPrefix = u?.email ? u.email.split("@")[0] : "";
-
-      const name = (data?.account_name && data.account_name.trim()) ||
-                   (metaName && String(metaName).trim()) ||
-                   emailPrefix;
-
-      setAccountName(name || "");
-      addLog(`[profile] nom chargé: ${name} (${data?.account_name ? "profiles" : metaName ? "auth.meta" : "email"})`);
-    }catch(e){
-      addLog(`[profile] load err: ${e?.message||e}`);
+  // ---- Profiles: load/save ----
+  async function loadAccountName(uid, email){
+    if(!uid) { setAccountName(email||""); return; }
+    const { data, error } = await sb.from("profiles").select("account_name").eq("id", uid).single();
+    if (!error && data?.account_name) {
+      setAccountName(data.account_name);
+    } else {
+      // fallback: meta or email prefix
+      const fallback = email ? String(email).split("@")[0] : "";
+      setAccountName(fallback);
     }
   }
 
   async function saveAccountName(newName){
-    try{
-      const safe = String(newName||"").trim();
-      if(!safe) return;
-      const { data: s } = await sb.auth.getSession();
-      const u = s?.session?.user; if(!u) return;
-
-      // 1) metadata (JWT)
-      const { error: authErr } = await sb.auth.updateUser({ data: { account_name: safe } });
-      if(authErr){ addLog(`[profile] auth.meta err: ${authErr.message}`); }
-
-      // 2) table profiles (si RLS ok / ligne existe)
-      const { error: sqlErr } = await sb
-        .from("profiles")
-        .update({ account_name: safe, email: u.email || null })
-        .eq("id", u.id);
-      if(sqlErr){ addLog(`[profile] profiles.update err: ${sqlErr.message}`); }
-
-      setAccountName(safe);
-      addLog(`Compte renommé : ${safe}`);
-    }catch(e){
-      addLog(`[profile] save err: ${e?.message||e}`);
+    if(!user) return;
+    const trimmed = (newName||"").trim();
+    if(!trimmed) return;
+    // Optimistic UI
+    setAccountName(trimmed);
+    const { error } = await sb.from("profiles").update({ account_name: trimmed, updated_at: new Date().toISOString() }).eq("id", user.id);
+    if(error){
+      // rollback minimal
+      addLog("Err save account_name: " + error.message);
+      await loadAccountName(user.id, user.email);
+      window.alert("Erreur enregistrement du nom de compte.");
     }
   }
 
@@ -364,12 +363,13 @@ export default function App(){
       if(!mounted) return;
       if(sess?.user){
         setUser(sess.user);
+        await loadAccountName(sess.user.id, sess.user.email);
         setAuthReady(true);
-        await loadProfile();
         await fullReload();
-        attachRealtime();
+        attachRealtime(sess.user.id);
       }else{
         setUser(null);
+        setAccountName("");
         setAuthReady(true);
       }
     }
@@ -378,16 +378,16 @@ export default function App(){
       if(event==="SIGNED_IN"){
         stripOAuthParams();
         setUser(session?.user||null);
-        await loadProfile();
+        await loadAccountName(session?.user?.id, session?.user?.email);
         await fullReload();
-        attachRealtime();
+        attachRealtime(session?.user?.id);
       }else if(event==="SIGNED_OUT"){
         setUser(null);
+        setAccountName("");
         setDevices([]); setNodesByMaster({}); setGroupsData([]); setSlavePhases({});
         cleanupRealtime();
       }else if(event==="TOKEN_REFRESHED"||event==="USER_UPDATED"){
         setUser(session?.user||null);
-        await loadProfile();
       }
       setAuthReady(true);
     });
@@ -544,10 +544,13 @@ export default function App(){
   const openGroupMembersModal=(groupId)=>setGroupMembersOpen({open:true,groupId});
   const closeGroupMembersModal=()=>setGroupMembersOpen({open:false,groupId:""});
 
-  // Réglages groupe
+  // Réglages groupe / master
   function openGroupSettingsModal(groupId){ setGroupSettingsOpen({ open:true, groupId }); }
   function closeGroupSettingsModal(){ setGroupSettingsOpen({ open:false, groupId:"" }); }
+  function openMasterSettingsModal(device){ setMasterSettingsOpen({ open:true, device }); }
+  function closeMasterSettingsModal(){ setMasterSettingsOpen({ open:false, device:null }); }
 
+  // Précocher membres groupe
   useEffect(()=>{
     if(!groupMembersOpen.open) return;
     const g=groupsData.find((gg)=>gg.id===groupMembersOpen.groupId); if(!g) return;
@@ -600,8 +603,6 @@ export default function App(){
   if(!authReady){ return <div style={{color:"#fff",padding:"2rem"}}>Chargement…</div>; }
   if(!user){ return <LoginScreen onLogin={handleLogin}/>; }
 
-  const displayAccount = accountName || (user?.email ? user.email.split("@")[0] : "");
-
   return(
     <>
       <header className="topHeader">
@@ -614,28 +615,35 @@ export default function App(){
             <div className="appSubtitle smallText">tableau de contrôle</div>
           </div>
           <div className="rightBlock">
-            <div className="userMail smallText">{displayAccount}</div>
-            <SubtleButton onClick={renameAccountLabel}>Renommer compte</SubtleButton>
+            <div className="userMail smallText">{user.email}</div>
             <SubtleButton onClick={handleLogout}>Déconnexion</SubtleButton>
             <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
-            <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
-            <SubtleButton onClick={fullReload}>Rafraîchir</SubtleButton>
           </div>
         </div>
       </header>
 
+      {/* Nom de compte en gros (sous le bandeau) */}
+      <div style={{padding:"16px 24px 0 24px"}}>
+        <div style={{fontSize:24, fontWeight:700, lineHeight:1.2}}>
+          {accountName || user.email}
+        </div>
+        <div style={{marginTop:6}}>
+          <SubtleButton onClick={()=>renameAccountLabel()}>Renommer le compte</SubtleButton>
+        </div>
+      </div>
+
       <div className="pageBg">
         <div className="pageContent">
-          {/* Nom de compte en gros, juste sous le bandeau */}
-          <div className="accountTitleBig" style={{fontSize:"2rem", fontWeight:600, margin:"0 0 1rem 0"}}>
-            {displayAccount}
-          </div>
-
           {/* Groupes */}
           <div className="groupsSection">
-            <div className="sectionTitleRow">
-              <div className="sectionTitle">Groupes</div>
-              <div className="sectionSub">Contrôler plusieurs machines en même temps</div>
+            <div className="sectionTitleRow" style={{alignItems:"center"}}>
+              <div>
+                <div className="sectionTitle">Groupes</div>
+                <div className="sectionSub">Contrôler plusieurs machines en même temps</div>
+              </div>
+              <div style={{marginLeft:"auto"}}>
+                <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
+              </div>
             </div>
             {!groupsData.length ? (
               <div className="noGroupsNote smallText">Aucun groupe pour l’instant</div>
@@ -667,17 +675,12 @@ export default function App(){
                 <MasterCard key={dev.id}
                   device={dev}
                   slaves={nodesByMaster[dev.id]||[]}
-                  onMasterRename={renameMaster}
-                  onMasterDelete={deleteMaster}
-                  onSendMasterCmd={sendCmd}
+                  onOpenMasterSettings={openMasterSettingsModal}
                   openSlaveInfoFor={openSlaveInfo}
                   onSlaveIO={(mid,mac)=>sendCmd(mid,mac,"SLV_IO",{pin:DEFAULT_IO_PIN,mode:"OUT",value:1})}
                   onSlaveReset={(mid,mac)=>sendCmd(mid,mac,"SLV_RESET",{})}
-                  onSlaveMore={(mid,mac)=>{
-                    const act=window.prompt("Action ?\n1 = HARD OFF\n2 = HARD RESET","1");
-                    if(act==="1") sendCmd(mid,mac,"SLV_FORCE_OFF",{});
-                    else if(act==="2") sendCmd(mid,mac,"SLV_HARD_RESET",{ms:3000});
-                  }}
+                  onSlaveHardOff={(mid,mac)=>sendCmd(mid,mac,"SLV_FORCE_OFF",{})}
+                  onSlaveHardReset={(mid,mac)=>sendCmd(mid,mac,"SLV_HARD_RESET",{ms:3000})}
                   slavePhases={slavePhases}
                 />
               ))
@@ -723,6 +726,14 @@ export default function App(){
         onRenameGroup={renameGroup}
         onOpenMembersEdit={(gid)=>openGroupMembersModal(gid)}
         onDeleteGroup={deleteGroup}
+      />
+      <MasterSettingsModal
+        open={masterSettingsOpen.open}
+        onClose={closeMasterSettingsModal}
+        device={masterSettingsOpen.device}
+        onPulse={(id)=>sendCmd(id,null,"PULSE",{ms:500})}
+        onRename={renameMaster}
+        onDelete={deleteMaster}
       />
     </>
   );
