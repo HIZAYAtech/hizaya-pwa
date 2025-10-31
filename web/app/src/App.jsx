@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import { sb, stripOAuthParams } from "./supabaseClient";
 
 /* ====== Const ====== */
-const LIVE_TTL_MS = 30000; // un peu plus tolérant (évite faux "offline")
+const LIVE_TTL_MS = 30000; // marge plus large pour éviter les faux "offline"
 const DEFAULT_IO_PIN = 26;
 
 /* ====== Helpers ====== */
@@ -248,17 +248,14 @@ export default function App(){
     realtimeAttached=true;
   }
 
-  /* ---------- INIT AUTH ROBUSTE (ne bloque jamais l'UI) ---------- */
+  /* ---------- INIT AUTH (ordre corrigé) ---------- */
   useEffect(()=>{
     let mounted=true;
 
     // Failsafe : jamais >3s sur "Chargement…"
-    const unlock = setTimeout(() => {
-      if (mounted) setAuthReady(true);
-    }, 3000);
+    const unlock = setTimeout(() => { if (mounted) setAuthReady(true); }, 3000);
 
     async function safeFullReload(timeoutMs=4000){
-      // évite un Promise.all bloqué si réseau KO
       await Promise.race([
         (async()=>{ try{ await fullReload(); }catch(e){ console.error("[fullReload]",e); } })(),
         new Promise(res=>setTimeout(res, timeoutMs))
@@ -267,15 +264,18 @@ export default function App(){
 
     async function init(){
       try{
-        stripOAuthParams();
+        // 1) Laisse Supabase traiter le code OAuth
         const { data, error } = await sb.auth.getSession();
         if(error) console.error("[auth] getSession error:", error);
         const sess = data?.session ?? null;
 
+        // 2) Ensuite seulement, on nettoie l'URL
+        stripOAuthParams();
+
         if(!mounted) return;
 
         setUser(sess?.user ?? null);
-        setAuthReady(true);               // <-- débloque l’UI quoi qu’il arrive
+        setAuthReady(true);  // débloque l’UI
 
         if(sess?.user){
           await safeFullReload();
@@ -287,7 +287,7 @@ export default function App(){
         console.error("[auth] init fatal:", e);
         if(mounted){
           setUser(null);
-          setAuthReady(true);             // <-- débloque même en erreur
+          setAuthReady(true);
           cleanupRealtime();
         }
       }finally{
@@ -297,10 +297,16 @@ export default function App(){
 
     const { data: sub } = sb.auth.onAuthStateChange(async (event, session)=>{
       if(!mounted) return;
+
+      if(event==="SIGNED_IN"){
+        // après SIGNED_IN on peut nettoyer l’URL
+        stripOAuthParams();
+      }
       setUser(session?.user ?? null);
-      setAuthReady(true);                 // <-- toujours débloqué
+      setAuthReady(true);
+
       if(session?.user){
-        await safeFullReload();
+        try{ await fullReload(); }catch{}
         attachRealtime();
       }else{
         cleanupRealtime();
@@ -318,7 +324,7 @@ export default function App(){
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
-  /* ---------- Réveil (focus/online) : resync sans reload ---------- */
+  /* ---------- Réveil (focus/online) ---------- */
   useEffect(() => {
     const onWake = async () => {
       try {
@@ -469,8 +475,7 @@ export default function App(){
   }
   function handleLogout(){ sb.auth.signOut(); }
   function handleLogin(){
-    stripOAuthParams();
-    // IMPORTANT: redirection vers la racine du site Pages
+    // IMPORTANT : garde la racine gh-pages
     const returnTo = `${window.location.origin}/hizaya-pwa/`;
     sb.auth.signInWithOAuth({
       provider:"google",
