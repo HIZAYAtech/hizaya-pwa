@@ -1,12 +1,19 @@
 import { createClient } from "@supabase/supabase-js";
 
-const url = import.meta.env.VITE_SUPABASE_URL;
-const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-if (!url || !key) {
-  // Evite les crashes silencieux
-  console.warn("[Supabase] VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY manquants.");
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error("[supabase] VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY manquants");
 }
 
-const supabase = createClient(url, key);
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    flowType: "pkce",
+  },
+});
+
 export default supabase;
