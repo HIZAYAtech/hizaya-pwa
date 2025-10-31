@@ -1,3 +1,4 @@
+// src/App.jsx
 import { useEffect, useRef, useState, useMemo } from "react";
 import { sb, stripOAuthParams } from "./supabaseClient";
 
@@ -74,10 +75,56 @@ function GroupSettingsModal({ open, onClose, group, onRenameGroup, onOpenMembers
   if (!open || !group) return null;
   return (
     <ModalShell open={open} onClose={onClose} title={`Réglages — ${group.name}`}>
-      <div className="modalSection">
+      <div className="modalSection" style={{display:"grid", gap:8}}>
         <SubtleButton onClick={()=>{ onRenameGroup(group.id); onClose(); }}>Renommer</SubtleButton>
         <SubtleButton onClick={()=>{ onOpenMembersEdit(group.id); onClose(); }}>Membres</SubtleButton>
         <SubtleButton onClick={()=>{ onDeleteGroup(group.id); onClose(); }} style={{background:"rgba(255,0,0,0.08)", borderColor:"rgba(255,0,0,0.25)"}}>
+          Supprimer
+        </SubtleButton>
+      </div>
+    </ModalShell>
+  );
+}
+
+/* --- Modale actions avancées Groupe (HARD OFF / HARD RESET) --- */
+function GroupMoreModal({ open, onClose, groupName, onHardOff, onHardReset }){
+  if(!open) return null;
+  return (
+    <ModalShell open={open} onClose={onClose} title={`Actions avancées — ${groupName||""}`}>
+      <div className="modalSection" style={{display:"flex", gap:12, justifyContent:"center"}}>
+        <CircleBtn onClick={onHardOff}>HARD OFF</CircleBtn>
+        <CircleBtn onClick={onHardReset}>HARD RESET</CircleBtn>
+      </div>
+    </ModalShell>
+  );
+}
+
+/* --- Modale actions avancées Slave (HARD OFF / HARD RESET) --- */
+function SlaveMoreModal({ open, onClose, slaveName, onHardOff, onHardReset }){
+  if(!open) return null;
+  return (
+    <ModalShell open={open} onClose={onClose} title={`Actions avancées — ${slaveName||""}`}>
+      <div className="modalSection" style={{display:"flex", gap:12, justifyContent:"center"}}>
+        <CircleBtn onClick={onHardOff}>HARD OFF</CircleBtn>
+        <CircleBtn onClick={onHardReset}>HARD RESET</CircleBtn>
+      </div>
+    </ModalShell>
+  );
+}
+
+/* --- Modale Réglages Master (Pulse / Renommer / Supprimer + infos) --- */
+function MasterSettingsModal({ open, onClose, device, onPulse, onRename, onDelete }){
+  if(!open || !device) return null;
+  return (
+    <ModalShell open={open} onClose={onClose} title={`Réglages — ${device.name || device.id}`}>
+      <div className="modalSection" style={{display:"grid", gap:8}}>
+        <div className="modalInfoRow"><span className="modalInfoKey">ID :</span><span className="modalInfoVal">{device.id}</span></div>
+        <div className="modalInfoRow"><span className="modalInfoKey">MAC :</span><span className="modalInfoVal">{device.master_mac || "—"}</span></div>
+      </div>
+      <div className="modalSection" style={{display:"grid", gap:8}}>
+        <SubtleButton onClick={()=>{ onPulse(device.id); }}>Pulse 500ms</SubtleButton>
+        <SubtleButton onClick={()=>{ onRename(device.id); }}>Renommer</SubtleButton>
+        <SubtleButton onClick={()=>{ onDelete(device.id); }} style={{background:"rgba(255,0,0,0.08)", borderColor:"rgba(255,0,0,0.25)"}}>
           Supprimer
         </SubtleButton>
       </div>
@@ -123,7 +170,7 @@ function SlaveCard({masterId,mac,friendlyName,pcOn,onInfoClick,onIO,onReset,onMo
 }
 
 /* --- Carte Master --- */
-function MasterCard({device,slaves,onMasterRename,onMasterDelete,onSendMasterCmd,openSlaveInfoFor,onSlaveIO,onSlaveReset,onSlaveMore,slavePhases}){
+function MasterCard({device,slaves,onOpenSettings,openSlaveInfoFor,onSlaveIO,onSlaveReset,onSlaveMore,slavePhases}){
   const live=isLiveDevice(device);
   return(
     <section className="masterCard">
@@ -134,18 +181,11 @@ function MasterCard({device,slaves,onMasterRename,onMasterDelete,onSendMasterCmd
             <span className={"onlineBadge "+(live?"onlineYes":"onlineNo")}>{live?"EN LIGNE":"HORS LIGNE"}</span>
           </div>
           <div className="masterMeta smallText">
-            <span className="kv"><span className="k">ID :</span> <span className="v">{device.id}</span></span> ·{" "}
-            <span className="kv"><span className="k">MAC :</span> <span className="v">{device.master_mac||"—"}</span></span> ·{" "}
             <span className="kv"><span className="k">Dernier contact :</span> <span className="v">{device.last_seen?fmtTS(device.last_seen):"jamais"}</span></span>
           </div>
         </div>
         <div className="masterActionsRow">
-          <SubtleButton onClick={()=>onMasterRename(device.id)}>Renommer</SubtleButton>
-          <SubtleButton onClick={()=>onMasterDelete(device.id)}>Supprimer</SubtleButton>
-          <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"PULSE",{ms:500})}>Pulse 500ms</SubtleButton>
-          <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"POWER_ON",{})}>Power ON</SubtleButton>
-          <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"POWER_OFF",{})}>Power OFF</SubtleButton>
-          <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"RESET",{})}>Reset</SubtleButton>
+          <SubtleButton onClick={()=>onOpenSettings(device.id)}>Réglages</SubtleButton>
         </div>
       </div>
       <div className="slavesWrap">
@@ -174,6 +214,7 @@ function GroupCard({
   group,
   onOpenSettings,   // ouvre la modale “Réglages”
   onOpenOnList,
+  onOpenMore,       // ouvre la modale “⋯”
   onGroupCmd
 }){
   const { id, name, statsOn, statsTotal } = group;
@@ -206,11 +247,7 @@ function GroupCard({
         <CircleBtn onClick={() => onGroupCmd(id, "SLV_IO_ON")}>ON</CircleBtn>
         <CircleBtn onClick={() => onGroupCmd(id, "RESET")}>↺</CircleBtn>
         <CircleBtn onClick={() => onGroupCmd(id, "SLV_IO_OFF")}>OFF</CircleBtn>
-        <CircleBtn extraClass="moreBtn" onClick={()=>{
-          const act = window.prompt("Actions avancées:\n1 = HARD OFF\n2 = HARD RESET","1");
-          if (act === "1") onGroupCmd(id, "SLV_FORCE_OFF");
-          else if (act === "2") onGroupCmd(id, "SLV_HARD_RESET");
-        }}>⋯</CircleBtn>
+        <CircleBtn extraClass="moreBtn" onClick={() => onOpenMore(id)}>⋯</CircleBtn>
       </div>
     </div>
   );
@@ -237,6 +274,8 @@ let realtimeAttached = false;
 export default function App(){
   const [authReady,setAuthReady]=useState(false);
   const [user,setUser]=useState(null);
+
+  // Nom de compte persistant (profiles.account_name)
   const [accountName,setAccountName]=useState("");
 
   const [devices,setDevices]=useState([]);
@@ -253,8 +292,15 @@ export default function App(){
   const [groupMembersOpen,setGroupMembersOpen]=useState({open:false,groupId:""});
   const [editMembersChecked,setEditMembersChecked]=useState({});
 
-  // nouvelle: modale Réglages groupe
+  // modales Groupe
   const [groupSettingsOpen, setGroupSettingsOpen] = useState({ open:false, groupId:"" });
+  const [groupMoreOpen, setGroupMoreOpen] = useState({ open:false, groupId:"" });
+
+  // modale Slave "⋯"
+  const [slaveMoreOpen, setSlaveMoreOpen] = useState({ open:false, masterId:"", mac:"", friendly:"" });
+
+  // modale Master "Réglages"
+  const [masterSettingsOpen, setMasterSettingsOpen] = useState({ open:false, masterId:"" });
 
   const chDevices=useRef(null); const chNodes=useRef(null); const chCmds=useRef(null); const chGroups=useRef(null);
 
@@ -298,6 +344,28 @@ export default function App(){
     realtimeAttached=true;
   }
 
+  // ---- PROFIL (account_name) ----
+  async function loadProfile(){
+    try{
+      const { data: s } = await sb.auth.getSession();
+      const uid = s?.session?.user?.id;
+      if(!uid) return;
+      const { data, error } = await sb.from("profiles").select("account_name").eq("id", uid).single();
+      if(!error && data){ setAccountName(data.account_name || ""); }
+    }catch(e){}
+  }
+  async function saveAccountName(newName){
+    try{
+      const { data: s } = await sb.auth.getSession();
+      const uid = s?.session?.user?.id;
+      if(!uid) return;
+      const { error } = await sb.from("profiles").update({ account_name: newName }).eq("id", uid);
+      if(error){ window.alert(error.message); return; }
+      setAccountName(newName);
+      addLog(`Compte renommé : ${newName}`);
+    }catch(e){ /* noop */ }
+  }
+
   useEffect(()=>{
     let mounted=true;
 
@@ -309,11 +377,13 @@ export default function App(){
       if(!mounted) return;
       if(sess?.user){
         setUser(sess.user);
+        await loadProfile();
         setAuthReady(true);
         await fullReload();
         attachRealtime();
       }else{
         setUser(null);
+        setAccountName("");
         setAuthReady(true);
       }
     }
@@ -322,14 +392,17 @@ export default function App(){
       if(event==="SIGNED_IN"){
         stripOAuthParams();
         setUser(session?.user||null);
+        await loadProfile();
         await fullReload();
         attachRealtime();
       }else if(event==="SIGNED_OUT"){
         setUser(null);
+        setAccountName("");
         setDevices([]); setNodesByMaster({}); setGroupsData([]); setSlavePhases({});
         cleanupRealtime();
       }else if(event==="TOKEN_REFRESHED"||event==="USER_UPDATED"){
         setUser(session?.user||null);
+        await loadProfile();
       }
       setAuthReady(true);
     });
@@ -464,9 +537,10 @@ export default function App(){
     if(error){ window.alert("Erreur création groupe: "+error.message); return; }
     addLog(`Groupe créé (${ins?.id||"?"}): ${gname}`); await refetchGroupsOnly();
   }
+
   function renameAccountLabel(){
     const newLabel=window.prompt("Nom du compte ?",accountName||""); if(!newLabel) return;
-    setAccountName(newLabel); addLog(`Compte nommé : ${newLabel}`);
+    saveAccountName(newLabel);
   }
   function handleLogout(){ sb.auth.signOut(); }
   function handleLogin(){
@@ -489,6 +563,22 @@ export default function App(){
   // Réglages groupe
   function openGroupSettingsModal(groupId){ setGroupSettingsOpen({ open:true, groupId }); }
   function closeGroupSettingsModal(){ setGroupSettingsOpen({ open:false, groupId:"" }); }
+
+  // More groupe
+  function openGroupMoreModal(groupId){ setGroupMoreOpen({ open:true, groupId }); }
+  function closeGroupMoreModal(){ setGroupMoreOpen({ open:false, groupId:"" }); }
+
+  // More slave
+  function openSlaveMore(masterId, mac, friendly){
+    setSlaveMoreOpen({ open:true, masterId, mac, friendly });
+  }
+  function closeSlaveMore(){
+    setSlaveMoreOpen({ open:false, masterId:"", mac:"", friendly:"" });
+  }
+
+  // Réglages master
+  function openMasterSettings(masterId){ setMasterSettingsOpen({ open:true, masterId }); }
+  function closeMasterSettings(){ setMasterSettingsOpen({ open:false, masterId:"" }); }
 
   useEffect(()=>{
     if(!groupMembersOpen.open) return;
@@ -538,12 +628,23 @@ export default function App(){
     return groupsData.find(g=>g.id===groupSettingsOpen.groupId)||null;
   },[groupSettingsOpen, groupsData]);
 
+  const moreGroupObj = useMemo(()=>{
+    if(!groupMoreOpen.open) return null;
+    return groupsData.find(g=>g.id===groupMoreOpen.groupId)||null;
+  },[groupMoreOpen, groupsData]);
+
+  const masterForSettings = useMemo(()=>{
+    if(!masterSettingsOpen.open) return null;
+    return devices.find(d=>d.id===masterSettingsOpen.masterId)||null;
+  },[masterSettingsOpen, devices]);
+
   /* Rendu */
   if(!authReady){ return <div style={{color:"#fff",padding:"2rem"}}>Chargement…</div>; }
   if(!user){ return <LoginScreen onLogin={handleLogin}/>; }
 
   return(
     <>
+      {/* HEADER */}
       <header className="topHeader">
         <div className="topHeaderInner">
           <div className="leftBlock">
@@ -558,19 +659,32 @@ export default function App(){
             <SubtleButton onClick={renameAccountLabel}>Renommer compte</SubtleButton>
             <SubtleButton onClick={handleLogout}>Déconnexion</SubtleButton>
             <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
-            <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
+            {/* "+ Groupe" retiré du header (désiré) */}
             <SubtleButton onClick={fullReload}>Rafraîchir</SubtleButton>
           </div>
         </div>
       </header>
 
+      {/* GROS NOM DE COMPTE */}
+      <div style={{padding:"16px 24px 0 24px"}}>
+        <div style={{fontSize:28, fontWeight:700, color:"#fff", opacity:0.9}}>
+          {accountName || user.email}
+        </div>
+      </div>
+
       <div className="pageBg">
         <div className="pageContent">
           {/* Groupes */}
           <div className="groupsSection">
-            <div className="sectionTitleRow">
-              <div className="sectionTitle">Groupes</div>
-              <div className="sectionSub">Contrôler plusieurs machines en même temps</div>
+            <div className="sectionTitleRow" style={{alignItems:"center"}}>
+              <div>
+                <div className="sectionTitle">Groupes</div>
+                <div className="sectionSub">Contrôler plusieurs machines en même temps</div>
+              </div>
+              {/* "+ Groupe" déplacé ici */}
+              <div style={{marginLeft:"auto"}}>
+                <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
+              </div>
             </div>
             {!groupsData.length ? (
               <div className="noGroupsNote smallText">Aucun groupe pour l’instant</div>
@@ -582,6 +696,7 @@ export default function App(){
                     group={g}
                     onOpenSettings={(id)=>openGroupSettingsModal(id)}
                     onOpenOnList={(id)=>openGroupOnListModal(id)}
+                    onOpenMore={(id)=>openGroupMoreModal(id)}
                     onGroupCmd={(id,act)=>sendGroupCmd(id,act)}
                   />
                 ))}
@@ -602,16 +717,13 @@ export default function App(){
                 <MasterCard key={dev.id}
                   device={dev}
                   slaves={nodesByMaster[dev.id]||[]}
-                  onMasterRename={renameMaster}
-                  onMasterDelete={deleteMaster}
-                  onSendMasterCmd={sendCmd}
+                  onOpenSettings={(id)=>openMasterSettings(id)}
                   openSlaveInfoFor={openSlaveInfo}
                   onSlaveIO={(mid,mac)=>sendCmd(mid,mac,"SLV_IO",{pin:DEFAULT_IO_PIN,mode:"OUT",value:1})}
                   onSlaveReset={(mid,mac)=>sendCmd(mid,mac,"SLV_RESET",{})}
                   onSlaveMore={(mid,mac)=>{
-                    const act=window.prompt("Action ?\n1 = HARD OFF\n2 = HARD RESET","1");
-                    if(act==="1") sendCmd(mid,mac,"SLV_FORCE_OFF",{});
-                    else if(act==="2") sendCmd(mid,mac,"SLV_HARD_RESET",{ms:3000});
+                    const friendly = (nodesByMaster[mid]||[]).find(s=>s.slave_mac===mac || s.mac===mac)?.friendly_name || mac;
+                    openSlaveMore(mid, mac, friendly);
                   }}
                   slavePhases={slavePhases}
                 />
@@ -658,6 +770,28 @@ export default function App(){
         onRenameGroup={renameGroup}
         onOpenMembersEdit={(gid)=>openGroupMembersModal(gid)}
         onDeleteGroup={deleteGroup}
+      />
+      <GroupMoreModal
+        open={groupMoreOpen.open}
+        onClose={closeGroupMoreModal}
+        groupName={(groupsData.find((g)=>g.id===groupMoreOpen.groupId)?.name)||""}
+        onHardOff={()=>{ if(!moreGroupObj) return; sendGroupCmd(moreGroupObj.id, "SLV_FORCE_OFF"); closeGroupMoreModal(); }}
+        onHardReset={()=>{ if(!moreGroupObj) return; sendGroupCmd(moreGroupObj.id, "SLV_HARD_RESET"); closeGroupMoreModal(); }}
+      />
+      <SlaveMoreModal
+        open={slaveMoreOpen.open}
+        onClose={closeSlaveMore}
+        slaveName={slaveMoreOpen.friendly}
+        onHardOff={()=>{ if(!slaveMoreOpen.open) return; sendCmd(slaveMoreOpen.masterId, slaveMoreOpen.mac, "SLV_FORCE_OFF", {}); closeSlaveMore(); }}
+        onHardReset={()=>{ if(!slaveMoreOpen.open) return; sendCmd(slaveMoreOpen.masterId, slaveMoreOpen.mac, "SLV_HARD_RESET", { ms:3000 }); closeSlaveMore(); }}
+      />
+      <MasterSettingsModal
+        open={masterSettingsOpen.open}
+        onClose={closeMasterSettings}
+        device={masterForSettings}
+        onPulse={(id)=>sendCmd(id,null,"PULSE",{ms:500})}
+        onRename={renameMaster}
+        onDelete={deleteMaster}
       />
     </>
   );
