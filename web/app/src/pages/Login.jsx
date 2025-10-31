@@ -1,87 +1,30 @@
-// src/pages/Login.jsx
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { sb } from "../lib/supabase";
-import { stripOAuthParams } from "../utils/stripOAuth";
+import { createClient } from "@supabase/supabase-js";
 
-export default function Login() {
-  const navigate = useNavigate();
-  const [authReady, setAuthReady] = useState(false);
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  useEffect(() => {
-    let mounted = true;
-
-    async function boot() {
-      // Nettoie l’URL (évite 404 post-OAuth)
-      stripOAuthParams();
-
-      // Si déjà connecté → hop vers /app
-      const { data } = await sb.auth.getSession();
-      if (!mounted) return;
-      if (data.session?.user) {
-        navigate("/app", { replace: true });
-      }
-      setAuthReady(true);
-    }
-
-    const { data: sub } = sb.auth.onAuthStateChange((_evt, session) => {
-      if (!mounted) return;
-      if (session?.user) {
-        navigate("/app", { replace: true });
-      }
-    });
-
-    boot();
-    return () => {
-      mounted = false;
-      sub?.subscription?.unsubscribe();
-    };
-  }, [navigate]);
-
+export default function LoginPage() {
   async function handleLogin() {
-    // Après Google, on revient directement sur /app (route du dashboard)
-    const redirectTo = window.location.origin + "/app";
+    // Très important pour GitHub Pages + HashRouter : on renvoie vers "#/"
+    const base = `${location.origin}${location.pathname}#/`;
     await sb.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo,
+        redirectTo: base,
         queryParams: { prompt: "select_account" },
       },
     });
   }
 
-  if (!authReady) {
-    return (
-      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", color: "#fff" }}>
-        Chargement…
-      </div>
-    );
-  }
-
   return (
-    <div className="pageBg" style={{ minHeight: "100vh" }}>
-      <div className="pageContent" style={{ maxWidth: 420, width: "100%" }}>
-        <div
-          className="groupsSection"
-          style={{
-            padding: 20,
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-            alignItems: "stretch",
-          }}
-        >
-          <div style={{ fontSize: 18, fontWeight: 700 }}>HIZAYA SWITCH</div>
-          <div style={{ fontSize: 13, opacity: 0.7, marginTop: -4 }}>Connexion</div>
-
-          <button className="subtleBtn" style={{ marginTop: 8, height: 42 }} onClick={handleLogin}>
-            Connexion avec Google
-          </button>
-
-          <div className="smallText" style={{ marginTop: 8 }}>
-            Vous serez redirigé automatiquement après connexion.
-          </div>
-        </div>
+    <div className="loginPage">
+      <div className="loginCard">
+        <h1 className="loginTitle">HIZAYA SWITCH</h1>
+        <p className="loginSub">Connecte-toi pour accéder au tableau de bord</p>
+        <button className="subtleBtn" onClick={handleLogin}>
+          Connexion Google
+        </button>
       </div>
     </div>
   );
