@@ -1,10 +1,20 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+// web/app/vite.config.js
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
-// Remplace par le nom exact de ton repo GitHub Pages
-const REPO = "hizaya-pwa";
-
+// Chemins RELATIFS -> parfait pour GitHub Pages
 export default defineConfig({
-  base: `/${REPO}/web/app/`, // <- si tu sers depuis /hizaya-pwa/web/app/
   plugins: [react()],
-});
+  base: './',                 // <<< clé : plus de chemins absolus /
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',      // JS/CSS sous dist/assets
+    rollupOptions: {
+      output: {
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]',
+      }
+    }
+  }
+})
