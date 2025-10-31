@@ -106,6 +106,44 @@ function GroupMembersModal({open,onClose,groupName,allSlaves,checkedMap,onToggle
   );
 }
 
+/* --- Modale Réglages Master (nouvelle) --- */
+function MasterSettingsModal({ open, onClose, device, onRename, onDelete }){
+  if(!open || !device) return null;
+  return (
+    <ModalShell open={open} onClose={onClose} title={`Réglages — ${device.name || device.id}`}>
+      <div className="modalSection">
+        <div className="modalInfoRow"><span className="modalInfoKey">ID :</span><span className="modalInfoVal">{device.id}</span></div>
+        <div className="modalInfoRow"><span className="modalInfoKey">MAC :</span><span className="modalInfoVal">{device.master_mac || "—"}</span></div>
+        <div className="modalInfoRow"><span className="modalInfoKey">Dernier contact :</span><span className="modalInfoVal">{device.last_seen ? fmtTS(device.last_seen) : "jamais"}</span></div>
+      </div>
+      <div className="modalSection">
+        <SubtleButton onClick={()=>{ onRename(device.id); onClose(); }}>Renommer</SubtleButton>
+        <SubtleButton onClick={()=>{ onDelete(device.id); onClose(); }} style={{background:"rgba(255,0,0,0.08)", borderColor:"rgba(255,0,0,0.25)"}}>
+          Supprimer
+        </SubtleButton>
+      </div>
+    </ModalShell>
+  );
+}
+
+/* --- Modale Réglages du Compte (nouvelle) --- */
+function AccountSettingsModal({ open, onClose, initialName, onSave }){
+  const [draft,setDraft] = useState(initialName||"");
+  useEffect(()=>{ setDraft(initialName||""); },[initialName,open]);
+  if(!open) return null;
+  return (
+    <ModalShell open={open} onClose={onClose} title="Réglages du compte">
+      <div className="modalSection">
+        <label className="modalLabel">Nom du compte</label>
+        <input className="modalInput" value={draft} onChange={(e)=>setDraft(e.target.value)} placeholder="Nom du compte…" />
+        <button className="subtleBtn" style={{marginTop:8}} onClick={()=>{ if(draft.trim()) onSave(draft.trim()); onClose(); }}>
+          Enregistrer
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
 /* --- Carte Slave --- */
 function SlaveCard({masterId,mac,friendlyName,pcOn,onInfoClick,onIO,onReset,onMore,actionBarPhase}){
   return(
@@ -124,7 +162,13 @@ function SlaveCard({masterId,mac,friendlyName,pcOn,onInfoClick,onIO,onReset,onMo
 }
 
 /* --- Carte Master --- */
-function MasterCard({device,slaves,onMasterRename,onMasterDelete,onSendMasterCmd,openSlaveInfoFor,onSlaveIO,onSlaveReset,onSlaveMore,slavePhases}){
+function MasterCard({
+  device,slaves,
+  onOpenSettings,        // NEW
+  onMore,                // NEW
+  onMasterRename,onMasterDelete,onSendMasterCmd,
+  openSlaveInfoFor,onSlaveIO,onSlaveReset,onSlaveMore,slavePhases
+}){
   const live=isLiveDevice(device);
   return(
     <section className="masterCard">
@@ -134,21 +178,25 @@ function MasterCard({device,slaves,onMasterRename,onMasterDelete,onSendMasterCmd
             <span className="masterCardTitle">{device.name||device.id}</span>
             <span className={"onlineBadge "+(live?"onlineYes":"onlineNo")}>{live?"EN LIGNE":"HORS LIGNE"}</span>
           </div>
-          <div className="masterMeta smallText">
-            <span className="kv"><span className="k">ID :</span> <span className="v">{device.id}</span></span> ·{" "}
-            <span className="kv"><span className="k">MAC :</span> <span className="v">{device.master_mac||"—"}</span></span> ·{" "}
-            <span className="kv"><span className="k">Dernier contact :</span> <span className="v">{device.last_seen?fmtTS(device.last_seen):"jamais"}</span></span>
-          </div>
+
+          {/* ⛔️ Infos ID/MAC/dernier contact NE SONT PLUS affichées ici (elles sont dans la modale Réglages) */}
         </div>
+
         <div className="masterActionsRow">
-          <SubtleButton onClick={()=>onMasterRename(device.id)}>Renommer</SubtleButton>
-          <SubtleButton onClick={()=>onMasterDelete(device.id)}>Supprimer</SubtleButton>
+          {/* Bouton Réglages identique à Groupes */}
+          <SubtleButton onClick={()=>onOpenSettings(device.id)}>Réglages</SubtleButton>
+
+          {/* Bouton … (Hard OFF / Hard RESET pour tous les slaves de ce master) */}
+          <CircleBtn extraClass="moreBtn" onClick={()=>onMore(device.id)}>⋯</CircleBtn>
+
+          {/* On conserve les autres actions existantes */}
           <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"PULSE",{ms:500})}>Pulse 500ms</SubtleButton>
           <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"POWER_ON",{})}>Power ON</SubtleButton>
           <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"POWER_OFF",{})}>Power OFF</SubtleButton>
           <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"RESET",{})}>Reset</SubtleButton>
         </div>
       </div>
+
       <div className="slavesWrap">
         <div className="slavesGrid">
           {(slaves||[]).map((sl)=>(
@@ -242,6 +290,10 @@ export default function App(){
 
   const [groupSettingsOpen, setGroupSettingsOpen] = useState({ open:false, groupId:"" });
 
+  // NEW: états pour modales de réglages master & compte
+  const [masterSettingsOpen, setMasterSettingsOpen] = useState({ open:false, masterId:"" });
+  const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
+
   const chDevices=useRef(null); const chNodes=useRef(null); const chCmds=useRef(null); const chGroups=useRef(null);
 
   // ---------- Debounce timers ----------
@@ -268,10 +320,8 @@ export default function App(){
     if(realtimeAttached) return;
     cleanupRealtime();
 
-    // devices: bat très souvent (last_seen). On debounce le refetch.
     chDevices.current = sb.channel("rt:devices")
       .on("postgres_changes",{event:"*",schema:"public",table:"devices"},(payload)=>{
-        // On évite de spammer les logs à chaque heartbeat
         if (payload?.eventType !== "UPDATE" || payload?.new?.name !== payload?.old?.name) {
           addLog("[RT] devices changed");
         }
@@ -279,15 +329,12 @@ export default function App(){
       })
       .subscribe();
 
-    // nodes: quand un node bouge, on regénère nodes + groupes (via refetch combiné, une seule lecture nodes).
     chNodes.current = sb.channel("rt:nodes")
       .on("postgres_changes",{event:"*",schema:"public",table:"nodes"},()=>{
-        // pas de double appel: un seul combo refetch
         scheduleNodesGroupsRefetch();
       })
       .subscribe();
 
-    // commands: ne log que l'ACK pour éviter le flood
     chCmds.current = sb.channel("rt:commands")
       .on("postgres_changes",{event:"*",schema:"public",table:"commands"},(payload)=>{
         const row=payload.new;
@@ -299,7 +346,6 @@ export default function App(){
       })
       .subscribe();
 
-    // groups + group_members: un seul refetch combiné
     chGroups.current = sb.channel("rt:groups+members")
       .on("postgres_changes",{event:"*",schema:"public",table:"groups"},()=>{ scheduleNodesGroupsRefetch(); })
       .on("postgres_changes",{event:"*",schema:"public",table:"group_members"},()=>{ scheduleNodesGroupsRefetch(); })
@@ -404,7 +450,6 @@ export default function App(){
 
   // 🔧 refetch combiné pour éviter 2 lectures de nodes
   async function refetchNodesAndGroups(){
-    // 1) nodes (unique lecture)
     const { data: rows, error: nErr } = await sb.from("nodes")
       .select("master_id,slave_mac,friendly_name,pc_on");
     if(nErr){ addLog("Err nodes: "+nErr.message); return; }
@@ -416,7 +461,6 @@ export default function App(){
     }
     setNodesByMaster(map);
 
-    // 2) groups + members
     const { data: gs, error: gErr } = await sb.from("groups").select("id,name");
     if(gErr){ addLog("Err groups: "+gErr.message); return; }
     const { data: membs, error: mErr } = await sb.from("group_members").select("group_id,slave_mac,master_id");
@@ -481,7 +525,6 @@ export default function App(){
       addLog("cmd err: "+error.message);
       if(targetMac) setSlavePhases((o)=>({...o,[targetMac]:"idle"}));
     } else {
-      // log réduit (éviter le flood)
       if(!targetMac) addLog(`[cmd] ${action} → ${masterId}`);
       if(targetMac) setSlavePhases((o)=>({...o,[targetMac]:"send"}));
     }
@@ -500,54 +543,24 @@ export default function App(){
       }
     }
   }
-  async function renameGroup(id){
-    const newName=window.prompt("Nouveau nom du groupe ?",""); if(!newName) return;
-    const { error } = await sb.from("groups").update({name:newName}).eq("id",id);
-    if(error) window.alert("Erreur rename group: "+error.message);
-    else { addLog(`Groupe ${id} renommé en ${newName}`); await refetchNodesAndGroups(); }
-  }
-  async function deleteGroup(id){
-    if(!window.confirm("Supprimer ce groupe ?")) return;
-    const { error: e1 } = await sb.from("group_members").delete().eq("group_id",id);
-    if(e1){ window.alert("Erreur suppr membres groupe: "+e1.message); return; }
-    const { error: e2 } = await sb.from("groups").delete().eq("id",id);
-    if(e2){ window.alert("Erreur suppr groupe: "+e2.message); return; }
-    addLog(`Groupe ${id} supprimé`); await refetchNodesAndGroups();
-  }
-  async function askAddMaster(){
-    const { data: sessionRes } = await sb.auth.getSession();
-    const token=sessionRes?.session?.access_token; if(!token){ window.alert("Non connecté."); return; }
-    const r=await fetch(`${sb.supabaseUrl}/functions/v1/create_pair_code`,{
-      method:"POST",
-      headers:{ "Content-Type":"application/json", apikey: sb.supabaseKey, Authorization:`Bearer ${token}` },
-      body:JSON.stringify({ ttl_minutes:10 })
-    });
-    if(!r.ok){ const txt=await r.text(); window.alert("Erreur pair-code: "+txt); return; }
-    const { code, expires_at } = await r.json();
-    const end=new Date(expires_at).getTime(); const ttlSec=Math.floor((end-Date.now())/1000);
-    window.alert(`Code: ${String(code).padStart(6,"0")} (expire dans ~${ttlSec}s)\nSaisis ce code dans le portail Wi-Fi du MASTER.`);
-  }
-  async function askAddGroup(){
-    const gname=window.prompt("Nom du nouveau groupe ?",""); if(!gname) return;
-    const { data: ins, error } = await sb.from("groups").insert({name:gname}).select("id").single();
-    if(error){ window.alert("Erreur création groupe: "+error.message); return; }
-    addLog(`Groupe créé (${ins?.id||"?"}): ${gname}`); await refetchNodesAndGroups();
-  }
-  function renameAccountLabel(){
-    const newLabel=window.prompt("Nom du compte ?",accountName||""); if(!newLabel) return;
-    saveAccountName(newLabel);
-  }
-  function handleLogout(){ sb.auth.signOut(); }
-  function handleLogin(){
-    stripOAuthParams();
-    const returnTo = `${window.location.origin}/hizaya-pwa/`;
-    sb.auth.signInWithOAuth({
-      provider:"google",
-      options:{ redirectTo:returnTo, queryParams:{ prompt:"select_account" } }
-    });
+
+  // --- NEW: actions UI
+  function openMasterSettings(mid){ setMasterSettingsOpen({ open:true, masterId: mid }); }
+  function closeMasterSettings(){ setMasterSettingsOpen({ open:false, masterId: "" }); }
+  function masterMore(mid){
+    const act = window.prompt("Actions avancées (pour tous les slaves de ce master):\n1 = HARD OFF\n2 = HARD RESET","1");
+    const slaves = nodesByMaster[mid] || [];
+    if(act==="1"){
+      for(const s of slaves) sendCmd(mid, s.mac, "SLV_FORCE_OFF", {});
+    } else if(act==="2"){
+      for(const s of slaves) sendCmd(mid, s.mac, "SLV_HARD_RESET", { ms:3000 });
+    }
   }
 
-  // Modales
+  function openAccountSettings(){ setAccountSettingsOpen(true); }
+  function closeAccountSettings(){ setAccountSettingsOpen(false); }
+
+  // Modales existantes
   const openSlaveInfo=(masterId,mac)=>setSlaveInfoOpen({open:true,masterId,mac});
   const closeSlaveInfo=()=>setSlaveInfoOpen({open:false,masterId:"",mac:""});
   const openGroupOnListModal=(groupId)=>setGroupOnListOpen({open:true,groupId});
@@ -606,6 +619,11 @@ export default function App(){
     return groupsData.find(g=>g.id===groupSettingsOpen.groupId)||null;
   },[groupSettingsOpen, groupsData]);
 
+  const settingsMasterObj = useMemo(()=>{
+    if(!masterSettingsOpen.open) return null;
+    return devices.find(d=>d.id===masterSettingsOpen.masterId) || null;
+  },[masterSettingsOpen, devices]);
+
   /* Rendu */
   if(!authReady){ return <div style={{color:"#fff",padding:"2rem"}}>Chargement…</div>; }
   if(!user){ return <LoginScreen onLogin={handleLogin}/>; }
@@ -625,9 +643,10 @@ export default function App(){
           </div>
           <div className="rightBlock">
             <div className="userMail smallText">{displayAccount}</div>
-            <SubtleButton onClick={renameAccountLabel}>Renommer compte</SubtleButton>
+            {/* Remplace “Renommer compte” par “Réglages” */}
+            <SubtleButton onClick={openAccountSettings}>Réglages</SubtleButton>
             <SubtleButton onClick={handleLogout}>Déconnexion</SubtleButton>
-            <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
+            {/* On laisse + Groupe ici, tu ne m'as pas demandé de le déplacer */}
             <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
             <SubtleButton onClick={fullReload}>Rafraîchir</SubtleButton>
           </div>
@@ -636,6 +655,7 @@ export default function App(){
 
       <div className="pageBg">
         <div className="pageContent">
+          {/* Nom de compte en gros */}
           <div className="accountTitleBig" style={{fontSize:"2rem", fontWeight:600, margin:"0 0 1rem 0"}}>
             {displayAccount}
           </div>
@@ -665,10 +685,15 @@ export default function App(){
 
           {/* Masters */}
           <div className="mastersSection">
-            <div className="sectionTitleRow">
-              <div className="sectionTitle">Masters</div>
-              <div className="sectionSub">Chaque master pilote ses slaves</div>
+            <div className="sectionTitleRow" style={{display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+              <div>
+                <div className="sectionTitle">Masters</div>
+                <div className="sectionSub">Chaque master pilote ses slaves</div>
+              </div>
+              {/* + MASTER déplacé dans la section Masters */}
+              <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
             </div>
+
             {!devices.length ? (
               <div className="noGroupsNote smallText">Aucun master</div>
             ):(
@@ -676,6 +701,8 @@ export default function App(){
                 <MasterCard key={dev.id}
                   device={dev}
                   slaves={nodesByMaster[dev.id]||[]}
+                  onOpenSettings={openMasterSettings}     // NEW
+                  onMore={masterMore}                      // NEW
                   onMasterRename={renameMaster}
                   onMasterDelete={deleteMaster}
                   onSendMasterCmd={sendCmd}
@@ -732,6 +759,23 @@ export default function App(){
         onRenameGroup={renameGroup}
         onOpenMembersEdit={(gid)=>openGroupMembersModal(gid)}
         onDeleteGroup={deleteGroup}
+      />
+
+      {/* NEW: Réglages Master */}
+      <MasterSettingsModal
+        open={masterSettingsOpen.open}
+        onClose={closeMasterSettings}
+        device={settingsMasterObj}
+        onRename={renameMaster}
+        onDelete={deleteMaster}
+      />
+
+      {/* NEW: Réglages du Compte */}
+      <AccountSettingsModal
+        open={accountSettingsOpen}
+        onClose={closeAccountSettings}
+        initialName={displayAccount}
+        onSave={saveAccountName}
       />
     </>
   );
