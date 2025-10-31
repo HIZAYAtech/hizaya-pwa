@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { sb, stripOAuthParams } from "./supabaseClient";
 
-/* ====== Const ====== */
-const LIVE_TTL_MS = 30000; // marge plus large pour éviter les faux "offline"
+/* ====== Const ======--- */
+const LIVE_TTL_MS = 8000;
 const DEFAULT_IO_PIN = 26;
 
 /* ====== Helpers ====== */
@@ -208,6 +208,59 @@ export default function App(){
 
   const chDevices=useRef(null); const chNodes=useRef(null); const chCmds=useRef(null); const chGroups=useRef(null);
 
+  /* ---------- COMPTE: lecture initiale (metadata -> profiles -> local) ---------- */
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await sb.auth.getSession();
+        const sessUser = data?.session?.user || null;
+        const metaName = sessUser?.user_metadata?.account_name || "";
+        let finalName = metaName;
+
+        if (!finalName && sessUser?.id) {
+          try {
+            const { data: prof } = await sb.from("profiles").select("account_name").eq("id", sessUser.id).single();
+            if (prof?.account_name) finalName = prof.account_name;
+          } catch {/* table absente → ignore */}
+        }
+
+        if (!finalName) {
+          finalName = localStorage.getItem("account_name") || "";
+        }
+        setAccountName(finalName);
+      } catch {
+        setAccountName(localStorage.getItem("account_name") || "");
+      }
+    })();
+  }, []);
+
+  function renameAccountLabel(){
+    const newLabel = window.prompt("Nom du compte ?", accountName || "")?.trim();
+    if (!newLabel) return;
+
+    // 1) Maj metadata auth
+    sb.auth.updateUser({ data: { account_name: newLabel } })
+      .then(({ error }) => { if (error) console.warn("[auth.updateUser] ", error.message); })
+      .catch((e) => console.warn("[auth.updateUser] exception", e))
+      .finally(async () => {
+        // 2) Best-effort: upsert dans profiles si elle existe
+        try {
+          const { data: sess } = await sb.auth.getSession();
+          const u = sess?.session?.user;
+          if (u?.id) {
+            await sb.from("profiles").upsert(
+              { id: u.id, email: u.email, account_name: newLabel },
+              { onConflict: "id" }
+            );
+          }
+        } catch {/* table absente → ignore */}
+        // 3) Fallback local
+        localStorage.setItem("account_name", newLabel);
+        setAccountName(newLabel);
+        addLog(`Compte nommé : ${newLabel}`);
+      });
+  }
+
   function cleanupRealtime(){
     if(chDevices.current) sb.removeChannel(chDevices.current);
     if(chNodes.current) sb.removeChannel(chNodes.current);
@@ -248,105 +301,58 @@ export default function App(){
     realtimeAttached=true;
   }
 
-  /* ---------- INIT AUTH (ordre corrigé) ---------- */
   useEffect(()=>{
     let mounted=true;
 
-    // Failsafe : jamais >3s sur "Chargement…"
-    const unlock = setTimeout(() => { if (mounted) setAuthReady(true); }, 3000);
-
-    async function safeFullReload(timeoutMs=4000){
-      await Promise.race([
-        (async()=>{ try{ await fullReload(); }catch(e){ console.error("[fullReload]",e); } })(),
-        new Promise(res=>setTimeout(res, timeoutMs))
-      ]);
-    }
-
     async function init(){
-      try{
-        // 1) Laisse Supabase traiter le code OAuth
-        const { data, error } = await sb.auth.getSession();
-        if(error) console.error("[auth] getSession error:", error);
-        const sess = data?.session ?? null;
+      const { data } = await sb.auth.getSession();
+      stripOAuthParams();
+      const sess = data.session;
 
-        // 2) Ensuite seulement, on nettoie l'URL
-        stripOAuthParams();
-
-        if(!mounted) return;
-
-        setUser(sess?.user ?? null);
-        setAuthReady(true);  // débloque l’UI
-
-        if(sess?.user){
-          await safeFullReload();
-          attachRealtime();
-        }else{
-          cleanupRealtime();
-        }
-      }catch(e){
-        console.error("[auth] init fatal:", e);
-        if(mounted){
-          setUser(null);
-          setAuthReady(true);
-          cleanupRealtime();
-        }
-      }finally{
-        clearTimeout(unlock);
+      if(!mounted) return;
+      if(sess?.user){
+        setUser(sess.user);
+        setAuthReady(true);
+        // rafraîchir le nom depuis metadata/profiles pour ce user
+        const nm = sess.user?.user_metadata?.account_name;
+        if (nm) setAccountName(nm);
+        await fullReload();
+        attachRealtime();
+      }else{
+        setUser(null);
+        setAuthReady(true);
       }
     }
 
     const { data: sub } = sb.auth.onAuthStateChange(async (event, session)=>{
-      if(!mounted) return;
-
       if(event==="SIGNED_IN"){
-        // après SIGNED_IN on peut nettoyer l’URL
         stripOAuthParams();
-      }
-      setUser(session?.user ?? null);
-      setAuthReady(true);
-
-      if(session?.user){
-        try{ await fullReload(); }catch{}
+        setUser(session?.user||null);
+        const nm = session?.user?.user_metadata?.account_name;
+        if (nm) setAccountName(nm);
+        await fullReload();
         attachRealtime();
-      }else{
+      }else if(event==="SIGNED_OUT"){
+        setUser(null);
+        setDevices([]); setNodesByMaster({}); setGroupsData([]); setSlavePhases({});
         cleanupRealtime();
+      }else if(event==="TOKEN_REFRESHED"||event==="USER_UPDATED"){
+        setUser(session?.user||null);
+        const nm = session?.user?.user_metadata?.account_name;
+        if (nm) setAccountName(nm);
       }
+      setAuthReady(true);
     });
 
     init();
-
     return ()=>{
       mounted=false;
       sub?.subscription?.unsubscribe();
       cleanupRealtime();
-      clearTimeout(unlock);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
-  /* ---------- Réveil (focus/online) ---------- */
-  useEffect(() => {
-    const onWake = async () => {
-      try {
-        const { data } = await sb.auth.getSession();
-        const sess = data?.session ?? null;
-        if (sess?.user) {
-          try { await fullReload(); } catch {}
-          attachRealtime();
-        } else {
-          cleanupRealtime();
-        }
-      } catch {}
-    };
-    window.addEventListener("focus", onWake);
-    window.addEventListener("online", onWake);
-    return () => {
-      window.removeEventListener("focus", onWake);
-      window.removeEventListener("online", onWake);
-    };
-  }, []);
-
-  /* ---------- FETCHERS ---------- */
   async function refetchDevicesOnly(){
     const { data: devs, error } = await sb.from("devices")
       .select("id,name,master_mac,last_seen,online,created_at")
@@ -392,7 +398,6 @@ export default function App(){
   }
   async function fullReload(){ await Promise.all([refetchDevicesOnly(),refetchNodesOnly(),refetchGroupsOnly()]); }
 
-  /* ---------- COMMANDES / ACTIONS ---------- */
   async function renameMaster(id){
     const newName=window.prompt("Nouveau nom du master ?",""); if(!newName) return;
     const { error } = await sb.from("devices").update({name:newName}).eq("id",id);
@@ -402,9 +407,9 @@ export default function App(){
     if(!window.confirm(`Supprimer le master ${id} ?`)) return;
     const { data: sessionRes } = await sb.auth.getSession();
     const token=sessionRes?.session?.access_token; if(!token){ window.alert("Non connecté."); return; }
-    const r=await fetch(`${sb.supabaseUrl || import.meta.env.VITE_SUPABASE_URL}/functions/v1/release_and_delete`,{
+    const r=await fetch(`${sb.supabaseUrl}/functions/v1/release_and_delete`,{
       method:"POST",
-      headers:{ "Content-Type":"application/json", apikey: (sb.supabaseKey || import.meta.env.VITE_SUPABASE_ANON_KEY), Authorization:`Bearer ${token}` },
+      headers:{ "Content-Type":"application/json", apikey: sb.supabaseKey, Authorization:`Bearer ${token}` },
       body:JSON.stringify({ master_id:id })
     });
     if(!r.ok){ const txt=await r.text(); addLog("❌ Suppression : "+txt); }
@@ -453,9 +458,9 @@ export default function App(){
   async function askAddMaster(){
     const { data: sessionRes } = await sb.auth.getSession();
     const token=sessionRes?.session?.access_token; if(!token){ window.alert("Non connecté."); return; }
-    const r=await fetch(`${sb.supabaseUrl || import.meta.env.VITE_SUPABASE_URL}/functions/v1/create_pair_code`,{
+    const r=await fetch(`${sb.supabaseUrl}/functions/v1/create_pair_code`,{
       method:"POST",
-      headers:{ "Content-Type":"application/json", apikey: (sb.supabaseKey || import.meta.env.VITE_SUPABASE_ANON_KEY), Authorization:`Bearer ${token}` },
+      headers:{ "Content-Type":"application/json", apikey: sb.supabaseKey, Authorization:`Bearer ${token}` },
       body:JSON.stringify({ ttl_minutes:10 })
     });
     if(!r.ok){ const txt=await r.text(); window.alert("Erreur pair-code: "+txt); return; }
@@ -469,13 +474,10 @@ export default function App(){
     if(error){ window.alert("Erreur création groupe: "+error.message); return; }
     addLog(`Groupe créé (${ins?.id||"?"}): ${gname}`); await refetchGroupsOnly();
   }
-  function renameAccountLabel(){
-    const newLabel=window.prompt("Nom du compte ?",accountName||""); if(!newLabel) return;
-    setAccountName(newLabel); addLog(`Compte nommé : ${newLabel}`);
-  }
   function handleLogout(){ sb.auth.signOut(); }
   function handleLogin(){
-    // IMPORTANT : garde la racine gh-pages
+    stripOAuthParams();
+    // IMPORTANT: redirection vers la racine du site Pages
     const returnTo = `${window.location.origin}/hizaya-pwa/`;
     sb.auth.signInWithOAuth({
       provider:"google",
@@ -536,6 +538,7 @@ export default function App(){
 
   /* Rendu */
   if(!authReady){ return <div style={{color:"#fff",padding:"2rem"}}>Chargement…</div>; }
+
   if(!user){ return <LoginScreen onLogin={handleLogin}/>; }
 
   return(
@@ -551,7 +554,7 @@ export default function App(){
           </div>
           <div className="rightBlock">
             <div className="userMail smallText">{accountName || user.email}</div>
-            <SubtleButton onClick={renameAccountLabel}>Renommer compte</SubtleButton>
+            <SubtleButton onClick={renameAccountLabel}>Renommer</SubtleButton>
             <SubtleButton onClick={handleLogout}>Déconnexion</SubtleButton>
             <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
             <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
@@ -562,6 +565,30 @@ export default function App(){
 
       <div className="pageBg">
         <div className="pageContent">
+
+          {/* COMPTE (grand titre sous le bandeau) */}
+          <div
+            className="accountBanner"
+            style={{
+              margin: "24px 0 12px",
+              padding: "18px 20px",
+              borderRadius: "16px",
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.08)"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ fontSize: "1.8rem", fontWeight: 700, letterSpacing: ".2px" }}>
+                {accountName || "Mon compte"}
+              </div>
+              <button className="subtleBtn" onClick={renameAccountLabel}>Renommer</button>
+            </div>
+            <div className="smallText" style={{ opacity: .7, marginTop: 6 }}>
+              {user.email}
+            </div>
+          </div>
+
+          {/* Groupes */}
           <div className="groupsSection">
             <div className="sectionTitleRow">
               <div className="sectionTitle">Groupes</div>
@@ -585,6 +612,7 @@ export default function App(){
             )}
           </div>
 
+          {/* Masters */}
           <div className="mastersSection">
             <div className="sectionTitleRow">
               <div className="sectionTitle">Masters</div>
@@ -614,6 +642,7 @@ export default function App(){
             )}
           </div>
 
+          {/* Journal */}
           <div className="journalSection">
             <div className="sectionTitleRow"><div className="sectionTitle">Journal</div></div>
             <div className="logBox" ref={logRef}>{logs.join("\n")}</div>
