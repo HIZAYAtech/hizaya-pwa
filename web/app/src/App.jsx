@@ -2,22 +2,14 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import { sb, stripOAuthParams } from "./supabaseClient";
 
 /* ====== Const ======--- */
-const LIVE_TTL_MS = 8000;
+const LIVE_TTL_MS = 25000;          // tolérance plus large pour éviter faux offline
 const DEFAULT_IO_PIN = 26;
-const REFETCH_DEBOUNCE_MS = 2000; // un poil plus cool
+const REFETCH_DEBOUNCE_MS = 1200;
+const BUSY_GRACE_MS = 10000;        // fenêtre "occupé" après action
 
 /* ====== Helpers ====== */
 function fmtTS(s){ if(!s) return "—"; const d = new Date(s); return d.toLocaleString(); }
 function isLiveDevice(dev){ if(!dev?.last_seen) return false; return Date.now()-new Date(dev.last_seen).getTime() < LIVE_TTL_MS; }
-
-// diff util pour filtrer les heartbeats
-const HEARTBEAT_FIELDS = new Set(["last_seen","online"]);
-function changedKeys(newRow = {}, oldRow = {}) {
-  const keys = new Set([...Object.keys(newRow||{}), ...Object.keys(oldRow||{})]);
-  const out = [];
-  keys.forEach((k) => { if ((newRow||{})[k] !== (oldRow||{})[k]) out.push(k); });
-  return out;
-}
 
 /* ====== UI bits ====== */
 function SubtleButton({children,onClick,disabled,style}){ return <button className="subtleBtn" disabled={disabled} onClick={onClick} style={style}>{children}</button>; }
@@ -115,6 +107,42 @@ function GroupMembersModal({open,onClose,groupName,allSlaves,checkedMap,onToggle
   );
 }
 
+/* --- Modale Réglages Master (détails + actions de maintenance) --- */
+function MasterSettingsModal({open,onClose,device,onRename,onDelete}){
+  if(!open || !device) return null;
+  return(
+    <ModalShell open={open} onClose={onClose} title={`Réglages — ${device.name||device.id}`}>
+      <div className="modalSection">
+        <div className="modalInfoRow"><span className="modalInfoKey">ID :</span><span className="modalInfoVal">{device.id}</span></div>
+        <div className="modalInfoRow"><span className="modalInfoKey">MAC :</span><span className="modalInfoVal">{device.master_mac||"—"}</span></div>
+        <div className="modalInfoRow"><span className="modalInfoKey">Dernier contact :</span><span className="modalInfoVal">{device.last_seen?fmtTS(device.last_seen):"jamais"}</span></div>
+      </div>
+      <div className="modalSection" style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <SubtleButton onClick={()=>{ onRename(device.id); onClose(); }}>Renommer</SubtleButton>
+        <SubtleButton onClick={()=>{ onDelete(device.id); onClose(); }} style={{background:"rgba(255,0,0,0.08)", borderColor:"rgba(255,0,0,0.25)"}}>Supprimer</SubtleButton>
+      </div>
+    </ModalShell>
+  );
+}
+
+/* --- Modale Réglages Compte (renommer) --- */
+function AccountSettingsModal({open,onClose,currentName,onSave}){
+  const [draft,setDraft]=useState(currentName||"");
+  useEffect(()=>{ if(open) setDraft(currentName||""); },[open,currentName]);
+  if(!open) return null;
+  return(
+    <ModalShell open={open} onClose={onClose} title="Réglages du compte">
+      <div className="modalSection">
+        <label className="modalLabel">Nom du compte</label>
+        <input className="modalInput" value={draft} onChange={(e)=>setDraft(e.target.value)} placeholder="ex: HIZAYA" />
+        <div style={{textAlign:"right",marginTop:8}}>
+          <button className="subtleBtn" onClick={()=>{ onSave(draft); onClose(); }}>Enregistrer</button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
 /* --- Carte Slave --- */
 function SlaveCard({masterId,mac,friendlyName,pcOn,onInfoClick,onIO,onReset,onMore,actionBarPhase}){
   return(
@@ -133,35 +161,37 @@ function SlaveCard({masterId,mac,friendlyName,pcOn,onInfoClick,onIO,onReset,onMo
 }
 
 /* --- Carte Master --- */
-function MasterCard({device,slaves,onMasterRename,onMasterDelete,onSendMasterCmd,openSlaveInfoFor,onSlaveIO,onSlaveReset,onSlaveMore,slavePhases}){
-  const live=isLiveDevice(device);
+function MasterCard({
+  device,slaves,
+  onOpenSettings,           // ouvre la modale réglages (détails + rename/delete)
+  onMasterMore,             // actions avancées “…” (HARD OFF/RESET sur tous les slaves du master)
+  onSendMasterCmd,
+  openSlaveInfoFor,onSlaveIO,onSlaveReset,onSlaveMore,
+  slavePhases,
+  isBusy
+}){
+  const live = isBusy ? true : isLiveDevice(device);
+  const statusLabel = isBusy ? "OCCUPÉ" : (live ? "EN LIGNE" : "HORS LIGNE");
   return(
     <section className="masterCard">
       <div className="masterTopRow">
         <div className="masterTitleLeft">
           <div className="masterNameLine">
             <span className="masterCardTitle">{device.name||device.id}</span>
-            <span className={"onlineBadge "+(live?"onlineYes":"onlineNo")}>{live?"EN LIGNE":"HORS LIGNE"}</span>
+            <span className={"onlineBadge "+(live?"onlineYes":"onlineNo")}>{statusLabel}</span>
           </div>
-          <div className="masterMeta smallText">
-            <span className="kv"><span className="k">ID :</span> <span className="v">{device.id}</span></span> ·{" "}
-            <span className="kv"><span className="k">MAC :</span> <span className="v">{device.master_mac||"—"}</span></span> ·{" "}
-            <span className="kv"><span className="k">Dernier contact :</span> <span className="v">{device.last_seen?fmtTS(device.last_seen):"jamais"}</span></span>
-          </div>
+          {/* Les métadonnées (ID, MAC, Dernier contact) sont maintenant visibles UNIQUEMENT dans la modale Réglages */}
         </div>
         <div className="masterActionsRow">
-          <SubtleButton onClick={()=>onMasterRename(device.id)}>Renommer</SubtleButton>
-          <SubtleButton onClick={()=>onMasterDelete(device.id)}>Supprimer</SubtleButton>
+          {/* Bouton Réglages (même visuel que groupe) */}
+          <SubtleButton onClick={()=>onOpenSettings(device.id)}>Réglages</SubtleButton>
+          {/* Commandes Master */}
           <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"PULSE",{ms:500})}>Pulse 500ms</SubtleButton>
           <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"POWER_ON",{})}>Power ON</SubtleButton>
           <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"POWER_OFF",{})}>Power OFF</SubtleButton>
           <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"RESET",{})}>Reset</SubtleButton>
-          {/* Les hard actions derrière le "..." si tu veux plus tard :
-          <SubtleButton onClick={()=>{
-            const act = window.prompt("Actions avancées:\n1 = HARD OFF\n2 = HARD RESET","1");
-            if(act==="1") onSendMasterCmd(device.id,null,"SLV_FORCE_OFF",{});
-            else if(act==="2") onSendMasterCmd(device.id,null,"SLV_HARD_RESET",{ms:3000});
-          }}>⋯</SubtleButton> */}
+          {/* “…” master = actions avancées sur TOUS les slaves de ce master */}
+          <SubtleButton onClick={()=>onMasterMore(device.id)} title="Actions avancées">…</SubtleButton>
         </div>
       </div>
       <div className="slavesWrap">
@@ -200,6 +230,7 @@ function GroupCard({ group, onOpenSettings, onOpenOnList, onGroupCmd }){
             </button>
           </div>
         </div>
+        {/* Bouton Réglages (identique à Master) */}
         <div className="groupMiniActions">
           <SubtleButton onClick={() => onOpenSettings(id)}>Réglages</SubtleButton>
         </div>
@@ -246,13 +277,9 @@ export default function App(){
   const [groupsData,setGroupsData]=useState([]);
   const [slavePhases,setSlavePhases]=useState({});
 
-  // ---- journal sans re-render ----
+  const [logs,setLogs]=useState([]);
   const logRef=useRef(null);
-  const addLog=(t)=>{
-    const el = logRef.current; if(!el) return;
-    el.textContent = (el.textContent || "") + new Date().toLocaleTimeString()+"  "+t+"\n";
-    el.scrollTop = el.scrollHeight;
-  };
+  const addLog=(t)=>setLogs((old)=>[...old.slice(-199), new Date().toLocaleTimeString()+"  "+t]);
 
   const [slaveInfoOpen,setSlaveInfoOpen]=useState({open:false,masterId:"",mac:""});
   const [groupOnListOpen,setGroupOnListOpen]=useState({open:false,groupId:""});
@@ -260,10 +287,23 @@ export default function App(){
   const [editMembersChecked,setEditMembersChecked]=useState({});
 
   const [groupSettingsOpen, setGroupSettingsOpen] = useState({ open:false, groupId:"" });
+  const [masterSettingsOpen, setMasterSettingsOpen] = useState({ open:false, masterId:"" });
+  const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
+
+  // Busy grace
+  const [busyMasters, setBusyMasters] = useState({});
+  function markBusy(masterId, ms = BUSY_GRACE_MS){
+    setBusyMasters(o => ({ ...o, [masterId]: Date.now() + ms }));
+    setTimeout(() => {
+      setBusyMasters(o => {
+        const n = { ...o }; delete n[masterId]; return n;
+      });
+    }, ms);
+  }
 
   const chDevices=useRef(null); const chNodes=useRef(null); const chCmds=useRef(null); const chGroups=useRef(null);
 
-  // ---------- Debounce timers ----------
+  // Debounce timers
   const timers = useRef({ dev:null, ng:null });
   const scheduleDevicesRefetch = () => {
     if (timers.current.dev) clearTimeout(timers.current.dev);
@@ -287,51 +327,37 @@ export default function App(){
     if(realtimeAttached) return;
     cleanupRealtime();
 
-    // devices: filtrer heartbeats (last_seen/online)
     chDevices.current = sb.channel("rt:devices")
       .on("postgres_changes",{event:"*",schema:"public",table:"devices"},(payload)=>{
-        const nr = payload?.new || {};
-        const or = payload?.old || {};
-        if (payload?.eventType === "UPDATE") {
-          const diff = changedKeys(nr, or);
-          const heartbeatOnly = diff.length > 0 && diff.every(k => HEARTBEAT_FIELDS.has(k));
-          if (heartbeatOnly) {
-            // maj locale, pas de refetch
-            setDevices((prev)=>prev.map(d=>d.id===nr.id?{...d,last_seen:nr.last_seen,online:nr.online}:d));
-            return;
-          }
+        if (payload?.eventType !== "UPDATE" || payload?.new?.name !== payload?.old?.name) {
+          addLog("[RT] devices changed");
         }
-        addLog("[RT] devices changed");
         scheduleDevicesRefetch();
       })
       .subscribe();
 
-    // nodes: un seul refetch combiné
     chNodes.current = sb.channel("rt:nodes")
       .on("postgres_changes",{event:"*",schema:"public",table:"nodes"},()=>{
         scheduleNodesGroupsRefetch();
       })
       .subscribe();
 
-    // commands: ne réagir qu'aux ACK
     chCmds.current = sb.channel("rt:commands")
-      .on("postgres_changes",{
-        event:"UPDATE",
-        schema:"public",
-        table:"commands",
-        filter:"status=eq.acked"
-      },(payload)=>{
-        const row = payload?.new;
-        if(!row) return;
-        if(row.target_mac){
-          setSlavePhases((o)=>({...o,[row.target_mac]:"acked"}));
-          setTimeout(()=>setSlavePhases((o)=>({...o,[row.target_mac]:"idle"})),2000);
+      .on("postgres_changes",{event:"*",schema:"public",table:"commands"},(payload)=>{
+        const row=payload.new;
+        if(row && row.target_mac && row.status==="acked"){
+          setSlavePhases(o=>({...o,[row.target_mac]:"acked"}));
+          setTimeout(()=>setSlavePhases(o=>({...o,[row.target_mac]:"idle"})),2000);
+          addLog(`[SUCCESS] ${row?.action} → ${row?.master_id}${row?.target_mac?" ▶ "+row?.target_mac:""}`);
         }
-        addLog(`[SUCCESS] ${row.action} → ${row.master_id}${row.target_mac?" ▶ "+row.target_mac:""}`);
+        // master-level ack -> lever busy plus tôt
+        if(row && !row.target_mac && row.status==="acked"){
+          setBusyMasters(o=>{ const n={...o}; delete n[row.master_id]; return n; });
+          addLog(`[SUCCESS] ${row?.action} → ${row?.master_id}`);
+        }
       })
       .subscribe();
 
-    // groups + group_members
     chGroups.current = sb.channel("rt:groups+members")
       .on("postgres_changes",{event:"*",schema:"public",table:"groups"},()=>{ scheduleNodesGroupsRefetch(); })
       .on("postgres_changes",{event:"*",schema:"public",table:"group_members"},()=>{ scheduleNodesGroupsRefetch(); })
@@ -434,9 +460,8 @@ export default function App(){
     if(!error && devs) setDevices(devs);
   }
 
-  // 🔧 refetch combiné pour éviter 2 lectures de nodes
+  // refetch combiné
   async function refetchNodesAndGroups(){
-    // 1) nodes
     const { data: rows, error: nErr } = await sb.from("nodes")
       .select("master_id,slave_mac,friendly_name,pc_on");
     if(nErr){ addLog("Err nodes: "+nErr.message); return; }
@@ -448,7 +473,6 @@ export default function App(){
     }
     setNodesByMaster(map);
 
-    // 2) groups + members
     const { data: gs, error: gErr } = await sb.from("groups").select("id,name");
     if(gErr){ addLog("Err groups: "+gErr.message); return; }
     const { data: membs, error: mErr } = await sb.from("group_members").select("group_id,slave_mac,master_id");
@@ -507,13 +531,14 @@ export default function App(){
     else { addLog(`Slave ${mac} renommé en ${newName}`); await refetchNodesAndGroups(); }
   }
   async function sendCmd(masterId,targetMac,action,payload={}){
+    // Fenêtre de grâce pour éviter faux offline UI
+    markBusy(masterId);
     if(targetMac) setSlavePhases((o)=>({...o,[targetMac]:"queue"}));
     const { error } = await sb.from("commands").insert({ master_id:masterId, target_mac:targetMac||null, action, payload });
     if(error){
       addLog("cmd err: "+error.message);
       if(targetMac) setSlavePhases((o)=>({...o,[targetMac]:"idle"}));
     } else {
-      // log réduit (éviter le flood)
       if(!targetMac) addLog(`[cmd] ${action} → ${masterId}`);
       if(targetMac) setSlavePhases((o)=>({...o,[targetMac]:"send"}));
     }
@@ -565,10 +590,7 @@ export default function App(){
     if(error){ window.alert("Erreur création groupe: "+error.message); return; }
     addLog(`Groupe créé (${ins?.id||"?"}): ${gname}`); await refetchNodesAndGroups();
   }
-  function renameAccountLabel(){
-    const newLabel=window.prompt("Nom du compte ?",accountName||""); if(!newLabel) return;
-    saveAccountName(newLabel);
-  }
+
   function handleLogout(){ sb.auth.signOut(); }
   function handleLogin(){
     stripOAuthParams();
@@ -579,7 +601,7 @@ export default function App(){
     });
   }
 
-  // Modales
+  // Modales: open/close helpers
   const openSlaveInfo=(masterId,mac)=>setSlaveInfoOpen({open:true,masterId,mac});
   const closeSlaveInfo=()=>setSlaveInfoOpen({open:false,masterId:"",mac:""});
   const openGroupOnListModal=(groupId)=>setGroupOnListOpen({open:true,groupId});
@@ -590,6 +612,10 @@ export default function App(){
   function openGroupSettingsModal(groupId){ setGroupSettingsOpen({ open:true, groupId }); }
   function closeGroupSettingsModal(){ setGroupSettingsOpen({ open:false, groupId:"" }); }
 
+  function openMasterSettingsModal(masterId){ setMasterSettingsOpen({ open:true, masterId }); }
+  function closeMasterSettingsModal(){ setMasterSettingsOpen({ open:false, masterId:"" }); }
+
+  // Group members initial check
   useEffect(()=>{
     if(!groupMembersOpen.open) return;
     const g=groupsData.find((gg)=>gg.id===groupMembersOpen.groupId); if(!g) return;
@@ -617,6 +643,19 @@ export default function App(){
     addLog(`Membres groupe ${gid} mis à jour.`); closeGroupMembersModal(); await refetchNodesAndGroups();
   }
 
+  // Master actions avancées via “...”: appliquer HARD OFF / HARD RESET à tous les slaves de ce master
+  async function masterAdvancedForAllSlaves(masterId){
+    const choice = window.prompt("Actions avancées (tous les slaves du master):\n1 = HARD OFF\n2 = HARD RESET","1");
+    const list = nodesByMaster[masterId] || [];
+    if(!list.length) return;
+    if(choice === "1"){
+      for(const sl of list){ await sendCmd(masterId, sl.mac, "SLV_FORCE_OFF", {}); }
+    }else if(choice === "2"){
+      for(const sl of list){ await sendCmd(masterId, sl.mac, "SLV_HARD_RESET", { ms:3000 }); }
+    }
+  }
+
+  // Selectors
   const currentSlaveInfo = useMemo(()=>{
     if(!slaveInfoOpen.open) return null;
     const { masterId,mac }=slaveInfoOpen; const list=nodesByMaster[masterId]||[];
@@ -638,6 +677,11 @@ export default function App(){
     return groupsData.find(g=>g.id===groupSettingsOpen.groupId)||null;
   },[groupSettingsOpen, groupsData]);
 
+  const settingsMasterObj = useMemo(()=>{
+    if(!masterSettingsOpen.open) return null;
+    return devices.find(d=>d.id===masterSettingsOpen.masterId)||null;
+  },[masterSettingsOpen, devices]);
+
   /* Rendu */
   if(!authReady){ return <div style={{color:"#fff",padding:"2rem"}}>Chargement…</div>; }
   if(!user){ return <LoginScreen onLogin={handleLogin}/>; }
@@ -657,10 +701,9 @@ export default function App(){
           </div>
           <div className="rightBlock">
             <div className="userMail smallText">{displayAccount}</div>
-            <SubtleButton onClick={renameAccountLabel}>Renommer compte</SubtleButton>
+            {/* Réglages compte (au lieu d’un bouton direct “Renommer compte”) */}
+            <SubtleButton onClick={()=>setAccountSettingsOpen(true)}>Réglages</SubtleButton>
             <SubtleButton onClick={handleLogout}>Déconnexion</SubtleButton>
-            <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
-            <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
             <SubtleButton onClick={fullReload}>Rafraîchir</SubtleButton>
           </div>
         </div>
@@ -668,15 +711,21 @@ export default function App(){
 
       <div className="pageBg">
         <div className="pageContent">
+          {/* Nom de compte en gros */}
           <div className="accountTitleBig" style={{fontSize:"2rem", fontWeight:600, margin:"0 0 1rem 0"}}>
             {displayAccount}
           </div>
 
           {/* Groupes */}
           <div className="groupsSection">
-            <div className="sectionTitleRow">
-              <div className="sectionTitle">Groupes</div>
-              <div className="sectionSub">Contrôler plusieurs machines en même temps</div>
+            <div className="sectionTitleRow" style={{alignItems:"center"}}>
+              <div>
+                <div className="sectionTitle">Groupes</div>
+                <div className="sectionSub">Contrôler plusieurs machines en même temps</div>
+              </div>
+              <div style={{marginLeft:"auto"}}>
+                <SubtleButton onClick={askAddGroup}>+ Groupe</SubtleButton>
+              </div>
             </div>
             {!groupsData.length ? (
               <div className="noGroupsNote smallText">Aucun groupe pour l’instant</div>
@@ -697,9 +746,15 @@ export default function App(){
 
           {/* Masters */}
           <div className="mastersSection">
-            <div className="sectionTitleRow">
-              <div className="sectionTitle">Masters</div>
-              <div className="sectionSub">Chaque master pilote ses slaves</div>
+            <div className="sectionTitleRow" style={{alignItems:"center"}}>
+              <div>
+                <div className="sectionTitle">Masters</div>
+                <div className="sectionSub">Chaque master pilote ses slaves</div>
+              </div>
+              {/* + MASTER déplacé ici (dans le cadre master) */}
+              <div style={{marginLeft:"auto"}}>
+                <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
+              </div>
             </div>
             {!devices.length ? (
               <div className="noGroupsNote smallText">Aucun master</div>
@@ -708,8 +763,8 @@ export default function App(){
                 <MasterCard key={dev.id}
                   device={dev}
                   slaves={nodesByMaster[dev.id]||[]}
-                  onMasterRename={renameMaster}
-                  onMasterDelete={deleteMaster}
+                  onOpenSettings={openMasterSettingsModal}
+                  onMasterMore={masterAdvancedForAllSlaves}
                   onSendMasterCmd={sendCmd}
                   openSlaveInfoFor={openSlaveInfo}
                   onSlaveIO={(mid,mac)=>sendCmd(mid,mac,"SLV_IO",{pin:DEFAULT_IO_PIN,mode:"OUT",value:1})}
@@ -720,6 +775,7 @@ export default function App(){
                     else if(act==="2") sendCmd(mid,mac,"SLV_HARD_RESET",{ms:3000});
                   }}
                   slavePhases={slavePhases}
+                  isBusy={!!busyMasters[dev.id]}
                 />
               ))
             )}
@@ -728,7 +784,7 @@ export default function App(){
           {/* Journal */}
           <div className="journalSection">
             <div className="sectionTitleRow"><div className="sectionTitle">Journal</div></div>
-            <pre className="logBox" ref={logRef} />
+            <div className="logBox" ref={logRef}>{logs.join("\n")}</div>
           </div>
         </div>
       </div>
@@ -764,6 +820,19 @@ export default function App(){
         onRenameGroup={renameGroup}
         onOpenMembersEdit={(gid)=>openGroupMembersModal(gid)}
         onDeleteGroup={deleteGroup}
+      />
+      <MasterSettingsModal
+        open={masterSettingsOpen.open}
+        onClose={closeMasterSettingsModal}
+        device={settingsMasterObj}
+        onRename={renameMaster}
+        onDelete={deleteMaster}
+      />
+      <AccountSettingsModal
+        open={accountSettingsOpen}
+        onClose={()=>setAccountSettingsOpen(false)}
+        currentName={displayAccount}
+        onSave={saveAccountName}
       />
     </>
   );
