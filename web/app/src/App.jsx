@@ -2,10 +2,10 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import { sb, stripOAuthParams } from "./supabaseClient";
 
 /* ====== Const ======--- */
-const LIVE_TTL_MS = 25000;          // tolérance plus large pour éviter faux offline
+const LIVE_TTL_MS = 25000;          // tolérance pour éviter faux offline pendant actions
 const DEFAULT_IO_PIN = 26;
 const REFETCH_DEBOUNCE_MS = 1200;
-const BUSY_GRACE_MS = 10000;        // fenêtre "occupé" après action
+const BUSY_GRACE_MS = 10000;        // fenêtre "occupé" après action pour l'UI
 
 /* ====== Helpers ====== */
 function fmtTS(s){ if(!s) return "—"; const d = new Date(s); return d.toLocaleString(); }
@@ -107,8 +107,8 @@ function GroupMembersModal({open,onClose,groupName,allSlaves,checkedMap,onToggle
   );
 }
 
-/* --- Modale Réglages Master (détails + actions de maintenance) --- */
-function MasterSettingsModal({open,onClose,device,onRename,onDelete}){
+/* --- Modale Réglages Master (détails + Pulse 500ms + rename/delete) --- */
+function MasterSettingsModal({open,onClose,device,onRename,onDelete,onSendMasterCmd}){
   if(!open || !device) return null;
   return(
     <ModalShell open={open} onClose={onClose} title={`Réglages — ${device.name||device.id}`}>
@@ -118,6 +118,7 @@ function MasterSettingsModal({open,onClose,device,onRename,onDelete}){
         <div className="modalInfoRow"><span className="modalInfoKey">Dernier contact :</span><span className="modalInfoVal">{device.last_seen?fmtTS(device.last_seen):"jamais"}</span></div>
       </div>
       <div className="modalSection" style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"PULSE",{ms:500})}>Pulse 500ms</SubtleButton>
         <SubtleButton onClick={()=>{ onRename(device.id); onClose(); }}>Renommer</SubtleButton>
         <SubtleButton onClick={()=>{ onDelete(device.id); onClose(); }} style={{background:"rgba(255,0,0,0.08)", borderColor:"rgba(255,0,0,0.25)"}}>Supprimer</SubtleButton>
       </div>
@@ -125,19 +126,25 @@ function MasterSettingsModal({open,onClose,device,onRename,onDelete}){
   );
 }
 
-/* --- Modale Réglages Compte (renommer) --- */
-function AccountSettingsModal({open,onClose,currentName,onSave}){
-  const [draft,setDraft]=useState(currentName||"");
-  useEffect(()=>{ if(open) setDraft(currentName||""); },[open,currentName]);
+/* --- Modales “Actions avancées …” (boutons, pas de prompt) --- */
+function SlaveAdvancedModal({open,onClose,slaveLabel,onHardOff,onHardReset}){
   if(!open) return null;
   return(
-    <ModalShell open={open} onClose={onClose} title="Réglages du compte">
-      <div className="modalSection">
-        <label className="modalLabel">Nom du compte</label>
-        <input className="modalInput" value={draft} onChange={(e)=>setDraft(e.target.value)} placeholder="ex: HIZAYA" />
-        <div style={{textAlign:"right",marginTop:8}}>
-          <button className="subtleBtn" onClick={()=>{ onSave(draft); onClose(); }}>Enregistrer</button>
-        </div>
+    <ModalShell open={open} onClose={onClose} title={`Actions avancées — ${slaveLabel}`}>
+      <div className="modalSection" style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <SubtleButton onClick={onHardOff}>HARD OFF</SubtleButton>
+        <SubtleButton onClick={onHardReset}>HARD RESET</SubtleButton>
+      </div>
+    </ModalShell>
+  );
+}
+function GroupAdvancedModal({open,onClose,groupName,onHardOff,onHardReset}){
+  if(!open) return null;
+  return(
+    <ModalShell open={open} onClose={onClose} title={`Actions avancées — ${groupName}`}>
+      <div className="modalSection" style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <SubtleButton onClick={onHardOff}>HARD OFF (groupe)</SubtleButton>
+        <SubtleButton onClick={onHardReset}>HARD RESET (groupe)</SubtleButton>
       </div>
     </ModalShell>
   );
@@ -163,9 +170,7 @@ function SlaveCard({masterId,mac,friendlyName,pcOn,onInfoClick,onIO,onReset,onMo
 /* --- Carte Master --- */
 function MasterCard({
   device,slaves,
-  onOpenSettings,           // ouvre la modale réglages (détails + rename/delete)
-  onMasterMore,             // actions avancées “…” (HARD OFF/RESET sur tous les slaves du master)
-  onSendMasterCmd,
+  onOpenSettings,           // ouvre la modale réglages
   openSlaveInfoFor,onSlaveIO,onSlaveReset,onSlaveMore,
   slavePhases,
   isBusy
@@ -180,18 +185,11 @@ function MasterCard({
             <span className="masterCardTitle">{device.name||device.id}</span>
             <span className={"onlineBadge "+(live?"onlineYes":"onlineNo")}>{statusLabel}</span>
           </div>
-          {/* Les métadonnées (ID, MAC, Dernier contact) sont maintenant visibles UNIQUEMENT dans la modale Réglages */}
+          {/* ID / MAC / Dernier contact: visibles dans Réglages */}
         </div>
         <div className="masterActionsRow">
-          {/* Bouton Réglages (même visuel que groupe) */}
+          {/* On garde uniquement Réglages côté Master */}
           <SubtleButton onClick={()=>onOpenSettings(device.id)}>Réglages</SubtleButton>
-          {/* Commandes Master */}
-          <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"PULSE",{ms:500})}>Pulse 500ms</SubtleButton>
-          <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"POWER_ON",{})}>Power ON</SubtleButton>
-          <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"POWER_OFF",{})}>Power OFF</SubtleButton>
-          <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"RESET",{})}>Reset</SubtleButton>
-          {/* “…” master = actions avancées sur TOUS les slaves de ce master */}
-          <SubtleButton onClick={()=>onMasterMore(device.id)} title="Actions avancées">…</SubtleButton>
         </div>
       </div>
       <div className="slavesWrap">
@@ -216,7 +214,7 @@ function MasterCard({
 }
 
 /* --- Carte Groupe --- */
-function GroupCard({ group, onOpenSettings, onOpenOnList, onGroupCmd }){
+function GroupCard({ group, onOpenSettings, onOpenOnList, onGroupCmd, onOpenAdvanced }){
   const { id, name, statsOn, statsTotal } = group;
   return (
     <div className="groupCard">
@@ -230,7 +228,7 @@ function GroupCard({ group, onOpenSettings, onOpenOnList, onGroupCmd }){
             </button>
           </div>
         </div>
-        {/* Bouton Réglages (identique à Master) */}
+        {/* Réglages (identique visuellement au master) */}
         <div className="groupMiniActions">
           <SubtleButton onClick={() => onOpenSettings(id)}>Réglages</SubtleButton>
         </div>
@@ -239,11 +237,7 @@ function GroupCard({ group, onOpenSettings, onOpenOnList, onGroupCmd }){
         <CircleBtn onClick={() => onGroupCmd(id, "SLV_IO_ON")}>ON</CircleBtn>
         <CircleBtn onClick={() => onGroupCmd(id, "RESET")}>↺</CircleBtn>
         <CircleBtn onClick={() => onGroupCmd(id, "SLV_IO_OFF")}>OFF</CircleBtn>
-        <CircleBtn extraClass="moreBtn" onClick={()=>{
-          const act = window.prompt("Actions avancées:\n1 = HARD OFF\n2 = HARD RESET","1");
-          if (act === "1") onGroupCmd(id, "SLV_FORCE_OFF");
-          else if (act === "2") onGroupCmd(id, "SLV_HARD_RESET");
-        }}>⋯</CircleBtn>
+        <CircleBtn extraClass="moreBtn" onClick={()=>onOpenAdvanced(id)}>⋯</CircleBtn>
       </div>
     </div>
   );
@@ -289,6 +283,10 @@ export default function App(){
   const [groupSettingsOpen, setGroupSettingsOpen] = useState({ open:false, groupId:"" });
   const [masterSettingsOpen, setMasterSettingsOpen] = useState({ open:false, masterId:"" });
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
+
+  // Modales “avancées” (boutons)
+  const [slaveAdvancedOpen, setSlaveAdvancedOpen] = useState({ open:false, masterId:"", mac:"", label:"" });
+  const [groupAdvancedOpen, setGroupAdvancedOpen] = useState({ open:false, groupId:"" });
 
   // Busy grace
   const [busyMasters, setBusyMasters] = useState({});
@@ -350,7 +348,6 @@ export default function App(){
           setTimeout(()=>setSlavePhases(o=>({...o,[row.target_mac]:"idle"})),2000);
           addLog(`[SUCCESS] ${row?.action} → ${row?.master_id}${row?.target_mac?" ▶ "+row?.target_mac:""}`);
         }
-        // master-level ack -> lever busy plus tôt
         if(row && !row.target_mac && row.status==="acked"){
           setBusyMasters(o=>{ const n={...o}; delete n[row.master_id]; return n; });
           addLog(`[SUCCESS] ${row?.action} → ${row?.master_id}`);
@@ -531,7 +528,6 @@ export default function App(){
     else { addLog(`Slave ${mac} renommé en ${newName}`); await refetchNodesAndGroups(); }
   }
   async function sendCmd(masterId,targetMac,action,payload={}){
-    // Fenêtre de grâce pour éviter faux offline UI
     markBusy(masterId);
     if(targetMac) setSlavePhases((o)=>({...o,[targetMac]:"queue"}));
     const { error } = await sb.from("commands").insert({ master_id:masterId, target_mac:targetMac||null, action, payload });
@@ -615,6 +611,14 @@ export default function App(){
   function openMasterSettingsModal(masterId){ setMasterSettingsOpen({ open:true, masterId }); }
   function closeMasterSettingsModal(){ setMasterSettingsOpen({ open:false, masterId:"" }); }
 
+  // Ouvrir les modales avancées (boutons)
+  function openSlaveAdvanced(masterId, mac, label){
+    setSlaveAdvancedOpen({ open:true, masterId, mac, label });
+  }
+  function closeSlaveAdvanced(){ setSlaveAdvancedOpen({ open:false, masterId:"", mac:"", label:"" }); }
+  function openGroupAdvanced(groupId){ setGroupAdvancedOpen({ open:true, groupId }); }
+  function closeGroupAdvanced(){ setGroupAdvancedOpen({ open:false, groupId:"" }); }
+
   // Group members initial check
   useEffect(()=>{
     if(!groupMembersOpen.open) return;
@@ -641,18 +645,6 @@ export default function App(){
       if(insErr){ window.alert("Erreur insert membres: "+insErr.message); return; }
     }
     addLog(`Membres groupe ${gid} mis à jour.`); closeGroupMembersModal(); await refetchNodesAndGroups();
-  }
-
-  // Master actions avancées via “...”: appliquer HARD OFF / HARD RESET à tous les slaves de ce master
-  async function masterAdvancedForAllSlaves(masterId){
-    const choice = window.prompt("Actions avancées (tous les slaves du master):\n1 = HARD OFF\n2 = HARD RESET","1");
-    const list = nodesByMaster[masterId] || [];
-    if(!list.length) return;
-    if(choice === "1"){
-      for(const sl of list){ await sendCmd(masterId, sl.mac, "SLV_FORCE_OFF", {}); }
-    }else if(choice === "2"){
-      for(const sl of list){ await sendCmd(masterId, sl.mac, "SLV_HARD_RESET", { ms:3000 }); }
-    }
   }
 
   // Selectors
@@ -682,6 +674,12 @@ export default function App(){
     return devices.find(d=>d.id===masterSettingsOpen.masterId)||null;
   },[masterSettingsOpen, devices]);
 
+  const currentGroupNameForAdvanced = useMemo(()=>{
+    if(!groupAdvancedOpen.open) return "";
+    const g = groupsData.find(x=>x.id===groupAdvancedOpen.groupId);
+    return g?.name || "";
+  },[groupAdvancedOpen, groupsData]);
+
   /* Rendu */
   if(!authReady){ return <div style={{color:"#fff",padding:"2rem"}}>Chargement…</div>; }
   if(!user){ return <LoginScreen onLogin={handleLogin}/>; }
@@ -701,7 +699,6 @@ export default function App(){
           </div>
           <div className="rightBlock">
             <div className="userMail smallText">{displayAccount}</div>
-            {/* Réglages compte (au lieu d’un bouton direct “Renommer compte”) */}
             <SubtleButton onClick={()=>setAccountSettingsOpen(true)}>Réglages</SubtleButton>
             <SubtleButton onClick={handleLogout}>Déconnexion</SubtleButton>
             <SubtleButton onClick={fullReload}>Rafraîchir</SubtleButton>
@@ -711,7 +708,7 @@ export default function App(){
 
       <div className="pageBg">
         <div className="pageContent">
-          {/* Nom de compte en gros */}
+          {/* Nom de compte */}
           <div className="accountTitleBig" style={{fontSize:"2rem", fontWeight:600, margin:"0 0 1rem 0"}}>
             {displayAccount}
           </div>
@@ -738,6 +735,7 @@ export default function App(){
                     onOpenSettings={(id)=>openGroupSettingsModal(id)}
                     onOpenOnList={(id)=>openGroupOnListModal(id)}
                     onGroupCmd={(id,act)=>sendGroupCmd(id,act)}
+                    onOpenAdvanced={(id)=>openGroupAdvanced(id)}
                   />
                 ))}
               </div>
@@ -751,7 +749,6 @@ export default function App(){
                 <div className="sectionTitle">Masters</div>
                 <div className="sectionSub">Chaque master pilote ses slaves</div>
               </div>
-              {/* + MASTER déplacé ici (dans le cadre master) */}
               <div style={{marginLeft:"auto"}}>
                 <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
               </div>
@@ -764,15 +761,12 @@ export default function App(){
                   device={dev}
                   slaves={nodesByMaster[dev.id]||[]}
                   onOpenSettings={openMasterSettingsModal}
-                  onMasterMore={masterAdvancedForAllSlaves}
-                  onSendMasterCmd={sendCmd}
                   openSlaveInfoFor={openSlaveInfo}
                   onSlaveIO={(mid,mac)=>sendCmd(mid,mac,"SLV_IO",{pin:DEFAULT_IO_PIN,mode:"OUT",value:1})}
                   onSlaveReset={(mid,mac)=>sendCmd(mid,mac,"SLV_RESET",{})}
                   onSlaveMore={(mid,mac)=>{
-                    const act=window.prompt("Action ?\n1 = HARD OFF\n2 = HARD RESET","1");
-                    if(act==="1") sendCmd(mid,mac,"SLV_FORCE_OFF",{});
-                    else if(act==="2") sendCmd(mid,mac,"SLV_HARD_RESET",{ms:3000});
+                    const label=(nodesByMaster[mid]||[]).find(s=>s.mac===mac)?.friendly_name || mac;
+                    openSlaveAdvanced(mid,mac,label);
                   }}
                   slavePhases={slavePhases}
                   isBusy={!!busyMasters[dev.id]}
@@ -827,6 +821,21 @@ export default function App(){
         device={settingsMasterObj}
         onRename={renameMaster}
         onDelete={deleteMaster}
+        onSendMasterCmd={sendCmd}
+      />
+      <SlaveAdvancedModal
+        open={slaveAdvancedOpen.open}
+        onClose={closeSlaveAdvanced}
+        slaveLabel={slaveAdvancedOpen.label}
+        onHardOff={()=>{ sendCmd(slaveAdvancedOpen.masterId, slaveAdvancedOpen.mac, "SLV_FORCE_OFF", {}); closeSlaveAdvanced(); }}
+        onHardReset={()=>{ sendCmd(slaveAdvancedOpen.masterId, slaveAdvancedOpen.mac, "SLV_HARD_RESET", {ms:3000}); closeSlaveAdvanced(); }}
+      />
+      <GroupAdvancedModal
+        open={groupAdvancedOpen.open}
+        onClose={closeGroupAdvanced}
+        groupName={currentGroupNameForAdvanced}
+        onHardOff={()=>{ sendGroupCmd(groupAdvancedOpen.groupId,"SLV_FORCE_OFF"); closeGroupAdvanced(); }}
+        onHardReset={()=>{ sendGroupCmd(groupAdvancedOpen.groupId,"SLV_HARD_RESET"); closeGroupAdvanced(); }}
       />
       <AccountSettingsModal
         open={accountSettingsOpen}
