@@ -1,19 +1,21 @@
+// src/App.jsx
 import { useEffect, useRef, useState, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 /* =========================================
    CONFIG SUPABASE
-   ========================================= */
+========================================= */
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-/* règles de "online": un master est "en ligne" si last_seen < 8s */
-const LIVE_TTL_MS = 8_000;
-/* pin par défaut pour IO sur le SLAVE */
-const DEFAULT_IO_PIN = 26;
+/* Règles / const UI */
+const LIVE_TTL_MS = 8_000;   // "en ligne" si last_seen < 8s
+const DEFAULT_IO_PIN = 26;   // pin IO par défaut côté SLAVE
 
-/* ========= Helpers ========= */
+/* =========================================
+   Helpers
+========================================= */
 function fmtTS(s) {
   if (!s) return "—";
   const d = new Date(s);
@@ -23,23 +25,25 @@ function isLiveDevice(dev) {
   if (!dev?.last_seen) return false;
   return Date.now() - new Date(dev.last_seen).getTime() < LIVE_TTL_MS;
 }
-// Nettoie l’URL après OAuth (évite les 404 bizarres et URLs moches)
+// Nettoyage des paramètres OAuth de l'URL (évite 404 GH Pages / URLs moches)
 function stripOAuthParams() {
   try {
     const url = new URL(window.location.href);
     let changed = false;
-    ["code", "state", "provider", "error", "error_description"].forEach((p) => {
+    for (const p of ["code", "state", "provider", "error", "error_description"]) {
       if (url.searchParams.has(p)) { url.searchParams.delete(p); changed = true; }
-    });
+    }
     if (url.hash && /access_token|refresh_token|error/i.test(url.hash)) {
       url.hash = "";
       changed = true;
     }
     if (changed) window.history.replaceState({}, document.title, url.toString());
-  } catch {}
+  } catch {/* noop */}
 }
 
-/* ========= UI éléments ========= */
+/* =========================================
+   UI bits
+========================================= */
 function SubtleButton({ children, onClick, disabled, style }) {
   return (
     <button className="subtleBtn" disabled={disabled} onClick={onClick} style={style}>
@@ -98,8 +102,15 @@ function SlaveInfoModal({ open, onClose, slaveMac, masterId, currentName, onRena
     <ModalShell open={open} onClose={onClose} title="Détails du Slave">
       <div className="modalSection">
         <label className="modalLabel">Nom du slave</label>
-        <input className="modalInput" value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} placeholder="Nom lisible…" />
-        <button className="subtleBtn" style={{ marginTop: 8 }} onClick={() => onRename(nameDraft)}>Enregistrer</button>
+        <input
+          className="modalInput"
+          value={nameDraft}
+          onChange={(e) => setNameDraft(e.target.value)}
+          placeholder="Nom lisible…"
+        />
+        <button className="subtleBtn" style={{ marginTop: 8 }} onClick={() => onRename(nameDraft)}>
+          Enregistrer
+        </button>
       </div>
       <div className="modalSection">
         <div className="modalInfoRow"><span className="modalInfoKey">MAC :</span><span className="modalInfoVal">{slaveMac || "—"}</span></div>
@@ -163,11 +174,13 @@ function MasterCard({ device, slaves, onMasterRename, onMasterDelete, onSendMast
         <div className="masterTitleLeft">
           <div className="masterNameLine">
             <span className="masterCardTitle">{device.name || device.id}</span>
-            <span className={"onlineBadge " + (live ? "onlineYes" : "onlineNo")}>{live ? "EN LIGNE" : "HORS LIGNE"}</span>
+            <span className={"onlineBadge " + (live ? "onlineYes" : "onlineNo")}>
+              {live ? "EN LIGNE" : "HORS LIGNE"}
+            </span>
           </div>
           <div className="masterMeta smallText">
-            <span className="kv"><span className="k">ID :</span> <span className="v">{device.id}</span></span> ·
-            <span className="kv"><span className="k">MAC :</span> <span className="v">{device.master_mac || "—"}</span></span> ·
+            <span className="kv"><span className="k">ID :</span> <span className="v">{device.id}</span></span>{" · "}
+            <span className="kv"><span className="k">MAC :</span> <span className="v">{device.master_mac || "—"}</span></span>{" · "}
             <span className="kv"><span className="k">Dernier contact :</span> <span className="v">{device.last_seen ? fmtTS(device.last_seen) : "jamais"}</span></span>
           </div>
         </div>
@@ -210,7 +223,9 @@ function GroupCard({ group, onRenameGroup, onDeleteGroup, onOpenMembersEdit, onO
           <div className="groupNameLine">{name}</div>
           <div className="groupSubLine">
             {statsOn}/{statsTotal} allumé(s)
-            <button className="chipBtn" style={{ marginLeft: 6 }} onClick={() => onOpenOnList(id)} disabled={!statsTotal}>Voir la liste</button>
+            <button className="chipBtn" style={{ marginLeft: 6 }} onClick={() => onOpenOnList(id)} disabled={!statsTotal}>
+              Voir la liste
+            </button>
           </div>
         </div>
         <div className="groupMiniActions">
@@ -230,7 +245,9 @@ function GroupCard({ group, onRenameGroup, onDeleteGroup, onOpenMembersEdit, onO
   );
 }
 
-/* ========== Login plein écran (par défaut si non connecté) ========== */
+/* =========================================
+   Login plein écran
+========================================= */
 function LoginScreen({ onLogin }) {
   return (
     <div className="loginScreen">
@@ -243,68 +260,68 @@ function LoginScreen({ onLogin }) {
   );
 }
 
-/* =========================================================
+/* =========================================
    APP PRINCIPALE
-========================================================= */
-
-// Flag module-level pour éviter d'attacher le realtime plusieurs fois
-let realtimeAttached = false;
-
+========================================= */
 export default function App() {
-  /* ----------- AUTH -------------- */
+  // Auth
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState(null);
   const [accountName, setAccountName] = useState("");
 
-  /* ----------- DATA STATE -------- */
-  const [devices, setDevices] = useState([]);               // masters
-  const [nodesByMaster, setNodesByMaster] = useState({});   // { master_id: [ ... ] }
-  const [slavePhases, setSlavePhases] = useState({});       // { mac: phase }
-  const [groupsData, setGroupsData] = useState([]);         // groupes
+  // Data
+  const [devices, setDevices] = useState([]);
+  const [nodesByMaster, setNodesByMaster] = useState({});
+  const [slavePhases, setSlavePhases] = useState({});
+  const [groupsData, setGroupsData] = useState([]);
 
-  /* journal */
+  // Journal
   const [logs, setLogs] = useState([]);
   const logRef = useRef(null);
   function addLog(text) {
     setLogs((old) => [...old.slice(-199), new Date().toLocaleTimeString() + "  " + text]);
   }
 
-  /* Modales */
+  // Modales
   const [slaveInfoOpen, setSlaveInfoOpen] = useState({ open: false, masterId: "", mac: "" });
   const [groupOnListOpen, setGroupOnListOpen] = useState({ open: false, groupId: "" });
   const [groupMembersOpen, setGroupMembersOpen] = useState({ open: false, groupId: "" });
-  const [editMembersChecked, setEditMembersChecked] = useState({}); // { mac: true }
+  const [editMembersChecked, setEditMembersChecked] = useState({});
 
-  /* ---------- REALTIME ---------- */
+  // Realtime channels + garde anti-double-attach
   const chDevices = useRef(null);
   const chNodes = useRef(null);
   const chCmds = useRef(null);
   const chGroups = useRef(null);
+  const rtAttached = useRef(false);
 
   function cleanupRealtime() {
     if (chDevices.current) sb.removeChannel(chDevices.current);
     if (chNodes.current) sb.removeChannel(chNodes.current);
     if (chCmds.current) sb.removeChannel(chCmds.current);
     if (chGroups.current) sb.removeChannel(chGroups.current);
-    chDevices.current = null; chNodes.current = null; chCmds.current = null; chGroups.current = null;
-    realtimeAttached = false;
+    chDevices.current = chNodes.current = chCmds.current = chGroups.current = null;
+    rtAttached.current = false;
   }
 
   function attachRealtime() {
-    if (realtimeAttached) return;
+    if (rtAttached.current) return;
     cleanupRealtime();
 
     chDevices.current = sb
       .channel("rt:devices")
       .on("postgres_changes", { event: "*", schema: "public", table: "devices" }, () => {
-        addLog("[RT] devices changed"); refetchDevicesOnly();
+        addLog("[RT] devices changed");
+        refetchDevicesOnly();
       })
       .subscribe();
 
     chNodes.current = sb
       .channel("rt:nodes")
       .on("postgres_changes", { event: "*", schema: "public", table: "nodes" }, () => {
-        addLog("[RT] nodes changed"); refetchNodesOnly(); refetchGroupsOnly();
+        addLog("[RT] nodes changed");
+        refetchNodesOnly();
+        refetchGroupsOnly();
       })
       .subscribe();
 
@@ -327,23 +344,25 @@ export default function App() {
     chGroups.current = sb
       .channel("rt:groups+members")
       .on("postgres_changes", { event: "*", schema: "public", table: "groups" }, () => {
-        addLog("[RT] groups changed"); refetchGroupsOnly();
+        addLog("[RT] groups changed");
+        refetchGroupsOnly();
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "group_members" }, () => {
-        addLog("[RT] group_members changed"); refetchGroupsOnly();
+        addLog("[RT] group_members changed");
+        refetchGroupsOnly();
       })
       .subscribe();
 
-    realtimeAttached = true;
+    rtAttached.current = true;
   }
 
-  /* ------------- AUTH FLOW ---------------- */
+  /* ========== AUTH FLOW ========== */
   useEffect(() => {
     let isMounted = true;
 
     async function initSessionOnce() {
       const { data } = await sb.auth.getSession();
-      stripOAuthParams(); // nettoie l’URL au boot
+      stripOAuthParams();
       const sess = data.session;
 
       if (!isMounted) return;
@@ -363,7 +382,7 @@ export default function App() {
       if (!isMounted) return;
 
       if (event === "SIGNED_IN") {
-        stripOAuthParams(); // nettoie après OAuth
+        stripOAuthParams();
         setUser(session?.user || null);
         await fullReload();
         attachRealtime();
@@ -391,7 +410,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ---------- FETCHERS ---------- */
+  /* ========== FETCHERS ========== */
   async function refetchDevicesOnly() {
     const { data: devs, error } = await sb
       .from("devices")
@@ -446,7 +465,7 @@ export default function App() {
     await Promise.all([refetchDevicesOnly(), refetchNodesOnly(), refetchGroupsOnly()]);
   }
 
-  /* ---------- COMMANDES / ACTIONS ---------- */
+  /* ========== COMMANDES / ACTIONS ========== */
   async function renameMaster(id) {
     const newName = window.prompt("Nouveau nom du master ?", "");
     if (!newName) return;
@@ -454,6 +473,7 @@ export default function App() {
     if (error) { window.alert(error.message); }
     else { addLog(`Master ${id} renommé en ${newName}`); await refetchDevicesOnly(); }
   }
+
   async function deleteMaster(id) {
     if (!window.confirm(`Supprimer le master ${id} ?`)) return;
     const { data: sessionRes } = await sb.auth.getSession();
@@ -468,32 +488,52 @@ export default function App() {
     else { addLog(`MASTER supprimé : ${id}`); }
     await fullReload();
   }
+
   async function doRenameSlave(masterId, mac, newName) {
     const { error } = await sb.from("nodes").update({ friendly_name: newName }).eq("master_id", masterId).eq("slave_mac", mac);
     if (error) window.alert("Erreur rename slave: " + error.message);
     else { addLog(`Slave ${mac} renommé en ${newName}`); await refetchNodesOnly(); await refetchGroupsOnly(); }
   }
+
   async function sendCmd(masterId, targetMac, action, payload = {}) {
     if (targetMac) setSlavePhases((old) => ({ ...old, [targetMac]: "queue" }));
     const { error } = await sb.from("commands").insert({ master_id: masterId, target_mac: targetMac || null, action, payload });
-    if (error) { addLog("cmd err: " + error.message); if (targetMac) setSlavePhases((old) => ({ ...old, [targetMac]: "idle" })); }
-    else { addLog(`[cmd] ${action} → ${masterId}${targetMac ? " ▶ " + targetMac : ""}`); if (targetMac) setSlavePhases((old) => ({ ...old, [targetMac]: "send" })); }
+    if (error) {
+      addLog("cmd err: " + error.message);
+      if (targetMac) setSlavePhases((old) => ({ ...old, [targetMac]: "idle" }));
+    } else {
+      addLog(`[cmd] ${action} → ${masterId}${targetMac ? " ▶ " + targetMac : ""}`);
+      if (targetMac) setSlavePhases((old) => ({ ...old, [targetMac]: "send" }));
+    }
   }
+
   async function sendGroupCmd(groupId, actionKey) {
     const g = groupsData.find((x) => x.id === groupId);
     if (!g) return;
     for (const m of g.members) {
       if (!m.master_id) continue;
       switch (actionKey) {
-        case "SLV_IO_ON":  await sendCmd(m.master_id, m.mac, "SLV_IO", { pin: DEFAULT_IO_PIN, mode: "OUT", value: 1 }); break;
-        case "SLV_IO_OFF": await sendCmd(m.master_id, m.mac, "SLV_IO", { pin: DEFAULT_IO_PIN, mode: "OUT", value: 0 }); break;
-        case "RESET":      await sendCmd(m.master_id, m.mac, "SLV_RESET", {}); break;
-        case "SLV_FORCE_OFF": await sendCmd(m.master_id, m.mac, "SLV_FORCE_OFF", {}); break;
-        case "SLV_HARD_RESET": await sendCmd(m.master_id, m.mac, "SLV_HARD_RESET", { ms: 3000 }); break;
-        default: break;
+        case "SLV_IO_ON":
+          await sendCmd(m.master_id, m.mac, "SLV_IO", { pin: DEFAULT_IO_PIN, mode: "OUT", value: 1 });
+          break;
+        case "SLV_IO_OFF":
+          await sendCmd(m.master_id, m.mac, "SLV_IO", { pin: DEFAULT_IO_PIN, mode: "OUT", value: 0 });
+          break;
+        case "RESET":
+          await sendCmd(m.master_id, m.mac, "SLV_RESET", {});
+          break;
+        case "SLV_FORCE_OFF":
+          await sendCmd(m.master_id, m.mac, "SLV_FORCE_OFF", {});
+          break;
+        case "SLV_HARD_RESET":
+          await sendCmd(m.master_id, m.mac, "SLV_HARD_RESET", { ms: 3000 });
+          break;
+        default:
+          break;
       }
     }
   }
+
   async function renameGroup(id) {
     const newName = window.prompt("Nouveau nom du groupe ?", "");
     if (!newName) return;
@@ -501,14 +541,17 @@ export default function App() {
     if (error) window.alert("Erreur rename group: " + error.message);
     else { addLog(`Groupe ${id} renommé en ${newName}`); await refetchGroupsOnly(); }
   }
+
   async function deleteGroup(id) {
     if (!window.confirm("Supprimer ce groupe ?")) return;
     const { error: e1 } = await sb.from("group_members").delete().eq("group_id", id);
     if (e1) { window.alert("Erreur suppr membres groupe: " + e1.message); return; }
     const { error: e2 } = await sb.from("groups").delete().eq("id", id);
     if (e2) { window.alert("Erreur suppr groupe: " + e2.message); return; }
-    addLog(`Groupe ${id} supprimé`); await refetchGroupsOnly();
+    addLog(`Groupe ${id} supprimé`);
+    await refetchGroupsOnly();
   }
+
   async function askAddMaster() {
     const { data: sessionRes } = await sb.auth.getSession();
     const token = sessionRes?.session?.access_token;
@@ -520,32 +563,38 @@ export default function App() {
     });
     if (!r.ok) { const txt = await r.text(); window.alert("Erreur pair-code: " + txt); return; }
     const { code, expires_at } = await r.json();
-    const end = new Date(expires_at).getTime(); const ttlSec = Math.floor((end - Date.now()) / 1000);
+    const end = new Date(expires_at).getTime();
+    const ttlSec = Math.floor((end - Date.now()) / 1000);
     window.alert(`Code: ${String(code).padStart(6, "0")} (expire dans ~${ttlSec}s)\nSaisis ce code dans le portail Wi-Fi du MASTER.`);
   }
+
   async function askAddGroup() {
-    const gname = window.prompt("Nom du nouveau groupe ?", ""); if (!gname) return;
+    const gname = window.prompt("Nom du nouveau groupe ?", "");
+    if (!gname) return;
     const { data: ins, error } = await sb.from("groups").insert({ name: gname }).select("id").single();
     if (error) { window.alert("Erreur création groupe: " + error.message); return; }
-    addLog(`Groupe créé (${ins?.id || "?"}): ${gname}`); await refetchGroupsOnly();
-  }
-  function renameAccountLabel() {
-    const newLabel = window.prompt("Nom du compte ?", accountName || (user?.email || ""));
-    if (!newLabel) return; setAccountName(newLabel); addLog(`Compte nommé : ${newLabel}`);
+    addLog(`Groupe créé (${ins?.id || "?"}): ${gname}`);
+    await refetchGroupsOnly();
   }
 
-  // Login/Logout
+  function renameAccountLabel() {
+    const newLabel = window.prompt("Nom du compte ?", accountName || (user?.email || ""));
+    if (!newLabel) return;
+    setAccountName(newLabel);
+    addLog(`Compte nommé : ${newLabel}`);
+  }
+
   function handleLogout() { sb.auth.signOut(); }
   function handleLogin() {
-    // URL propre (root de la page gh-pages) — fonctionne sans router
-    const returnTo = window.location.origin + window.location.pathname;
+    stripOAuthParams();
+    const returnTo = window.location.origin + window.location.pathname; // safe pour GH Pages
     sb.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: returnTo, queryParams: { prompt: "select_account" } }
+      options: { redirectTo: returnTo, queryParams: { prompt: "select_account" } },
     });
   }
 
-  /* ---------- Modales ---------- */
+  // Modales open/close
   function openSlaveInfo(masterId, mac) { setSlaveInfoOpen({ open: true, masterId, mac }); }
   function closeSlaveInfo() { setSlaveInfoOpen({ open: false, masterId: "", mac: "" }); }
   function openGroupOnListModal(groupId) { setGroupOnListOpen({ open: true, groupId }); }
@@ -553,30 +602,43 @@ export default function App() {
   function openGroupMembersModal(groupId) { setGroupMembersOpen({ open: true, groupId }); }
   function closeGroupMembersModal() { setGroupMembersOpen({ open: false, groupId: "" }); }
 
-  // Pré-cocher uniquement à l'ouverture
+  // Pré-cocher lors de l'ouverture de la modale membres
   useEffect(() => {
     if (!groupMembersOpen.open) return;
-    const g = groupsData.find((gg) => gg.id === groupMembersOpen.groupId); if (!g) return;
-    const initialMap = {}; for (const m of g.members || []) initialMap[m.mac] = true;
+    const g = groupsData.find((gg) => gg.id === groupMembersOpen.groupId);
+    if (!g) return;
+    const initialMap = {};
+    for (const m of g.members || []) initialMap[m.mac] = true;
     setEditMembersChecked(initialMap);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupMembersOpen.open]);
 
   function toggleCheckMac(mac) { setEditMembersChecked((old) => ({ ...old, [mac]: !old[mac] })); }
+
   async function saveGroupMembers() {
-    const gid = groupMembersOpen.groupId; if (!gid) return;
-    const macToMaster = {}; for (const s of allSlavesFlat) macToMaster[s.mac] = s.master_id;
+    const gid = groupMembersOpen.groupId;
+    if (!gid) return;
+
+    // index MAC -> master_id
+    const macToMaster = {};
+    for (const s of allSlavesFlat) macToMaster[s.mac] = s.master_id;
+
     const { error: delErr } = await sb.from("group_members").delete().eq("group_id", gid);
     if (delErr) { window.alert("Erreur clear membres: " + delErr.message); return; }
+
     const rows = Object.entries(editMembersChecked)
       .filter(([, ok]) => ok)
       .map(([mac]) => ({ group_id: gid, slave_mac: mac, master_id: macToMaster[mac] || null }))
       .filter((r) => r.master_id);
+
     if (rows.length) {
       const { error: insErr } = await sb.from("group_members").insert(rows);
       if (insErr) { window.alert("Erreur insert membres: " + insErr.message); return; }
     }
-    addLog(`Membres groupe ${gid} mis à jour.`); closeGroupMembersModal(); await refetchGroupsOnly();
+
+    addLog(`Membres groupe ${gid} mis à jour.`);
+    closeGroupMembersModal();
+    await refetchGroupsOnly();
   }
 
   // Sélections mémo
@@ -600,29 +662,24 @@ export default function App() {
   const allSlavesFlat = useMemo(() => {
     const arr = [];
     for (const mid of Object.keys(nodesByMaster)) {
-      for (const sl of nodesByMaster[mid]) arr.push({ mac: sl.mac, master_id: mid, friendly_name: sl.friendly_name, pc_on: sl.pc_on });
+      for (const sl of nodesByMaster[mid]) {
+        arr.push({ mac: sl.mac, master_id: mid, friendly_name: sl.friendly_name, pc_on: sl.pc_on });
+      }
     }
     return arr;
   }, [nodesByMaster]);
 
-  /* ---------- Rendu ---------- */
+  /* ========== Rendu ========== */
   if (!authReady) {
-    return (
-      <div style={{ color: "#fff", padding: "2rem" }}>
-        Chargement…
-      </div>
-    );
+    return <div style={{ color: "#fff", padding: "2rem" }}>Chargement…</div>;
   }
 
   const isLogged = !!user;
-
-  if (!isLogged) {
-    return <LoginScreen onLogin={handleLogin} />;
-  }
+  if (!isLogged) return <LoginScreen onLogin={handleLogin} />;
 
   return (
     <>
-      {/* HEADER STICKY */}
+      {/* HEADER */}
       <header className="topHeader">
         <div className="topHeaderInner">
           <div className="leftBlock">
@@ -632,7 +689,6 @@ export default function App() {
             </div>
             <div className="appSubtitle smallText">tableau de contrôle</div>
           </div>
-
           <div className="rightBlock">
             <div className="userMail smallText">{accountName || user.email}</div>
             <SubtleButton onClick={renameAccountLabel}>Renommer compte</SubtleButton>
@@ -644,7 +700,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* CONTENU PAGE */}
+      {/* CONTENU */}
       <div className="pageBg">
         <div className="pageContent">
           {/* Groupes */}
@@ -717,24 +773,20 @@ export default function App() {
         onClose={closeSlaveInfo}
         slaveMac={slaveInfoOpen.mac}
         masterId={slaveInfoOpen.masterId}
-        currentName={(nodesByMaster[slaveInfoOpen.masterId] || []).find((s) => s.mac === slaveInfoOpen.mac)?.friendly_name || slaveInfoOpen.mac}
-        pcOn={!!(nodesByMaster[slaveInfoOpen.masterId] || []).find((s) => s.mac === slaveInfoOpen.mac)?.pc_on}
+        currentName={currentSlaveInfo?.friendly_name || slaveInfoOpen.mac}
+        pcOn={!!currentSlaveInfo?.pc_on}
         onRename={(newName) => { doRenameSlave(slaveInfoOpen.masterId, slaveInfoOpen.mac, newName); closeSlaveInfo(); }}
       />
       <GroupOnListModal
         open={groupOnListOpen.open}
         onClose={closeGroupOnListModal}
-        members={(groupsData.find((g) => g.id === groupOnListOpen.groupId)?.members) || []}
+        members={currentGroupForOnList?.members || []}
       />
       <GroupMembersModal
         open={groupMembersOpen.open}
         onClose={closeGroupMembersModal}
-        groupName={(groupsData.find((g) => g.id === groupMembersOpen.groupId)?.name) || ""}
-        allSlaves={useMemo(() => {
-          const arr = [];
-          for (const mid of Object.keys(nodesByMaster)) for (const sl of nodesByMaster[mid]) arr.push({ mac: sl.mac, master_id: mid, friendly_name: sl.friendly_name, pc_on: sl.pc_on });
-          return arr;
-        }, [nodesByMaster])}
+        groupName={currentGroupForMembers?.name || ""}
+        allSlaves={allSlavesFlat}
         checkedMap={editMembersChecked}
         onToggleMac={toggleCheckMac}
         onSave={saveGroupMembers}
