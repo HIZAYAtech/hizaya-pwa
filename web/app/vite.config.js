@@ -3,5 +3,5 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
-  base: "/hizaya-pwa/", // nom du repo GitHub Pages
+  base: "/hizaya-pwa/"
 });
