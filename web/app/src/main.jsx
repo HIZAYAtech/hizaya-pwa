@@ -1,19 +1,16 @@
-import React from "react";
-import ReactDOM from "react-dom/client";
 import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
-
+import stripOAuth from "./utils/stripOAuth";
+import supabase from "./supabaseClient";
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import "./styles.css";
-import supabase from "./supabaseClient";
-import stripOAuth from "./utils/stripOAuth";
 
 function AppRouter() {
   const [ready, setReady] = React.useState(false);
   const [user, setUser] = React.useState(null);
 
   React.useEffect(() => {
-    stripOAuth(); // nettoie l'URL après OAuth (GitHub Pages + hash)
+    stripOAuth(); // nettoie ?code, #access_token, etc.
     supabase.auth.getSession().then(({ data }) => {
       setUser(data.session?.user ?? null);
       setReady(true);
