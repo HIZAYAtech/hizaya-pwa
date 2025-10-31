@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { sb, stripOAuthParams } from "./supabaseClient";
 
-/* ====== Const ====== */
+/* ====== Const ======--- */
 const LIVE_TTL_MS = 8000;
 const DEFAULT_IO_PIN = 26;
 
