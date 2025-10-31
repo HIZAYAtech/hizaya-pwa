@@ -137,7 +137,7 @@ function AccountSettingsModal({ open, onClose, accountName, onRename }) {
   );
 }
 
-/* --- Modale édition membres (PRESENTE !) --- */
+/* --- Modale édition membres (présente !) --- */
 function GroupMembersModal({open,onClose,groupName,allSlaves,checkedMap,onToggleMac,onSave}){
   if(!open) return null;
   return(
@@ -348,7 +348,7 @@ export default function App(){
         .from("profiles")
         .select("account_name")
         .eq("id", uid)
-        .maybeSingle();            // <-- évite 406 quand aucune ligne
+        .maybeSingle();
       if (!error && data?.account_name) {
         setAccountName(data.account_name);
       } else {
@@ -372,7 +372,6 @@ export default function App(){
       .update({ account_name: trimmed, updated_at: new Date().toISOString() })
       .eq("id", user.id);
     if(error){
-      // rollback UI + fallback
       setAccountName(previous);
       addLog("Err save account_name: " + error.message);
       window.alert("Erreur enregistrement du nom de compte.");
@@ -579,34 +578,7 @@ export default function App(){
   function openGroupMore(groupId, label){ setGroupMoreOpen({ open:true, groupId, label }); }
   function closeGroupMore(){ setGroupMoreOpen({ open:false, groupId:"", label:"" }); }
 
-  // Précocher membres groupe
-  useEffect(()=>{
-    if(!groupMembersOpen.open) return;
-    const g=groupsData.find((gg)=>gg.id===groupMembersOpen.groupId); if(!g) return;
-    const initial={}; for(const m of g.members||[]) initial[m.mac]=true;
-    setEditMembersChecked(initial);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[groupMembersOpen.open]);
-
-  const toggleCheckMac=(mac)=>setEditMembersChecked((o)=>({...o,[mac]:!o[mac]}));
-  async function saveGroupMembers(){
-    const gid=groupMembersOpen.groupId; if(!gid) return;
-    const macToMaster={};
-    for(const mid of Object.keys(nodesByMaster)) for(const s of nodesByMaster[mid]) macToMaster[s.mac]=mid;
-
-    const { error: delErr } = await sb.from("group_members").delete().eq("group_id",gid);
-    if(delErr){ window.alert("Erreur clear membres: "+delErr.message); return; }
-    const rows=Object.entries(editMembersChecked)
-      .filter(([,ok])=>ok)
-      .map(([mac])=>({ group_id:gid, slave_mac:mac, master_id:macToMaster[mac]||null }))
-      .filter((r)=>r.master_id);
-    if(rows.length){
-      const { error: insErr } = await sb.from("group_members").insert(rows);
-      if(insErr){ window.alert("Erreur insert membres: "+insErr.message); return; }
-    }
-    addLog(`Membres groupe ${gid} mis à jour.`); closeGroupMembersModal(); await refetchGroupsOnly();
-  }
-
+  // ==== DERIVÉS avec useMemo AU BON ENDROIT (pas dans le JSX) ====
   const currentSlaveInfo = useMemo(()=>{
     if(!slaveInfoOpen.open) return null;
     const { masterId,mac }=slaveInfoOpen; const list=nodesByMaster[masterId]||[];
@@ -732,20 +704,20 @@ export default function App(){
         onClose={closeSlaveInfo}
         slaveMac={slaveInfoOpen.mac}
         masterId={slaveInfoOpen.masterId}
-        currentName={(useMemo(()=>{ if(!slaveInfoOpen.open) return null; const { masterId,mac }=slaveInfoOpen; const list=nodesByMaster[masterId]||[]; return (list.find((s)=>s.mac===mac)||{}).friendly_name; },[slaveInfoOpen,nodesByMaster])) || slaveInfoOpen.mac}
-        pcOn={!!(useMemo(()=>{ if(!slaveInfoOpen.open) return null; const { masterId,mac }=slaveInfoOpen; const list=nodesByMaster[masterId]||[]; const f=list.find((s)=>s.mac===mac); return f?.pc_on; },[slaveInfoOpen,nodesByMaster]))}
+        currentName={currentSlaveInfo?.friendly_name || slaveInfoOpen.mac}
+        pcOn={!!currentSlaveInfo?.pc_on}
         onRename={(newName)=>{ doRenameSlave(slaveInfoOpen.masterId,slaveInfoOpen.mac,newName); closeSlaveInfo(); }}
       />
       <GroupOnListModal
         open={groupOnListOpen.open}
         onClose={closeGroupOnListModal}
-        members={(useMemo(()=>{ if(!groupOnListOpen.open) return []; const g=groupsData.find((gg)=>gg.id===groupOnListOpen.groupId); return g?.members||[]; },[groupOnListOpen,groupsData]))}
+        members={currentGroupForOnList?.members || []}
       />
       <GroupMembersModal
         open={groupMembersOpen.open}
         onClose={closeGroupMembersModal}
         groupName={(groupsData.find((g)=>g.id===groupMembersOpen.groupId)?.name)||""}
-        allSlaves={(useMemo(()=>{ const arr=[]; for(const mid of Object.keys(nodesByMaster)) for(const sl of nodesByMaster[mid]) arr.push({mac:sl.mac,master_id:mid,friendly_name:sl.friendly_name,pc_on:sl.pc_on}); return arr; },[nodesByMaster]))}
+        allSlaves={allSlavesFlat}
         checkedMap={editMembersChecked}
         onToggleMac={(mac)=>setEditMembersChecked((o)=>({...o,[mac]:!o[mac]}))}
         onSave={saveGroupMembers}
@@ -753,7 +725,7 @@ export default function App(){
       <GroupSettingsModal
         open={groupSettingsOpen.open}
         onClose={closeGroupSettingsModal}
-        group={(useMemo(()=>{ if(!groupSettingsOpen.open) return null; return groupsData.find(g=>g.id===groupSettingsOpen.groupId)||null; },[groupSettingsOpen, groupsData]))}
+        group={settingsGroupObj}
         onRenameGroup={renameGroup}
         onOpenMembersEdit={(gid)=>openGroupMembersModal(gid)}
         onDeleteGroup={deleteGroup}
