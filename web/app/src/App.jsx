@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { sb, stripOAuthParams } from "./supabaseClient";
 
-/* ====== Const ======--- */
-const LIVE_TTL_MS = 8000;
+/* ====== Const ====== */
+const LIVE_TTL_MS = 30000; // un peu plus tolérant (évite faux "offline")
 const DEFAULT_IO_PIN = 26;
 
 /* ====== Helpers ====== */
@@ -248,51 +248,99 @@ export default function App(){
     realtimeAttached=true;
   }
 
+  /* ---------- INIT AUTH ROBUSTE (ne bloque jamais l'UI) ---------- */
   useEffect(()=>{
     let mounted=true;
 
-    async function init(){
-      const { data } = await sb.auth.getSession();
-      stripOAuthParams();
-      const sess = data.session;
+    // Failsafe : jamais >3s sur "Chargement…"
+    const unlock = setTimeout(() => {
+      if (mounted) setAuthReady(true);
+    }, 3000);
 
-      if(!mounted) return;
-      if(sess?.user){
-        setUser(sess.user);
-        setAuthReady(true);
-        await fullReload();
-        attachRealtime();
-      }else{
-        setUser(null);
-        setAuthReady(true);
+    async function safeFullReload(timeoutMs=4000){
+      // évite un Promise.all bloqué si réseau KO
+      await Promise.race([
+        (async()=>{ try{ await fullReload(); }catch(e){ console.error("[fullReload]",e); } })(),
+        new Promise(res=>setTimeout(res, timeoutMs))
+      ]);
+    }
+
+    async function init(){
+      try{
+        stripOAuthParams();
+        const { data, error } = await sb.auth.getSession();
+        if(error) console.error("[auth] getSession error:", error);
+        const sess = data?.session ?? null;
+
+        if(!mounted) return;
+
+        setUser(sess?.user ?? null);
+        setAuthReady(true);               // <-- débloque l’UI quoi qu’il arrive
+
+        if(sess?.user){
+          await safeFullReload();
+          attachRealtime();
+        }else{
+          cleanupRealtime();
+        }
+      }catch(e){
+        console.error("[auth] init fatal:", e);
+        if(mounted){
+          setUser(null);
+          setAuthReady(true);             // <-- débloque même en erreur
+          cleanupRealtime();
+        }
+      }finally{
+        clearTimeout(unlock);
       }
     }
 
     const { data: sub } = sb.auth.onAuthStateChange(async (event, session)=>{
-      if(event==="SIGNED_IN"){
-        stripOAuthParams();
-        setUser(session?.user||null);
-        await fullReload();
+      if(!mounted) return;
+      setUser(session?.user ?? null);
+      setAuthReady(true);                 // <-- toujours débloqué
+      if(session?.user){
+        await safeFullReload();
         attachRealtime();
-      }else if(event==="SIGNED_OUT"){
-        setUser(null);
-        setDevices([]); setNodesByMaster({}); setGroupsData([]); setSlavePhases({});
+      }else{
         cleanupRealtime();
-      }else if(event==="TOKEN_REFRESHED"||event==="USER_UPDATED"){
-        setUser(session?.user||null);
       }
-      setAuthReady(true);
     });
 
     init();
+
     return ()=>{
       mounted=false;
       sub?.subscription?.unsubscribe();
       cleanupRealtime();
+      clearTimeout(unlock);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
+  /* ---------- Réveil (focus/online) : resync sans reload ---------- */
+  useEffect(() => {
+    const onWake = async () => {
+      try {
+        const { data } = await sb.auth.getSession();
+        const sess = data?.session ?? null;
+        if (sess?.user) {
+          try { await fullReload(); } catch {}
+          attachRealtime();
+        } else {
+          cleanupRealtime();
+        }
+      } catch {}
+    };
+    window.addEventListener("focus", onWake);
+    window.addEventListener("online", onWake);
+    return () => {
+      window.removeEventListener("focus", onWake);
+      window.removeEventListener("online", onWake);
+    };
+  }, []);
+
+  /* ---------- FETCHERS ---------- */
   async function refetchDevicesOnly(){
     const { data: devs, error } = await sb.from("devices")
       .select("id,name,master_mac,last_seen,online,created_at")
@@ -338,6 +386,7 @@ export default function App(){
   }
   async function fullReload(){ await Promise.all([refetchDevicesOnly(),refetchNodesOnly(),refetchGroupsOnly()]); }
 
+  /* ---------- COMMANDES / ACTIONS ---------- */
   async function renameMaster(id){
     const newName=window.prompt("Nouveau nom du master ?",""); if(!newName) return;
     const { error } = await sb.from("devices").update({name:newName}).eq("id",id);
@@ -347,9 +396,9 @@ export default function App(){
     if(!window.confirm(`Supprimer le master ${id} ?`)) return;
     const { data: sessionRes } = await sb.auth.getSession();
     const token=sessionRes?.session?.access_token; if(!token){ window.alert("Non connecté."); return; }
-    const r=await fetch(`${sb.supabaseUrl}/functions/v1/release_and_delete`,{
+    const r=await fetch(`${sb.supabaseUrl || import.meta.env.VITE_SUPABASE_URL}/functions/v1/release_and_delete`,{
       method:"POST",
-      headers:{ "Content-Type":"application/json", apikey: sb.supabaseKey, Authorization:`Bearer ${token}` },
+      headers:{ "Content-Type":"application/json", apikey: (sb.supabaseKey || import.meta.env.VITE_SUPABASE_ANON_KEY), Authorization:`Bearer ${token}` },
       body:JSON.stringify({ master_id:id })
     });
     if(!r.ok){ const txt=await r.text(); addLog("❌ Suppression : "+txt); }
@@ -398,9 +447,9 @@ export default function App(){
   async function askAddMaster(){
     const { data: sessionRes } = await sb.auth.getSession();
     const token=sessionRes?.session?.access_token; if(!token){ window.alert("Non connecté."); return; }
-    const r=await fetch(`${sb.supabaseUrl}/functions/v1/create_pair_code`,{
+    const r=await fetch(`${sb.supabaseUrl || import.meta.env.VITE_SUPABASE_URL}/functions/v1/create_pair_code`,{
       method:"POST",
-      headers:{ "Content-Type":"application/json", apikey: sb.supabaseKey, Authorization:`Bearer ${token}` },
+      headers:{ "Content-Type":"application/json", apikey: (sb.supabaseKey || import.meta.env.VITE_SUPABASE_ANON_KEY), Authorization:`Bearer ${token}` },
       body:JSON.stringify({ ttl_minutes:10 })
     });
     if(!r.ok){ const txt=await r.text(); window.alert("Erreur pair-code: "+txt); return; }
@@ -482,7 +531,6 @@ export default function App(){
 
   /* Rendu */
   if(!authReady){ return <div style={{color:"#fff",padding:"2rem"}}>Chargement…</div>; }
-
   if(!user){ return <LoginScreen onLogin={handleLogin}/>; }
 
   return(
