@@ -4,10 +4,20 @@ import { sb, stripOAuthParams } from "./supabaseClient";
 /* ====== Const ======--- */
 const LIVE_TTL_MS = 8000;
 const DEFAULT_IO_PIN = 26;
+const REFETCH_DEBOUNCE_MS = 2000; // un poil plus cool
 
 /* ====== Helpers ====== */
 function fmtTS(s){ if(!s) return "—"; const d = new Date(s); return d.toLocaleString(); }
 function isLiveDevice(dev){ if(!dev?.last_seen) return false; return Date.now()-new Date(dev.last_seen).getTime() < LIVE_TTL_MS; }
+
+// diff util pour filtrer les heartbeats
+const HEARTBEAT_FIELDS = new Set(["last_seen","online"]);
+function changedKeys(newRow = {}, oldRow = {}) {
+  const keys = new Set([...Object.keys(newRow||{}), ...Object.keys(oldRow||{})]);
+  const out = [];
+  keys.forEach((k) => { if ((newRow||{})[k] !== (oldRow||{})[k]) out.push(k); });
+  return out;
+}
 
 /* ====== UI bits ====== */
 function SubtleButton({children,onClick,disabled,style}){ return <button className="subtleBtn" disabled={disabled} onClick={onClick} style={style}>{children}</button>; }
@@ -69,7 +79,7 @@ function GroupOnListModal({open,onClose,members}){
   );
 }
 
-/* --- Modale “Réglages du groupe” (Renommer / Membres / Supprimer) --- */
+/* --- Modale “Réglages du groupe” --- */
 function GroupSettingsModal({ open, onClose, group, onRenameGroup, onOpenMembersEdit, onDeleteGroup }) {
   if (!open || !group) return null;
   return (
@@ -146,6 +156,12 @@ function MasterCard({device,slaves,onMasterRename,onMasterDelete,onSendMasterCmd
           <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"POWER_ON",{})}>Power ON</SubtleButton>
           <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"POWER_OFF",{})}>Power OFF</SubtleButton>
           <SubtleButton onClick={()=>onSendMasterCmd(device.id,null,"RESET",{})}>Reset</SubtleButton>
+          {/* Les hard actions derrière le "..." si tu veux plus tard :
+          <SubtleButton onClick={()=>{
+            const act = window.prompt("Actions avancées:\n1 = HARD OFF\n2 = HARD RESET","1");
+            if(act==="1") onSendMasterCmd(device.id,null,"SLV_FORCE_OFF",{});
+            else if(act==="2") onSendMasterCmd(device.id,null,"SLV_HARD_RESET",{ms:3000});
+          }}>⋯</SubtleButton> */}
         </div>
       </div>
       <div className="slavesWrap">
@@ -169,13 +185,8 @@ function MasterCard({device,slaves,onMasterRename,onMasterDelete,onSendMasterCmd
   );
 }
 
-/* --- Carte Groupe (nouvelle UI) --- */
-function GroupCard({
-  group,
-  onOpenSettings,   // ouvre la modale “Réglages”
-  onOpenOnList,
-  onGroupCmd
-}){
+/* --- Carte Groupe --- */
+function GroupCard({ group, onOpenSettings, onOpenOnList, onGroupCmd }){
   const { id, name, statsOn, statsTotal } = group;
   return (
     <div className="groupCard">
@@ -184,24 +195,15 @@ function GroupCard({
           <div className="groupNameLine">{name}</div>
           <div className="groupSubLine">
             {statsOn}/{statsTotal} allumé(s)
-            <button
-              className="chipBtn"
-              style={{ marginLeft: 6 }}
-              onClick={() => onOpenOnList(id)}
-              disabled={!statsTotal}
-            >
+            <button className="chipBtn" style={{ marginLeft: 6 }} onClick={() => onOpenOnList(id)} disabled={!statsTotal}>
               Voir la liste
             </button>
           </div>
         </div>
-
-        {/* Un seul bouton pour Renommer / Supprimer / Membres */}
         <div className="groupMiniActions">
           <SubtleButton onClick={() => onOpenSettings(id)}>Réglages</SubtleButton>
         </div>
       </div>
-
-      {/* Commandes avec les boutons ronds (même visuel que les slaves) */}
       <div className="slaveBtnsRow" style={{ marginTop: 8 }}>
         <CircleBtn onClick={() => onGroupCmd(id, "SLV_IO_ON")}>ON</CircleBtn>
         <CircleBtn onClick={() => onGroupCmd(id, "RESET")}>↺</CircleBtn>
@@ -244,19 +246,33 @@ export default function App(){
   const [groupsData,setGroupsData]=useState([]);
   const [slavePhases,setSlavePhases]=useState({});
 
-  const [logs,setLogs]=useState([]);
+  // ---- journal sans re-render ----
   const logRef=useRef(null);
-  const addLog=(t)=>setLogs((old)=>[...old.slice(-199), new Date().toLocaleTimeString()+"  "+t]);
+  const addLog=(t)=>{
+    const el = logRef.current; if(!el) return;
+    el.textContent = (el.textContent || "") + new Date().toLocaleTimeString()+"  "+t+"\n";
+    el.scrollTop = el.scrollHeight;
+  };
 
   const [slaveInfoOpen,setSlaveInfoOpen]=useState({open:false,masterId:"",mac:""});
   const [groupOnListOpen,setGroupOnListOpen]=useState({open:false,groupId:""});
   const [groupMembersOpen,setGroupMembersOpen]=useState({open:false,groupId:""});
   const [editMembersChecked,setEditMembersChecked]=useState({});
 
-  // nouvelle: modale Réglages groupe
   const [groupSettingsOpen, setGroupSettingsOpen] = useState({ open:false, groupId:"" });
 
   const chDevices=useRef(null); const chNodes=useRef(null); const chCmds=useRef(null); const chGroups=useRef(null);
+
+  // ---------- Debounce timers ----------
+  const timers = useRef({ dev:null, ng:null });
+  const scheduleDevicesRefetch = () => {
+    if (timers.current.dev) clearTimeout(timers.current.dev);
+    timers.current.dev = setTimeout(()=>{ refetchDevicesOnly(); timers.current.dev=null; }, REFETCH_DEBOUNCE_MS);
+  };
+  const scheduleNodesGroupsRefetch = () => {
+    if (timers.current.ng) clearTimeout(timers.current.ng);
+    timers.current.ng = setTimeout(()=>{ refetchNodesAndGroups(); timers.current.ng=null; }, REFETCH_DEBOUNCE_MS);
+  };
 
   function cleanupRealtime(){
     if(chDevices.current) sb.removeChannel(chDevices.current);
@@ -266,33 +282,59 @@ export default function App(){
     chDevices.current = chNodes.current = chCmds.current = chGroups.current = null;
     realtimeAttached=false;
   }
+
   function attachRealtime(){
     if(realtimeAttached) return;
     cleanupRealtime();
 
+    // devices: filtrer heartbeats (last_seen/online)
     chDevices.current = sb.channel("rt:devices")
-      .on("postgres_changes",{event:"*",schema:"public",table:"devices"},()=>{ addLog("[RT] devices changed"); refetchDevicesOnly(); })
-      .subscribe();
-
-    chNodes.current = sb.channel("rt:nodes")
-      .on("postgres_changes",{event:"*",schema:"public",table:"nodes"},()=>{ addLog("[RT] nodes changed"); refetchNodesOnly(); refetchGroupsOnly(); })
-      .subscribe();
-
-    chCmds.current = sb.channel("rt:commands")
-      .on("postgres_changes",{event:"*",schema:"public",table:"commands"},(payload)=>{
-        const row=payload.new;
-        if(row && row.target_mac && row.status==="acked"){
-          setSlavePhases((o)=>({...o,[row.target_mac]:"acked"}));
-          setTimeout(()=>setSlavePhases((o)=>({...o,[row.target_mac]:"idle"})),2000);
+      .on("postgres_changes",{event:"*",schema:"public",table:"devices"},(payload)=>{
+        const nr = payload?.new || {};
+        const or = payload?.old || {};
+        if (payload?.eventType === "UPDATE") {
+          const diff = changedKeys(nr, or);
+          const heartbeatOnly = diff.length > 0 && diff.every(k => HEARTBEAT_FIELDS.has(k));
+          if (heartbeatOnly) {
+            // maj locale, pas de refetch
+            setDevices((prev)=>prev.map(d=>d.id===nr.id?{...d,last_seen:nr.last_seen,online:nr.online}:d));
+            return;
+          }
         }
-        if(row?.status==="acked"){ addLog(`[SUCCESS] ${row?.action} → ${row?.master_id}${row?.target_mac?" ▶ "+row?.target_mac:""}`); }
-        else { addLog(`[cmd ${payload.eventType}] ${row?.action} (${row?.status}) → ${row?.master_id}`); }
+        addLog("[RT] devices changed");
+        scheduleDevicesRefetch();
       })
       .subscribe();
 
+    // nodes: un seul refetch combiné
+    chNodes.current = sb.channel("rt:nodes")
+      .on("postgres_changes",{event:"*",schema:"public",table:"nodes"},()=>{
+        scheduleNodesGroupsRefetch();
+      })
+      .subscribe();
+
+    // commands: ne réagir qu'aux ACK
+    chCmds.current = sb.channel("rt:commands")
+      .on("postgres_changes",{
+        event:"UPDATE",
+        schema:"public",
+        table:"commands",
+        filter:"status=eq.acked"
+      },(payload)=>{
+        const row = payload?.new;
+        if(!row) return;
+        if(row.target_mac){
+          setSlavePhases((o)=>({...o,[row.target_mac]:"acked"}));
+          setTimeout(()=>setSlavePhases((o)=>({...o,[row.target_mac]:"idle"})),2000);
+        }
+        addLog(`[SUCCESS] ${row.action} → ${row.master_id}${row.target_mac?" ▶ "+row.target_mac:""}`);
+      })
+      .subscribe();
+
+    // groups + group_members
     chGroups.current = sb.channel("rt:groups+members")
-      .on("postgres_changes",{event:"*",schema:"public",table:"groups"},()=>{ addLog("[RT] groups changed"); refetchGroupsOnly(); })
-      .on("postgres_changes",{event:"*",schema:"public",table:"group_members"},()=>{ addLog("[RT] group_members changed"); refetchGroupsOnly(); })
+      .on("postgres_changes",{event:"*",schema:"public",table:"groups"},()=>{ scheduleNodesGroupsRefetch(); })
+      .on("postgres_changes",{event:"*",schema:"public",table:"group_members"},()=>{ scheduleNodesGroupsRefetch(); })
       .subscribe();
 
     realtimeAttached=true;
@@ -304,17 +346,9 @@ export default function App(){
       const { data: s } = await sb.auth.getSession();
       const u = s?.session?.user; if(!u) return;
 
-      // 1) table profiles
-      const { data, error } = await sb
-        .from("profiles")
-        .select("account_name")
-        .eq("id", u.id)
-        .maybeSingle();
+      const { data } = await sb.from("profiles").select("account_name").eq("id", u.id).maybeSingle();
 
-      // 2) metadata auth
       const metaName = u?.user_metadata?.account_name;
-
-      // 3) fallback email prefix
       const emailPrefix = u?.email ? u.email.split("@")[0] : "";
 
       const name = (data?.account_name && data.account_name.trim()) ||
@@ -335,16 +369,8 @@ export default function App(){
       const { data: s } = await sb.auth.getSession();
       const u = s?.session?.user; if(!u) return;
 
-      // 1) metadata (JWT)
-      const { error: authErr } = await sb.auth.updateUser({ data: { account_name: safe } });
-      if(authErr){ addLog(`[profile] auth.meta err: ${authErr.message}`); }
-
-      // 2) table profiles (si RLS ok / ligne existe)
-      const { error: sqlErr } = await sb
-        .from("profiles")
-        .update({ account_name: safe, email: u.email || null })
-        .eq("id", u.id);
-      if(sqlErr){ addLog(`[profile] profiles.update err: ${sqlErr.message}`); }
+      await sb.auth.updateUser({ data: { account_name: safe } });
+      await sb.from("profiles").update({ account_name: safe, email: u.email || null }).eq("id", u.id);
 
       setAccountName(safe);
       addLog(`Compte renommé : ${safe}`);
@@ -407,34 +433,42 @@ export default function App(){
       .order("created_at",{ascending:false});
     if(!error && devs) setDevices(devs);
   }
-  async function refetchNodesOnly(){
-    const { data: rows, error } = await sb.from("nodes")
+
+  // 🔧 refetch combiné pour éviter 2 lectures de nodes
+  async function refetchNodesAndGroups(){
+    // 1) nodes
+    const { data: rows, error: nErr } = await sb.from("nodes")
       .select("master_id,slave_mac,friendly_name,pc_on");
-    if(error){ addLog("Err nodes: "+error.message); return; }
+    if(nErr){ addLog("Err nodes: "+nErr.message); return; }
+
     const map={};
     for(const r of rows||[]){
       if(!map[r.master_id]) map[r.master_id]=[];
       map[r.master_id].push({ mac:r.slave_mac, friendly_name:r.friendly_name, pc_on:r.pc_on });
     }
     setNodesByMaster(map);
-  }
-  async function refetchGroupsOnly(){
+
+    // 2) groups + members
     const { data: gs, error: gErr } = await sb.from("groups").select("id,name");
     if(gErr){ addLog("Err groups: "+gErr.message); return; }
     const { data: membs, error: mErr } = await sb.from("group_members").select("group_id,slave_mac,master_id");
     if(mErr){ addLog("Err group_members: "+mErr.message); return; }
-    const { data: allNodes, error: nErr } = await sb.from("nodes").select("master_id,slave_mac,friendly_name,pc_on");
-    if(nErr){ addLog("Err nodes in groups: "+nErr.message); return; }
+
+    const friendlyByMac = {};
+    const onByMac = {};
+    for (const r of rows||[]){
+      friendlyByMac[r.slave_mac] = r.friendly_name || r.slave_mac;
+      onByMac[r.slave_mac] = !!r.pc_on;
+    }
 
     const membersByGroup={};
     for(const gm of membs||[]){
       if(!membersByGroup[gm.group_id]) membersByGroup[gm.group_id]=[];
-      const nodeInfo=(allNodes||[]).find((nd)=>nd.slave_mac===gm.slave_mac);
       membersByGroup[gm.group_id].push({
         mac:gm.slave_mac,
-        master_id: nodeInfo?.master_id || gm.master_id || null,
-        friendly_name: nodeInfo?.friendly_name || gm.slave_mac,
-        pc_on: !!nodeInfo?.pc_on
+        master_id: gm.master_id || null,
+        friendly_name: friendlyByMac[gm.slave_mac] || gm.slave_mac,
+        pc_on: !!onByMac[gm.slave_mac]
       });
     }
     const final=(gs||[]).map((g)=>{
@@ -444,7 +478,10 @@ export default function App(){
     });
     setGroupsData(final);
   }
-  async function fullReload(){ await Promise.all([refetchDevicesOnly(),refetchNodesOnly(),refetchGroupsOnly()]); }
+
+  async function fullReload(){
+    await Promise.all([refetchDevicesOnly(), refetchNodesAndGroups()]);
+  }
 
   async function renameMaster(id){
     const newName=window.prompt("Nouveau nom du master ?",""); if(!newName) return;
@@ -467,13 +504,19 @@ export default function App(){
   async function doRenameSlave(masterId,mac,newName){
     const { error } = await sb.from("nodes").update({friendly_name:newName}).eq("master_id",masterId).eq("slave_mac",mac);
     if(error) window.alert("Erreur rename slave: "+error.message);
-    else { addLog(`Slave ${mac} renommé en ${newName}`); await refetchNodesOnly(); await refetchGroupsOnly(); }
+    else { addLog(`Slave ${mac} renommé en ${newName}`); await refetchNodesAndGroups(); }
   }
   async function sendCmd(masterId,targetMac,action,payload={}){
     if(targetMac) setSlavePhases((o)=>({...o,[targetMac]:"queue"}));
     const { error } = await sb.from("commands").insert({ master_id:masterId, target_mac:targetMac||null, action, payload });
-    if(error){ addLog("cmd err: "+error.message); if(targetMac) setSlavePhases((o)=>({...o,[targetMac]:"idle"})); }
-    else { addLog(`[cmd] ${action} → ${masterId}${targetMac?" ▶ "+targetMac:""}`); if(targetMac) setSlavePhases((o)=>({...o,[targetMac]:"send"})); }
+    if(error){
+      addLog("cmd err: "+error.message);
+      if(targetMac) setSlavePhases((o)=>({...o,[targetMac]:"idle"}));
+    } else {
+      // log réduit (éviter le flood)
+      if(!targetMac) addLog(`[cmd] ${action} → ${masterId}`);
+      if(targetMac) setSlavePhases((o)=>({...o,[targetMac]:"send"}));
+    }
   }
   async function sendGroupCmd(groupId,actionKey){
     const g=groupsData.find((x)=>x.id===groupId); if(!g) return;
@@ -493,7 +536,7 @@ export default function App(){
     const newName=window.prompt("Nouveau nom du groupe ?",""); if(!newName) return;
     const { error } = await sb.from("groups").update({name:newName}).eq("id",id);
     if(error) window.alert("Erreur rename group: "+error.message);
-    else { addLog(`Groupe ${id} renommé en ${newName}`); await refetchGroupsOnly(); }
+    else { addLog(`Groupe ${id} renommé en ${newName}`); await refetchNodesAndGroups(); }
   }
   async function deleteGroup(id){
     if(!window.confirm("Supprimer ce groupe ?")) return;
@@ -501,7 +544,7 @@ export default function App(){
     if(e1){ window.alert("Erreur suppr membres groupe: "+e1.message); return; }
     const { error: e2 } = await sb.from("groups").delete().eq("id",id);
     if(e2){ window.alert("Erreur suppr groupe: "+e2.message); return; }
-    addLog(`Groupe ${id} supprimé`); await refetchGroupsOnly();
+    addLog(`Groupe ${id} supprimé`); await refetchNodesAndGroups();
   }
   async function askAddMaster(){
     const { data: sessionRes } = await sb.auth.getSession();
@@ -520,7 +563,7 @@ export default function App(){
     const gname=window.prompt("Nom du nouveau groupe ?",""); if(!gname) return;
     const { data: ins, error } = await sb.from("groups").insert({name:gname}).select("id").single();
     if(error){ window.alert("Erreur création groupe: "+error.message); return; }
-    addLog(`Groupe créé (${ins?.id||"?"}): ${gname}`); await refetchGroupsOnly();
+    addLog(`Groupe créé (${ins?.id||"?"}): ${gname}`); await refetchNodesAndGroups();
   }
   function renameAccountLabel(){
     const newLabel=window.prompt("Nom du compte ?",accountName||""); if(!newLabel) return;
@@ -544,7 +587,6 @@ export default function App(){
   const openGroupMembersModal=(groupId)=>setGroupMembersOpen({open:true,groupId});
   const closeGroupMembersModal=()=>setGroupMembersOpen({open:false,groupId:""});
 
-  // Réglages groupe
   function openGroupSettingsModal(groupId){ setGroupSettingsOpen({ open:true, groupId }); }
   function closeGroupSettingsModal(){ setGroupSettingsOpen({ open:false, groupId:"" }); }
 
@@ -572,7 +614,7 @@ export default function App(){
       const { error: insErr } = await sb.from("group_members").insert(rows);
       if(insErr){ window.alert("Erreur insert membres: "+insErr.message); return; }
     }
-    addLog(`Membres groupe ${gid} mis à jour.`); closeGroupMembersModal(); await refetchGroupsOnly();
+    addLog(`Membres groupe ${gid} mis à jour.`); closeGroupMembersModal(); await refetchNodesAndGroups();
   }
 
   const currentSlaveInfo = useMemo(()=>{
@@ -626,7 +668,6 @@ export default function App(){
 
       <div className="pageBg">
         <div className="pageContent">
-          {/* Nom de compte en gros, juste sous le bandeau */}
           <div className="accountTitleBig" style={{fontSize:"2rem", fontWeight:600, margin:"0 0 1rem 0"}}>
             {displayAccount}
           </div>
@@ -687,7 +728,7 @@ export default function App(){
           {/* Journal */}
           <div className="journalSection">
             <div className="sectionTitleRow"><div className="sectionTitle">Journal</div></div>
-            <div className="logBox" ref={logRef}>{logs.join("\n")}</div>
+            <pre className="logBox" ref={logRef} />
           </div>
         </div>
       </div>
