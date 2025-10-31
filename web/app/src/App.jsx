@@ -12,7 +12,25 @@ function fmtTS(s){ if(!s) return "—"; const d = new Date(s); return d.toLocale
 function isLiveDevice(dev){ if(!dev?.last_seen) return false; return Date.now()-new Date(dev.last_seen).getTime() < LIVE_TTL_MS; }
 
 /* ====== UI bits ====== */
-function SubtleButton({children,onClick,disabled,style}){ return <button className="subtleBtn" disabled={disabled} onClick={onClick} style={style}>{children}</button>; }
+function SubtleButton({children,onClick,disabled,style,className,size="md"}){
+  // petite API de tailles (pas de <style> global)
+  const SIZES = {
+    sm: { fontSize: 12, padding: "6px 10px" },
+    md: { fontSize: 14, padding: "8px 14px" },
+    lg: { fontSize: 14, padding: "10px 16px" }, // gabarit des “Réglages”
+  };
+  const base = SIZES[size] || SIZES.md;
+  return (
+    <button
+      className={`subtleBtn ${className||""}`}
+      disabled={disabled}
+      onClick={onClick}
+      style={{ borderRadius: 9999, lineHeight: 1, ...base, ...(style||{}) }}
+    >
+      {children}
+    </button>
+  );
+}
 function CircleBtn({children,onClick,disabled,extraClass}){ return <button className={`circleBtn ${extraClass||""}`} disabled={disabled} onClick={onClick}><span className="circleBtnInner">{children}</span></button>; }
 function ActionBar({phase}){ if(!phase||phase==="idle") return null; const isAck=phase==="acked"; return(
   <div className="actionBarBlock">
@@ -149,6 +167,7 @@ function GroupAdvancedModal({open,onClose,groupName,onHardOff,onHardReset}){
     </ModalShell>
   );
 }
+
 /* --- Modale Réglages Compte (renommer le compte) --- */
 function AccountSettingsModal({ open, onClose, currentName, onSave }) {
   const [draft, setDraft] = useState(currentName || "");
@@ -216,8 +235,8 @@ function MasterCard({
           {/* ID / MAC / Dernier contact: visibles dans Réglages */}
         </div>
         <div className="masterActionsRow">
-          {/* On garde uniquement Réglages côté Master */}
-          <SubtleButton onClick={()=>onOpenSettings(device.id)}>Réglages</SubtleButton>
+          {/* Même taille que le bouton groupe */}
+          <SubtleButton size="lg" onClick={()=>onOpenSettings(device.id)}>Réglages</SubtleButton>
         </div>
       </div>
       <div className="slavesWrap">
@@ -257,14 +276,9 @@ function GroupCard({ group, onOpenSettings, onOpenOnList, onGroupCmd, onOpenAdva
           </div>
         </div>
         {/* Réglages (identique visuellement au master) */}
-<div className="groupMiniActions">
-  <SubtleButton
-    onClick={() => onOpenSettings(id)}
-    style={{ padding: "8px 14px", fontSize: "14px", lineHeight: "1", borderRadius: "9999px" }}
-  >
-    Réglages
-  </SubtleButton>
-</div>
+        <div className="groupMiniActions">
+          <SubtleButton size="lg" onClick={() => onOpenSettings(id)}>Réglages</SubtleButton>
+        </div>
       </div>
       <div className="slaveBtnsRow" style={{ marginTop: 8 }}>
         <CircleBtn onClick={() => onGroupCmd(id, "SLV_IO_ON")}>ON</CircleBtn>
