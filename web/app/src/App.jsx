@@ -149,6 +149,34 @@ function GroupAdvancedModal({open,onClose,groupName,onHardOff,onHardReset}){
     </ModalShell>
   );
 }
+/* --- Modale Réglages Compte (renommer le compte) --- */
+function AccountSettingsModal({ open, onClose, currentName, onSave }) {
+  const [draft, setDraft] = useState(currentName || "");
+  useEffect(() => { setDraft(currentName || ""); }, [currentName, open]);
+
+  if (!open) return null;
+  return (
+    <ModalShell open={open} onClose={onClose} title="Réglages du compte">
+      <div className="modalSection">
+        <label className="modalLabel">Nom du compte</label>
+        <input
+          className="modalInput"
+          value={draft}
+          onChange={(e)=>setDraft(e.target.value)}
+          placeholder="Nom d’affichage…"
+        />
+        <div style={{display:"flex", gap:8, marginTop:8, justifyContent:"flex-end"}}>
+          <SubtleButton onClick={onClose}>Annuler</SubtleButton>
+          <SubtleButton
+            onClick={() => { const v = String(draft||"").trim(); if(v){ onSave(v); onClose(); } }}
+          >
+            Enregistrer
+          </SubtleButton>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
 
 /* --- Carte Slave --- */
 function SlaveCard({masterId,mac,friendlyName,pcOn,onInfoClick,onIO,onReset,onMore,actionBarPhase}){
