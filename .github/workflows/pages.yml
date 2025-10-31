@@ -20,11 +20,9 @@ jobs:
     defaults:
       run:
         working-directory: web/app
-
     env:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,23 +32,13 @@ jobs:
         with:
           node-version: 20
 
-      - name: Show versions
+      - name: Install deps
         run: |
-          node -v
-          npm -v
-
-      # If no lockfile in repo, generate one so we can use `npm ci`
-      - name: Ensure lockfile
-        run: |
-          if [ ! -f package-lock.json ]; then
-            echo "No package-lock.json → generating…"
-            npm install --package-lock-only --no-audit --no-fund
+          if [ -f package-lock.json ]; then
+            npm ci
           else
-            echo "package-lock.json present."
+            npm install
           fi
-
-      - name: Install deps (ci)
-        run: npm ci --no-audit --no-fund
 
       - name: Check required secrets
         run: |
@@ -63,7 +51,6 @@ jobs:
       - name: Build
         run: |
           npm run build
-          # SPA fallback for GitHub Pages
           cp -f dist/index.html dist/404.html || true
           ls -la dist
 
@@ -71,6 +58,7 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: web/app/dist
+          name: github-pages
 
   deploy:
     needs: build
