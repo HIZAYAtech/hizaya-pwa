@@ -106,7 +106,7 @@ function MasterSettingsModal({ open, onClose, device, onPulse, onRename, onDelet
   );
 }
 
-/* --- Modale “Actions avancées” (Hard OFF / Hard RESET) réutilisable --- */
+/* --- Modale “Actions avancées” (Hard OFF / Hard RESET) --- */
 function HardActionsModal({ open, onClose, title, onHardOff, onHardReset }) {
   if (!open) return null;
   return (
@@ -132,6 +132,27 @@ function AccountSettingsModal({ open, onClose, accountName, onRename }) {
         <div style={{textAlign:"right", marginTop:8}}>
           <SubtleButton onClick={()=>{ onRename(draft); onClose(); }}>Enregistrer</SubtleButton>
         </div>
+      </div>
+    </ModalShell>
+  );
+}
+
+/* --- Modale édition membres (PRESENTE !) --- */
+function GroupMembersModal({open,onClose,groupName,allSlaves,checkedMap,onToggleMac,onSave}){
+  if(!open) return null;
+  return(
+    <ModalShell open={open} onClose={onClose} title={`Membres de "${groupName}"`}>
+      <div className="modalSection">
+        {(allSlaves||[]).map((sl)=>(
+          <label key={sl.mac} className="checkRow">
+            <input type="checkbox" checked={!!checkedMap[sl.mac]} onChange={()=>onToggleMac(sl.mac)} />
+            <span className="checkName">{sl.friendly_name||sl.mac}</span>
+            <span className="checkState">{sl.pc_on?"allumé":"éteint"}</span>
+          </label>
+        ))}
+      </div>
+      <div style={{textAlign:"right",marginTop:8}}>
+        <button className="subtleBtn" onClick={onSave}>Enregistrer</button>
       </div>
     </ModalShell>
   );
@@ -165,7 +186,6 @@ function MasterCard({device,slaves,onOpenMasterSettings,openSlaveInfoFor,onSlave
             <span className="masterCardTitle">{device.name||device.id}</span>
             <span className={"onlineBadge "+(live?"onlineYes":"onlineNo")}>{live?"EN LIGNE":"HORS LIGNE"}</span>
           </div>
-          {/* Infos ID/MAC/Dernier contact retirées de la carte -> visibles seulement via “Réglages” */}
         </div>
         <div className="masterActionsRow">
           <SubtleButton onClick={()=>onOpenMasterSettings(device)}>Réglages</SubtleButton>
@@ -211,13 +231,10 @@ function GroupCard({ group, onOpenSettings, onOpenOnList, onOpenMore, onGroupCmd
           <SubtleButton onClick={() => onOpenSettings(id)}>Réglages</SubtleButton>
         </div>
       </div>
-
-      {/* Commandes principales (même visuel que slaves) */}
       <div className="slaveBtnsRow" style={{ marginTop: 8 }}>
         <CircleBtn onClick={() => onGroupCmd(id, "SLV_IO_ON")}>ON</CircleBtn>
         <CircleBtn onClick={() => onGroupCmd(id, "RESET")}>↺</CircleBtn>
         <CircleBtn onClick={() => onGroupCmd(id, "SLV_IO_OFF")}>OFF</CircleBtn>
-        {/* Hard actions via “…” */}
         <CircleBtn extraClass="moreBtn" onClick={()=>onOpenMore(id, name)}>⋯</CircleBtn>
       </div>
     </div>
@@ -325,11 +342,20 @@ export default function App(){
 
   // ---- Profiles: load/save ----
   async function loadAccountName(uid, email){
-    if(!uid) { setAccountName(email||""); return; }
-    const { data, error } = await sb.from("profiles").select("account_name").eq("id", uid).single();
-    if (!error && data?.account_name) {
-      setAccountName(data.account_name);
-    } else {
+    try{
+      if(!uid) { setAccountName(email||""); return; }
+      const { data, error } = await sb
+        .from("profiles")
+        .select("account_name")
+        .eq("id", uid)
+        .maybeSingle();            // <-- évite 406 quand aucune ligne
+      if (!error && data?.account_name) {
+        setAccountName(data.account_name);
+      } else {
+        const fallback = email ? String(email).split("@")[0] : "";
+        setAccountName(fallback);
+      }
+    }catch{
       const fallback = email ? String(email).split("@")[0] : "";
       setAccountName(fallback);
     }
@@ -339,11 +365,16 @@ export default function App(){
     if(!user) return;
     const trimmed = (newName||"").trim();
     if(!trimmed) return;
+    const previous = accountName;
     setAccountName(trimmed); // Optimistic UI
-    const { error } = await sb.from("profiles").update({ account_name: trimmed, updated_at: new Date().toISOString() }).eq("id", user.id);
+    const { error } = await sb
+      .from("profiles")
+      .update({ account_name: trimmed, updated_at: new Date().toISOString() })
+      .eq("id", user.id);
     if(error){
+      // rollback UI + fallback
+      setAccountName(previous);
       addLog("Err save account_name: " + error.message);
-      await loadAccountName(user.id, user.email);
       window.alert("Erreur enregistrement du nom de compte.");
     }
   }
@@ -614,14 +645,13 @@ export default function App(){
           </div>
           <div className="rightBlock">
             <div className="userMail smallText">{user.email}</div>
-            {/* Réglages compte (renommer) + Déconnexion */}
             <SubtleButton onClick={()=>setAccountSettingsOpen(true)}>Réglages</SubtleButton>
             <SubtleButton onClick={handleLogout}>Déconnexion</SubtleButton>
           </div>
         </div>
       </header>
 
-      {/* Nom de compte en gros (sous le bandeau) */}
+      {/* Nom de compte en gros */}
       <div style={{padding:"16px 24px 0 24px"}}>
         <div style={{fontSize:24, fontWeight:700, lineHeight:1.2}}>
           {accountName || user.email}
@@ -702,28 +732,28 @@ export default function App(){
         onClose={closeSlaveInfo}
         slaveMac={slaveInfoOpen.mac}
         masterId={slaveInfoOpen.masterId}
-        currentName={currentSlaveInfo?.friendly_name || slaveInfoOpen.mac}
-        pcOn={!!currentSlaveInfo?.pc_on}
+        currentName={(useMemo(()=>{ if(!slaveInfoOpen.open) return null; const { masterId,mac }=slaveInfoOpen; const list=nodesByMaster[masterId]||[]; return (list.find((s)=>s.mac===mac)||{}).friendly_name; },[slaveInfoOpen,nodesByMaster])) || slaveInfoOpen.mac}
+        pcOn={!!(useMemo(()=>{ if(!slaveInfoOpen.open) return null; const { masterId,mac }=slaveInfoOpen; const list=nodesByMaster[masterId]||[]; const f=list.find((s)=>s.mac===mac); return f?.pc_on; },[slaveInfoOpen,nodesByMaster]))}
         onRename={(newName)=>{ doRenameSlave(slaveInfoOpen.masterId,slaveInfoOpen.mac,newName); closeSlaveInfo(); }}
       />
       <GroupOnListModal
         open={groupOnListOpen.open}
         onClose={closeGroupOnListModal}
-        members={currentGroupForOnList?.members || []}
+        members={(useMemo(()=>{ if(!groupOnListOpen.open) return []; const g=groupsData.find((gg)=>gg.id===groupOnListOpen.groupId); return g?.members||[]; },[groupOnListOpen,groupsData]))}
       />
       <GroupMembersModal
         open={groupMembersOpen.open}
         onClose={closeGroupMembersModal}
         groupName={(groupsData.find((g)=>g.id===groupMembersOpen.groupId)?.name)||""}
-        allSlaves={allSlavesFlat}
+        allSlaves={(useMemo(()=>{ const arr=[]; for(const mid of Object.keys(nodesByMaster)) for(const sl of nodesByMaster[mid]) arr.push({mac:sl.mac,master_id:mid,friendly_name:sl.friendly_name,pc_on:sl.pc_on}); return arr; },[nodesByMaster]))}
         checkedMap={editMembersChecked}
-        onToggleMac={toggleCheckMac}
+        onToggleMac={(mac)=>setEditMembersChecked((o)=>({...o,[mac]:!o[mac]}))}
         onSave={saveGroupMembers}
       />
       <GroupSettingsModal
         open={groupSettingsOpen.open}
         onClose={closeGroupSettingsModal}
-        group={settingsGroupObj}
+        group={(useMemo(()=>{ if(!groupSettingsOpen.open) return null; return groupsData.find(g=>g.id===groupSettingsOpen.groupId)||null; },[groupSettingsOpen, groupsData]))}
         onRenameGroup={renameGroup}
         onOpenMembersEdit={(gid)=>openGroupMembersModal(gid)}
         onDeleteGroup={deleteGroup}
