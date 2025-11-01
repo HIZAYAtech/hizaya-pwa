@@ -248,7 +248,10 @@ function MasterCard({
               onInfoClick={()=>openSlaveInfoFor(device.id,sl.mac)}
               onIO={()=>onSlaveIO(device.id,sl.mac)}
               onReset={()=>onSlaveReset(device.id,sl.mac)}
-              onMore={()=>onSlaveMore(device.id,sl.mac)}
+              onMore={()=>{
+                const label=(slaves||[]).find(s=>s.mac===sl.mac)?.friendly_name || sl.mac;
+                onSlaveMore(device.id, sl.mac, label);
+              }}
             />
           ))}
         </div>
@@ -281,6 +284,19 @@ function GroupCard({ group, onOpenSettings, onOpenOnList, onGroupCmd, onOpenAdva
         <CircleBtn onClick={() => onGroupCmd(id, "RESET")}>↺</CircleBtn>
         <CircleBtn onClick={() => onGroupCmd(id, "SLV_IO_OFF")}>OFF</CircleBtn>
         <CircleBtn extraClass="moreBtn" onClick={()=>onOpenAdvanced(id)}>⋯</CircleBtn>
+      </div>
+    </div>
+  );
+}
+
+/* --- Écran de login simple --- */
+function LoginScreen({ onLogin }) {
+  return (
+    <div className="loginScreen" style={{minHeight:"100vh", display:"grid", placeItems:"center"}}>
+      <div className="loginCard" style={{padding:"2rem", borderRadius:16, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)"}}>
+        <div className="appName" style={{fontSize:24, fontWeight:700, marginBottom:8}}>HIZAYA SWITCH</div>
+        <div className="smallText" style={{opacity:.8, marginBottom:16}}>Connecte‑toi pour continuer</div>
+        <SubtleButton size="lg" onClick={onLogin}>Se connecter avec Google</SubtleButton>
       </div>
     </div>
   );
@@ -430,82 +446,78 @@ export default function App(){
   }
 
   // ---------- INIT / AUTH ----------
-  useEffect(()=>{
+  useEffect(() => {
     let mounted = true;
 
-    // iOS/Safari BFCache: si la page revient du cache d’historique, on reload.
-    const onPageShow = (e) => { if (e.persisted) window.location.reload(); };
-    window.addEventListener('pageshow', onPageShow);
-
-    // Abonnement auth : on attend INITIAL_SESSION comme barrière
-    const { data: sub } = sb.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
+    (async () => {
+      // iOS/Safari BFCache: si la page revient du cache d’historique, on reload.
+      const onPageShow = (e) => { if (e.persisted) window.location.reload(); };
+      window.addEventListener('pageshow', onPageShow);
 
       try {
-        if (event === "INITIAL_SESSION") {
-          const u = session?.user ?? null;
-          setUser(u);
-
-          if (u) {
-            await loadProfile();
-            await fullReload();     // ← premières requêtes, JWT présent
-            attachRealtime();
-          } else {
-            cleanupRealtime();
-          }
-          setAuthReady(true);       // ← prêt seulement après restauration
-        }
-
-        else if (event === "SIGNED_IN") {
-          try { stripOAuthParams(); } catch(e){ addLog("[auth] strip err: "+(e?.message||e)); }
-          setUser(session?.user ?? null);
-          await loadProfile();
-          await fullReload();
-          attachRealtime();
-          setAuthReady(true);
-        }
-
-        else if (event === "SIGNED_OUT") {
-          setUser(null);
-          setDevices([]); setNodesByMaster({}); setGroupsData([]); setSlavePhases({});
-          cleanupRealtime();
-          setAuthReady(true);       // prêt à afficher le login
-        }
-
-        else if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
-          setUser(session?.user ?? null);
-          await loadProfile();
+        // 1) Si on revient du provider OAuth, échanger immédiatement le code
+        const url = new URL(window.location.href);
+        const hasPKCE = url.searchParams.get("code") && url.searchParams.get("state");
+        const hasHashToken = url.hash.includes("access_token=");
+        if (hasPKCE || hasHashToken) {
+          await sb.auth.exchangeCodeForSession();
+          try { stripOAuthParams(); } catch {}
         }
       } catch (e) {
-        addLog("[auth] onAuthStateChange err: "+(e?.message||e));
-        setAuthReady(true);
+        addLog("[auth] parse/exchange err: "+(e?.message||e));
       }
-    });
 
-    // Fallback robuste (au cas où INITIAL_SESSION ne viendrait pas)
-    const fallback = setTimeout(async () => {
+      // 2) Lire la session tout de suite
+      const { data: { session } = {} } = await sb.auth.getSession();
       if (!mounted) return;
-      const { data } = await sb.auth.getSession();
-      const u = data?.session?.user ?? null;
-      setUser(u);
-      if (u) {
+
+      setUser(session?.user ?? null);
+      if (session?.user) {
         await loadProfile();
-        await fullReload();
+        await fullReload();     // ← premières requêtes, JWT présent
         attachRealtime();
       } else {
         cleanupRealtime();
       }
-      setAuthReady(true);
-    }, 6000);
 
-    return ()=>{
-      mounted=false;
-      sub?.subscription?.unsubscribe();
-      cleanupRealtime();
-      window.removeEventListener('pageshow', onPageShow);
-      clearTimeout(fallback);
-    };
-  },[]);
+      // 3) On est prêt à rendre (login si pas de session)
+      setAuthReady(true);
+
+      // 4) Écoute des changements de session
+      const { data: { subscription } } = sb.auth.onAuthStateChange(async (event, sess) => {
+        if (!mounted) return;
+        setUser(sess?.user ?? null);
+
+        if (event === 'SIGNED_IN') {
+          try { stripOAuthParams(); } catch {}
+          await loadProfile();
+          await fullReload();
+          attachRealtime();
+        }
+        if (event === 'SIGNED_OUT') {
+          setDevices([]); setNodesByMaster({}); setGroupsData([]); setSlavePhases({});
+          cleanupRealtime();
+        }
+        if (event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') {
+          await loadProfile();
+        }
+      });
+
+      // Cleanup
+      return () => {
+        mounted = false;
+        subscription?.unsubscribe?.();
+        window.removeEventListener('pageshow', onPageShow);
+      };
+    })();
+  }, []);
+
+  // Garde‑fou anti‑spin : ne jamais rester indéfiniment sur "Chargement…"
+  useEffect(() => {
+    if (authReady) return;
+    const t = setTimeout(() => setAuthReady(true), 3000);
+    return () => clearTimeout(t);
+  }, [authReady]);
 
   async function refetchDevicesOnly(){
     const { data: devs, error } = await sb.from("devices")
@@ -637,7 +649,7 @@ export default function App(){
     if(!r.ok){ const txt=await r.text(); window.alert("Erreur pair-code: "+txt); return; }
     const { code, expires_at } = await r.json();
     const end=new Date(expires_at).getTime(); const ttlSec=Math.floor((end-Date.now())/1000);
-    window.alert(`Code: ${String(code).padStart(6,"0")} (expire dans ~${ttlSec}s)\nSaisis ce code dans le portail Wi-Fi du MASTER.`);
+    window.alert(`Code: ${String(code).padStart(6,"0")} (expire dans ~${ttlSec}s)\nSaisis ce code dans le portail Wi‑Fi du MASTER.`);
   }
   async function askAddGroup(){
     const gname=window.prompt("Nom du nouveau groupe ?",""); if(!gname) return;
@@ -648,7 +660,7 @@ export default function App(){
 
   function handleLogout(){ sb.auth.signOut(); }
   function handleLogin(){
-    stripOAuthParams();
+    try { stripOAuthParams(); } catch {}
     const returnTo = `${window.location.origin}/hizaya-pwa/`;
     sb.auth.signInWithOAuth({
       provider:"google",
@@ -736,25 +748,10 @@ export default function App(){
     return g?.name || "";
   },[groupAdvancedOpen, groupsData]);
 
-/* Rendu */
-if (!authReady) {
-  return <div style={{ color: "#fff", padding: "2rem" }}>Chargement…</div>;
-}
+  /* Rendu */
+  if(!authReady){ return <div style={{color:"#fff",padding:"2rem"}}>Chargement…</div>; }
+  if(!user){ return <LoginScreen onLogin={handleLogin}/>; }
 
-if (!user) {
-  return (
-    <div style={{ color: "#fff", padding: "2rem" }}>
-      <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 12 }}>
-        HIZAYA SWITCH
-      </div>
-      <SubtleButton size="lg" onClick={handleLogin}>
-        Se connecter avec Google
-      </SubtleButton>
-    </div>
-  );
-}
-
-// Ici, l'utilisateur est connecté → on rend l'app complète
   const displayAccount = accountName || (user?.email ? user.email.split("@")[0] : "");
 
   return(
@@ -832,9 +829,9 @@ if (!user) {
                   openSlaveInfoFor={openSlaveInfo}
                   onSlaveIO={(mid,mac)=>sendCmd(mid,mac,"SLV_IO",{pin:DEFAULT_IO_PIN,mode:"OUT",value:1})}
                   onSlaveReset={(mid,mac)=>sendCmd(mid,mac,"SLV_RESET",{})}
-                  onSlaveMore={(mid,mac)=>{
-                    const label=(nodesByMaster[mid]||[]).find(s=>s.mac===mac)?.friendly_name || mac;
-                    openSlaveAdvanced(mid,mac,label);
+                  onSlaveMore={(mid,mac,label)=>{
+                    const lbl=(nodesByMaster[mid]||[]).find(s=>s.mac===mac)?.friendly_name || mac;
+                    openSlaveAdvanced(mid,mac,label||lbl);
                   }}
                   slavePhases={slavePhases}
                   isBusy={!!busyMasters[dev.id]}
