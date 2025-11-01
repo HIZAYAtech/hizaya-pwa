@@ -736,17 +736,25 @@ export default function App(){
     return g?.name || "";
   },[groupAdvancedOpen, groupsData]);
 
-  /* Rendu */
-  if(!authReady){ return <div style={{color:"#fff",padding:"2rem"}}>Chargement…</div>; }
-  if(!user){ return <if (!user) {
+/* Rendu */
+if (!authReady) {
+  return <div style={{ color: "#fff", padding: "2rem" }}>Chargement…</div>;
+}
+
+if (!user) {
   return (
-    <div style={{color:"#fff", padding:"2rem"}}>
-      <div style={{fontSize:24, fontWeight:700, marginBottom:12}}>HIZAYA SWITCH</div>
-      <SubtleButton size="lg" onClick={handleLogin}>Se connecter avec Google</SubtleButton>
+    <div style={{ color: "#fff", padding: "2rem" }}>
+      <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 12 }}>
+        HIZAYA SWITCH
+      </div>
+      <SubtleButton size="lg" onClick={handleLogin}>
+        Se connecter avec Google
+      </SubtleButton>
     </div>
   );
-} onLogin={handleLogin}/>; }
+}
 
+// Ici, l'utilisateur est connecté → on rend l'app complète
   const displayAccount = accountName || (user?.email ? user.email.split("@")[0] : "");
 
   return(
