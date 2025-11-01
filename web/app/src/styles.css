@@ -107,7 +107,6 @@ html,body,#root{ margin:0; padding:0; background:var(--bg-page); color:var(--tex
 
 /* largeur uniforme pour les boutons Réglages */
 .btn-settings { min-width: 120px; text-align: center; }
-
 /* option : forcer aussi par conteneur si besoin */
 .masterActionsRow .subtleBtn,
 .groupMiniActions .subtleBtn {
