@@ -40,6 +40,15 @@ function ActionBar({phase}){ if(!phase||phase==="idle") return null; const isAck
   </div>
 ); }
 
+/* New uniform Settings button */
+function SettingsButton({ onClick, children = "Réglages", size = "lg" }) {
+  return (
+    <SubtleButton size={size} onClick={onClick} style={{ minWidth: 110 }}>
+      {children}
+    </SubtleButton>
+  );
+}
+
 /* --- Modale générique --- */
 function ModalShell({open,onClose,children,title}){ if(!open) return null; return(
   <div className="modalOverlay" onClick={onClose}>
@@ -233,7 +242,7 @@ function MasterCard({
           </div>
         </div>
         <div className="masterActionsRow">
-          <SubtleButton size="lg" onClick={()=>onOpenSettings(device.id)}>Réglages</SubtleButton>
+          <SettingsButton onClick={()=>onOpenSettings(device.id)} />
         </div>
       </div>
       <div className="slavesWrap">
@@ -276,7 +285,7 @@ function GroupCard({ group, onOpenSettings, onOpenOnList, onGroupCmd, onOpenAdva
           </div>
         </div>
         <div className="groupMiniActions">
-          <SubtleButton size="lg" onClick={() => onOpenSettings(id)}>Réglages</SubtleButton>
+          <SettingsButton onClick={()=>onOpenSettings(id)} />
         </div>
       </div>
       <div className="slaveBtnsRow" style={{ marginTop: 8 }}>
@@ -318,6 +327,12 @@ export default function App(){
   const [slavePhases,setSlavePhases]=useState({});
 
   const [logs,setLogs]=useState([]);
+  // Journal visibility (persisted)
+  const [journalOpen, setJournalOpen] = useState(() => {
+    try { return localStorage.getItem('journalOpen') !== '0'; } catch { return true; }
+  });
+  useEffect(()=>{ try{ localStorage.setItem('journalOpen', journalOpen ? '1':'0'); } catch{} }, [journalOpen]);
+
   const logRef=useRef(null);
   const addLog=(t)=>setLogs((old)=>[...old.slice(-199), new Date().toLocaleTimeString()+"  "+t]);
 
@@ -767,7 +782,7 @@ export default function App(){
           </div>
           <div className="rightBlock">
             <div className="userMail smallText">{displayAccount}</div>
-            <SubtleButton onClick={()=>setAccountSettingsOpen(true)}>Réglages</SubtleButton>
+            <SettingsButton onClick={()=>setAccountSettingsOpen(true)} />
             <SubtleButton onClick={handleLogout}>Déconnexion</SubtleButton>
             <SubtleButton onClick={fullReload}>Rafraîchir</SubtleButton>
           </div>
@@ -780,7 +795,7 @@ export default function App(){
 
           {/* Groupes */}
           <div className="groupsSection">
-            <div className="sectionTitleRow" style={{alignItems:"center"}}>
+            <div className="sectionTitleRow" style={{alignItems:"center", paddingLeft:24, paddingRight:12}}>
               <div>
                 <div className="sectionTitle">Groupes</div>
                 <div className="sectionSub">Contrôler plusieurs machines en même temps</div>
@@ -809,7 +824,7 @@ export default function App(){
 
           {/* Masters */}
           <div className="mastersSection">
-            <div className="sectionTitleRow" style={{alignItems:"center"}}>
+            <div className="sectionTitleRow" style={{alignItems:"center", paddingLeft:24, paddingRight:12}}>
               <div>
                 <div className="sectionTitle">Masters</div>
                 <div className="sectionSub">Chaque master pilote ses slaves</div>
@@ -842,11 +857,14 @@ export default function App(){
 
           {/* Journal */}
           <div className="journalSection">
-            <div className="sectionTitleRow"><div className="sectionTitle">Journal</div></div>
-            <div className="logBox" ref={logRef}>{logs.join("\n")}</div>
+            <div className="sectionTitleRow" style={{alignItems:"center", paddingLeft:24, paddingRight:12}}>
+              <div className="sectionTitle">Journal</div>
+              <div style={{marginLeft:"auto"}}>
+                <SubtleButton onClick={()=>setJournalOpen(o=>!o)}>{journalOpen ? "Masquer" : "Afficher"}</SubtleButton>
+              </div>
+            </div>
+            {journalOpen && <div className="logBox" ref={logRef}>{logs.join("\n")}</div>}
           </div>
-        </div>
-      </div>
 
       {/* Modales */}
       <SlaveInfoModal
