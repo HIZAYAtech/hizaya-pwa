@@ -449,53 +449,83 @@ export default function App(){
     }
   }
 
-  useEffect(()=>{
-    let mounted=true;
+useEffect(()=>{
+  let mounted = true;
 
-    async function init(){
+  // iOS/Safari BFCache: si la page revient du cache d’historique, on reload.
+  const onPageShow = (e) => { if (e.persisted) window.location.reload(); };
+  window.addEventListener('pageshow', onPageShow);
+
+  // Watchdog: si quelque chose pend, on force l’UI à sortir de "Chargement…"
+  const watchdog = setTimeout(() => {
+    if (mounted) {
+      setAuthReady(true);
+      addLog("[init] watchdog fired → authReady=TRUE (force)");
+    }
+  }, 5000);
+
+  async function init(){
+    try {
+      // strip des params OAuth protégé
+      try { stripOAuthParams(); } 
+      catch (e) { addLog("[init] stripOAuthParams err: "+(e?.message||e)); }
+
       const { data } = await sb.auth.getSession();
-      stripOAuthParams();
-      const sess = data.session;
+      const sess = data?.session;
 
-      if(!mounted) return;
-      if(sess?.user){
+      if (!mounted) return;
+
+      if (sess?.user) {
         setUser(sess.user);
-        setAuthReady(true);
         await loadProfile();
         await fullReload();
         attachRealtime();
-      }else{
+      } else {
         setUser(null);
-        setAuthReady(true);
       }
+    } catch (e) {
+      addLog("[init] getSession err: "+(e?.message||e));
+    } finally {
+      if (mounted) setAuthReady(true);  // <- garantit la sortie de "Chargement…"
+      clearTimeout(watchdog);
     }
+  }
 
-    const { data: sub } = sb.auth.onAuthStateChange(async (event, session)=>{
+  // Abonnement auth, protégé
+  const { data: sub } = sb.auth.onAuthStateChange(async (event, session)=>{
+    try{
       if(event==="SIGNED_IN"){
-        stripOAuthParams();
+        try { stripOAuthParams(); } catch(e){ addLog("[auth] strip err: "+(e?.message||e)); }
         setUser(session?.user||null);
         await loadProfile();
         await fullReload();
         attachRealtime();
-      }else if(event==="SIGNED_OUT"){
+      } else if(event==="SIGNED_OUT"){
         setUser(null);
         setDevices([]); setNodesByMaster({}); setGroupsData([]); setSlavePhases({});
         cleanupRealtime();
-      }else if(event==="TOKEN_REFRESHED"||event==="USER_UPDATED"){
+      } else if(event==="TOKEN_REFRESHED"||event==="USER_UPDATED"){
         setUser(session?.user||null);
         await loadProfile();
       }
+    } catch(e){
+      addLog("[auth] onAuthStateChange err: "+(e?.message||e));
+    } finally {
       setAuthReady(true);
-    });
+    }
+  });
 
-    init();
-    return ()=>{
-      mounted=false;
-      sub?.subscription?.unsubscribe();
-      cleanupRealtime();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[]);
+  init();
+
+  return ()=>{
+    mounted=false;
+    sub?.subscription?.unsubscribe();
+    cleanupRealtime();
+    window.removeEventListener('pageshow', onPageShow);
+    clearTimeout(watchdog);
+  };
+// eslint-disable-next-line react-hooks/exhaustive-deps
+},[]);
 
   async function refetchDevicesOnly(){
     const { data: devs, error } = await sb.from("devices")
