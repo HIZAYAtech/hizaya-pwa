@@ -738,7 +738,14 @@ export default function App(){
 
   /* Rendu */
   if(!authReady){ return <div style={{color:"#fff",padding:"2rem"}}>Chargement…</div>; }
-  if(!user){ return <LoginScreen onLogin={handleLogin}/>; }
+  if(!user){ return <if (!user) {
+  return (
+    <div style={{color:"#fff", padding:"2rem"}}>
+      <div style={{fontSize:24, fontWeight:700, marginBottom:12}}>HIZAYA SWITCH</div>
+      <SubtleButton size="lg" onClick={handleLogin}>Se connecter avec Google</SubtleButton>
+    </div>
+  );
+} onLogin={handleLogin}/>; }
 
   const displayAccount = accountName || (user?.email ? user.email.split("@")[0] : "");
 
