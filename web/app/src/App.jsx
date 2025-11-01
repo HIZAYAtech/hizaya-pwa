@@ -41,14 +41,9 @@ function ActionBar({phase}){ if(!phase||phase==="idle") return null; const isAck
 ); }
 
 /* New uniform Settings button */
-function SettingsButton({ onClick, children = "Réglages", size = "lg", className = "" }) {
+function SettingsButton({ onClick, children = "Réglages", size = "lg" }) {
   return (
-    <SubtleButton
-      size={size}
-      onClick={onClick}
-      className={`btn-settings ${className}`}
-      style={{ minWidth: 120, textAlign: "center" }}
-    >
+    <SubtleButton size={size} onClick={onClick} className="btn-settings" style={{ minWidth: 120, textAlign: "center" }}>
       {children}
     </SubtleButton>
   );
@@ -868,7 +863,7 @@ export default function App(){
                 <SubtleButton onClick={()=>setJournalOpen(o=>!o)}>{journalOpen ? "Masquer" : "Afficher"}</SubtleButton>
               </div>
             </div>
-            {journalOpen && <div className="logBox" ref={logRef}>{logs.join("\n")}</div>}
+            {journalOpen && <div className="logBox" ref={logRef}>{logs.join("\\n")}</div>}
           </div>
         </div>
       </div>
