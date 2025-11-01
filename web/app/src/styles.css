@@ -105,6 +105,15 @@ html,body,#root{ margin:0; padding:0; background:var(--bg-page); color:var(--tex
 @keyframes pulseBar{ 0%{opacity:0.4;} 50%{opacity:1;} 100%{opacity:0.4;} }
 @keyframes fillBar{ 0%{width:0%;} 100%{width:100%;} }
 
+/* largeur uniforme pour les boutons Réglages */
+.btn-settings { min-width: 120px; text-align: center; }
+
+/* option : forcer aussi par conteneur si besoin */
+.masterActionsRow .subtleBtn,
+.groupMiniActions .subtleBtn {
+  min-width: 120px;
+}
+
 /* Buttons */
 .slaveBtnsRow{ display:flex; flex-wrap:nowrap; align-items:flex-end; justify-content:center; gap:12px; margin-top:auto; }
 .circleBtn{ width:44px; height:44px; border-radius:9999px; background:var(--bubble-bg); border:1px solid var(--bubble-border); color:var(--text-main); cursor:pointer; }
