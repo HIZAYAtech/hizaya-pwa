@@ -865,6 +865,8 @@ export default function App(){
             </div>
             {journalOpen && <div className="logBox" ref={logRef}>{logs.join("\n")}</div>}
           </div>
+        </div>
+      </div>
 
       {/* Modales */}
       <SlaveInfoModal
