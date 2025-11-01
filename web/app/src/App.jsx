@@ -863,8 +863,7 @@ export default function App(){
                 <SubtleButton onClick={()=>setJournalOpen(o=>!o)}>{journalOpen ? "Masquer" : "Afficher"}</SubtleButton>
               </div>
             </div>
-            {journalOpen && <div className="logBox" ref={logRef}>{logs.join("
-")}</div>}
+            {journalOpen && <div className="logBox" ref={logRef}>{logs.join("\n")}</div>}
           </div>
         </div>
       </div>
