@@ -795,8 +795,8 @@ export default function App(){
 
           {/* Groupes */}
           <div className="groupsSection">
-            <div className="sectionTitleRow" style={{alignItems:"center", paddingLeft:24, paddingRight:12}}>
-              <div>
+            <div className="sectionTitleRow" style={{alignItems:"flex-start", justifyContent:"flex-start", paddingLeft:24, paddingRight:12}}>
+              <div style={{textAlign:"left", marginRight:"auto"}}>
                 <div className="sectionTitle">Groupes</div>
                 <div className="sectionSub">Contrôler plusieurs machines en même temps</div>
               </div>
@@ -824,8 +824,8 @@ export default function App(){
 
           {/* Masters */}
           <div className="mastersSection">
-            <div className="sectionTitleRow" style={{alignItems:"center", paddingLeft:24, paddingRight:12}}>
-              <div>
+            <div className="sectionTitleRow" style={{alignItems:"flex-start", justifyContent:"flex-start", paddingLeft:24, paddingRight:12}}>
+              <div style={{textAlign:"left", marginRight:"auto"}}>
                 <div className="sectionTitle">Masters</div>
                 <div className="sectionSub">Chaque master pilote ses slaves</div>
               </div>
@@ -857,13 +857,14 @@ export default function App(){
 
           {/* Journal */}
           <div className="journalSection">
-            <div className="sectionTitleRow" style={{alignItems:"center", paddingLeft:24, paddingRight:12}}>
+            <div className="sectionTitleRow" style={{alignItems:"flex-start", justifyContent:"flex-start", paddingLeft:24, paddingRight:12}}>
               <div className="sectionTitle">Journal</div>
               <div style={{marginLeft:"auto"}}>
                 <SubtleButton onClick={()=>setJournalOpen(o=>!o)}>{journalOpen ? "Masquer" : "Afficher"}</SubtleButton>
               </div>
             </div>
-            {journalOpen && <div className="logBox" ref={logRef}>{logs.join("\n")}</div>}
+            {journalOpen && <div className="logBox" ref={logRef}>{logs.join("
+")}</div>}
           </div>
         </div>
       </div>
