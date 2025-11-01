@@ -106,7 +106,17 @@ html,body,#root{ margin:0; padding:0; background:var(--bg-page); color:var(--tex
 @keyframes fillBar{ 0%{width:0%;} 100%{width:100%;} }
 
 /* largeur uniforme pour les boutons Réglages */
-.btn-settings { min-width: 120px; text-align: center; }
+/* largeur/hauteur identiques pour tous les boutons Réglages */
+.btn-settings{
+  width: 120px;          /* au lieu de min-width */
+  height: 48px;          /* fixe la hauteur, même rendu partout */
+  display: inline-flex;  /* centrage propre */
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;       /* garde le look des capsules */
+  line-height: 1;
+  white-space: nowrap;   /* évite un retour ligne “Réglages” */
+}
 /* option : forcer aussi par conteneur si besoin */
 .masterActionsRow .subtleBtn,
 .groupMiniActions .subtleBtn {
