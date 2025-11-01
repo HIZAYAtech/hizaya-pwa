@@ -41,9 +41,14 @@ function ActionBar({phase}){ if(!phase||phase==="idle") return null; const isAck
 ); }
 
 /* New uniform Settings button */
-function SettingsButton({ onClick, children = "Réglages", size = "lg" }) {
+function SettingsButton({ onClick, children = "Réglages", size = "lg", className = "" }) {
   return (
-    <SubtleButton size={size} onClick={onClick} style={{ minWidth: 110 }}>
+    <SubtleButton
+      size={size}
+      onClick={onClick}
+      className={`btn-settings ${className}`}
+      style={{ minWidth: 120, textAlign: "center" }}
+    >
       {children}
     </SubtleButton>
   );
