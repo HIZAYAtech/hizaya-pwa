@@ -13,11 +13,10 @@ function isLiveDevice(dev){ if(!dev?.last_seen) return false; return Date.now()-
 
 /* ====== UI bits ====== */
 function SubtleButton({children,onClick,disabled,style,className,size="md"}){
-  // petite API de tailles (pas de <style> global)
   const SIZES = {
     sm: { fontSize: 12, padding: "6px 10px" },
     md: { fontSize: 14, padding: "8px 14px" },
-    lg: { fontSize: 14, padding: "10px 16px" }, // gabarit des “Réglages”
+    lg: { fontSize: 14, padding: "10px 16px" },
   };
   const base = SIZES[size] || SIZES.md;
   return (
@@ -125,7 +124,7 @@ function GroupMembersModal({open,onClose,groupName,allSlaves,checkedMap,onToggle
   );
 }
 
-/* --- Modale Réglages Master (détails + Pulse 500ms + rename/delete) --- */
+/* --- Modale Réglages Master --- */
 function MasterSettingsModal({open,onClose,device,onRename,onDelete,onSendMasterCmd}){
   if(!open || !device) return null;
   return(
@@ -144,7 +143,7 @@ function MasterSettingsModal({open,onClose,device,onRename,onDelete,onSendMaster
   );
 }
 
-/* --- Modales “Actions avancées …” (boutons, pas de prompt) --- */
+/* --- Modales “Actions avancées …” --- */
 function SlaveAdvancedModal({open,onClose,slaveLabel,onHardOff,onHardReset}){
   if(!open) return null;
   return(
@@ -168,7 +167,7 @@ function GroupAdvancedModal({open,onClose,groupName,onHardOff,onHardReset}){
   );
 }
 
-/* --- Modale Réglages Compte (renommer le compte) --- */
+/* --- Modale Réglages Compte --- */
 function AccountSettingsModal({ open, onClose, currentName, onSave }) {
   const [draft, setDraft] = useState(currentName || "");
   useEffect(() => { setDraft(currentName || ""); }, [currentName, open]);
@@ -217,7 +216,7 @@ function SlaveCard({masterId,mac,friendlyName,pcOn,onInfoClick,onIO,onReset,onMo
 /* --- Carte Master --- */
 function MasterCard({
   device,slaves,
-  onOpenSettings,           // ouvre la modale réglages
+  onOpenSettings,
   openSlaveInfoFor,onSlaveIO,onSlaveReset,onSlaveMore,
   slavePhases,
   isBusy
@@ -232,10 +231,8 @@ function MasterCard({
             <span className="masterCardTitle">{device.name||device.id}</span>
             <span className={"onlineBadge "+(live?"onlineYes":"onlineNo")}>{statusLabel}</span>
           </div>
-          {/* ID / MAC / Dernier contact: visibles dans Réglages */}
         </div>
         <div className="masterActionsRow">
-          {/* Même taille que le bouton groupe */}
           <SubtleButton size="lg" onClick={()=>onOpenSettings(device.id)}>Réglages</SubtleButton>
         </div>
       </div>
@@ -275,7 +272,6 @@ function GroupCard({ group, onOpenSettings, onOpenOnList, onGroupCmd, onOpenAdva
             </button>
           </div>
         </div>
-        {/* Réglages (identique visuellement au master) */}
         <div className="groupMiniActions">
           <SubtleButton size="lg" onClick={() => onOpenSettings(id)}>Réglages</SubtleButton>
         </div>
@@ -285,19 +281,6 @@ function GroupCard({ group, onOpenSettings, onOpenOnList, onGroupCmd, onOpenAdva
         <CircleBtn onClick={() => onGroupCmd(id, "RESET")}>↺</CircleBtn>
         <CircleBtn onClick={() => onGroupCmd(id, "SLV_IO_OFF")}>OFF</CircleBtn>
         <CircleBtn extraClass="moreBtn" onClick={()=>onOpenAdvanced(id)}>⋯</CircleBtn>
-      </div>
-    </div>
-  );
-}
-
-/* ====== Login plein écran ====== */
-function LoginScreen({ onLogin }){
-  return(
-    <div className="loginScreen">
-      <div className="loginCard">
-        <h1 className="loginTitle">HIZAYA SWITCH</h1>
-        <p className="loginSub">Connecte-toi pour accéder au tableau de bord</p>
-        <button className="subtleBtn" onClick={onLogin}>Connexion Google</button>
       </div>
     </div>
   );
@@ -331,11 +314,9 @@ export default function App(){
   const [masterSettingsOpen, setMasterSettingsOpen] = useState({ open:false, masterId:"" });
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
 
-  // Modales “avancées” (boutons)
   const [slaveAdvancedOpen, setSlaveAdvancedOpen] = useState({ open:false, masterId:"", mac:"", label:"" });
   const [groupAdvancedOpen, setGroupAdvancedOpen] = useState({ open:false, groupId:"" });
 
-  // Busy grace
   const [busyMasters, setBusyMasters] = useState({});
   function markBusy(masterId, ms = BUSY_GRACE_MS){
     setBusyMasters(o => ({ ...o, [masterId]: Date.now() + ms }));
@@ -348,7 +329,6 @@ export default function App(){
 
   const chDevices=useRef(null); const chNodes=useRef(null); const chCmds=useRef(null); const chGroups=useRef(null);
 
-  // Debounce timers
   const timers = useRef({ dev:null, ng:null });
   const scheduleDevicesRefetch = () => {
     if (timers.current.dev) clearTimeout(timers.current.dev);
@@ -410,7 +390,7 @@ export default function App(){
     realtimeAttached=true;
   }
 
-  // ---------- PROFIL (account_name) ----------
+  // ---------- PROFIL ----------
   async function loadProfile(){
     try{
       const { data: s } = await sb.auth.getSession();
@@ -449,83 +429,83 @@ export default function App(){
     }
   }
 
-useEffect(()=>{
-  let mounted = true;
+  // ---------- INIT / AUTH ----------
+  useEffect(()=>{
+    let mounted = true;
 
-  // iOS/Safari BFCache: si la page revient du cache d’historique, on reload.
-  const onPageShow = (e) => { if (e.persisted) window.location.reload(); };
-  window.addEventListener('pageshow', onPageShow);
+    // iOS/Safari BFCache: si la page revient du cache d’historique, on reload.
+    const onPageShow = (e) => { if (e.persisted) window.location.reload(); };
+    window.addEventListener('pageshow', onPageShow);
 
-  // Watchdog: si quelque chose pend, on force l’UI à sortir de "Chargement…"
-  const watchdog = setTimeout(() => {
-    if (mounted) {
-      setAuthReady(true);
-      addLog("[init] watchdog fired → authReady=TRUE (force)");
-    }
-  }, 5000);
-
-  async function init(){
-    try {
-      // strip des params OAuth protégé
-      try { stripOAuthParams(); } 
-      catch (e) { addLog("[init] stripOAuthParams err: "+(e?.message||e)); }
-
-      const { data } = await sb.auth.getSession();
-      const sess = data?.session;
-
+    // Abonnement auth : on attend INITIAL_SESSION comme barrière
+    const { data: sub } = sb.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
 
-      if (sess?.user) {
-        setUser(sess.user);
+      try {
+        if (event === "INITIAL_SESSION") {
+          const u = session?.user ?? null;
+          setUser(u);
+
+          if (u) {
+            await loadProfile();
+            await fullReload();     // ← premières requêtes, JWT présent
+            attachRealtime();
+          } else {
+            cleanupRealtime();
+          }
+          setAuthReady(true);       // ← prêt seulement après restauration
+        }
+
+        else if (event === "SIGNED_IN") {
+          try { stripOAuthParams(); } catch(e){ addLog("[auth] strip err: "+(e?.message||e)); }
+          setUser(session?.user ?? null);
+          await loadProfile();
+          await fullReload();
+          attachRealtime();
+          setAuthReady(true);
+        }
+
+        else if (event === "SIGNED_OUT") {
+          setUser(null);
+          setDevices([]); setNodesByMaster({}); setGroupsData([]); setSlavePhases({});
+          cleanupRealtime();
+          setAuthReady(true);       // prêt à afficher le login
+        }
+
+        else if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
+          setUser(session?.user ?? null);
+          await loadProfile();
+        }
+      } catch (e) {
+        addLog("[auth] onAuthStateChange err: "+(e?.message||e));
+        setAuthReady(true);
+      }
+    });
+
+    // Fallback robuste (au cas où INITIAL_SESSION ne viendrait pas)
+    const fallback = setTimeout(async () => {
+      if (!mounted) return;
+      const { data } = await sb.auth.getSession();
+      const u = data?.session?.user ?? null;
+      setUser(u);
+      if (u) {
         await loadProfile();
         await fullReload();
         attachRealtime();
       } else {
-        setUser(null);
-      }
-    } catch (e) {
-      addLog("[init] getSession err: "+(e?.message||e));
-    } finally {
-      if (mounted) setAuthReady(true);  // <- garantit la sortie de "Chargement…"
-      clearTimeout(watchdog);
-    }
-  }
-
-  // Abonnement auth, protégé
-  const { data: sub } = sb.auth.onAuthStateChange(async (event, session)=>{
-    try{
-      if(event==="SIGNED_IN"){
-        try { stripOAuthParams(); } catch(e){ addLog("[auth] strip err: "+(e?.message||e)); }
-        setUser(session?.user||null);
-        await loadProfile();
-        await fullReload();
-        attachRealtime();
-      } else if(event==="SIGNED_OUT"){
-        setUser(null);
-        setDevices([]); setNodesByMaster({}); setGroupsData([]); setSlavePhases({});
         cleanupRealtime();
-      } else if(event==="TOKEN_REFRESHED"||event==="USER_UPDATED"){
-        setUser(session?.user||null);
-        await loadProfile();
       }
-    } catch(e){
-      addLog("[auth] onAuthStateChange err: "+(e?.message||e));
-    } finally {
       setAuthReady(true);
-    }
-  });
+    }, 6000);
 
-  init();
-
-  return ()=>{
-    mounted=false;
-    sub?.subscription?.unsubscribe();
-    cleanupRealtime();
-    window.removeEventListener('pageshow', onPageShow);
-    clearTimeout(watchdog);
-  };
-// eslint-disable-next-line react-hooks/exhaustive-deps
-},[]);
+    return ()=>{
+      mounted=false;
+      sub?.subscription?.unsubscribe();
+      cleanupRealtime();
+      window.removeEventListener('pageshow', onPageShow);
+      clearTimeout(fallback);
+    };
+  },[]);
 
   async function refetchDevicesOnly(){
     const { data: devs, error } = await sb.from("devices")
@@ -578,6 +558,8 @@ useEffect(()=>{
   }
 
   async function fullReload(){
+    const { data } = await sb.auth.getSession();
+    if (!data?.session?.user) { addLog("[fullReload] no session → skip"); return; }
     await Promise.all([refetchDevicesOnly(), refetchNodesAndGroups()]);
   }
 
@@ -688,7 +670,6 @@ useEffect(()=>{
   function openMasterSettingsModal(masterId){ setMasterSettingsOpen({ open:true, masterId }); }
   function closeMasterSettingsModal(){ setMasterSettingsOpen({ open:false, masterId:"" }); }
 
-  // Ouvrir les modales avancées (boutons)
   function openSlaveAdvanced(masterId, mac, label){
     setSlaveAdvancedOpen({ open:true, masterId, mac, label });
   }
@@ -696,13 +677,12 @@ useEffect(()=>{
   function openGroupAdvanced(groupId){ setGroupAdvancedOpen({ open:true, groupId }); }
   function closeGroupAdvanced(){ setGroupAdvancedOpen({ open:false, groupId:"" }); }
 
-  // Group members initial check
   useEffect(()=>{
     if(!groupMembersOpen.open) return;
     const g=groupsData.find((gg)=>gg.id===groupMembersOpen.groupId); if(!g) return;
     const initial={}; for(const m of g.members||[]) initial[m.mac]=true;
     setEditMembersChecked(initial);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[groupMembersOpen.open]);
 
   const toggleCheckMac=(mac)=>setEditMembersChecked((o)=>({...o,[mac]:!o[mac]}));
@@ -724,7 +704,6 @@ useEffect(()=>{
     addLog(`Membres groupe ${gid} mis à jour.`); closeGroupMembersModal(); await refetchNodesAndGroups();
   }
 
-  // Selectors
   const currentSlaveInfo = useMemo(()=>{
     if(!slaveInfoOpen.open) return null;
     const { masterId,mac }=slaveInfoOpen; const list=nodesByMaster[masterId]||[];
@@ -785,10 +764,7 @@ useEffect(()=>{
 
       <div className="pageBg">
         <div className="pageContent">
-          {/* Nom de compte */}
-          <div className="accountTitleBig" style={{fontSize:"2rem", fontWeight:600, margin:"0 0 1rem 0"}}>
-            {displayAccount}
-          </div>
+          <div className="accountTitleBig" style={{fontSize:"2rem", fontWeight:600, margin:"0 0 1rem 0"}}>{displayAccount}</div>
 
           {/* Groupes */}
           <div className="groupsSection">
