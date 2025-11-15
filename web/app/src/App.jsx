@@ -701,10 +701,11 @@ export default function App(){
   function handleLogout(){ sb.auth.signOut(); }
   function handleLogin(){
     try { stripOAuthParams(); } catch {}
-    const returnTo = `${window.location.origin}/hizaya-pwa/`;
+    const base = import.meta.env.BASE_URL || "/";
+    const redirectUrl = new URL(base, window.location.origin).toString();
     sb.auth.signInWithOAuth({
       provider:"google",
-      options:{ redirectTo:returnTo, queryParams:{ prompt:"select_account" } }
+      options:{ redirectTo:redirectUrl, queryParams:{ prompt:"select_account" } }
     });
   }
 
