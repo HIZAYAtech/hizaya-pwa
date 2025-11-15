@@ -320,6 +320,7 @@ function LoginScreen({ onLogin }) {
    APP
 ========================================================= */
 let realtimeAttached = false;
+let pkceExchangeHandled = false;
 
 export default function App(){
   const [authReady,setAuthReady]=useState(false);
@@ -339,7 +340,6 @@ export default function App(){
   useEffect(()=>{ try{ localStorage.setItem('journalOpen', journalOpen ? '1':'0'); } catch{} }, [journalOpen]);
 
   const logRef=useRef(null);
-  const pkceHandledRef = useRef(false);
   const addLog=(t)=>setLogs((old)=>[...old.slice(-199), new Date().toLocaleTimeString()+"  "+t]);
 
   const [slaveInfoOpen,setSlaveInfoOpen]=useState({open:false,masterId:"",mac:""});
@@ -476,14 +476,20 @@ export default function App(){
       window.addEventListener('pageshow', onPageShow);
 
       try {
-        // 1) Si on revient du provider OAuth, échanger le code PKCE une seule fois (StrictMode friendly)
+        // 1) Si on revient du provider OAuth, échanger le code PKCE une seule fois même en StrictMode
         const url = new URL(window.location.href);
         const hasPKCE = url.searchParams.get("code") && url.searchParams.get("state");
         const hasHashToken = url.hash.includes("access_token=");
-        if (!pkceHandledRef.current && (hasPKCE || hasHashToken)) {
-          pkceHandledRef.current = true;
-          await sb.auth.exchangeCodeForSession();
-          try { stripOAuthParams(); } catch {}
+        if (!pkceExchangeHandled && (hasPKCE || hasHashToken)) {
+          pkceExchangeHandled = true;
+          try {
+            await sb.auth.exchangeCodeForSession();
+            try { stripOAuthParams(); } catch {}
+            addLog("[auth] exchange OK");
+          } catch (err) {
+            pkceExchangeHandled = false; // autorise une nouvelle tentative après erreur
+            throw err;
+          }
         }
       } catch (e) {
         addLog("[auth] exchange err: "+(e?.message||e));
