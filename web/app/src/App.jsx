@@ -475,16 +475,15 @@ export default function App(){
       window.addEventListener('pageshow', onPageShow);
 
       try {
-        // 1) Si on revient du provider OAuth, échanger immédiatement le code
+        // 1) Si on revient du provider OAuth, nettoyer l’URL une fois l’échange auto Supabase fait
         const url = new URL(window.location.href);
-        const hasPKCE = url.searchParams.get("code") && url.searchParams.get("state");
+        const hasPKCE = url.searchParams.has("code");
         const hasHashToken = url.hash.includes("access_token=");
         if (hasPKCE || hasHashToken) {
-          await sb.auth.exchangeCodeForSession();
           try { stripOAuthParams(); } catch {}
         }
       } catch (e) {
-        addLog("[auth] parse/exchange err: "+(e?.message||e));
+        addLog("[auth] url cleanup err: "+(e?.message||e));
       }
 
       // 2) Lire la session tout de suite
@@ -543,7 +542,12 @@ export default function App(){
     const { data: devs, error } = await sb.from("devices")
       .select("id,name,master_mac,last_seen,online,created_at")
       .order("created_at",{ascending:false});
-    if(!error && devs) setDevices(devs);
+    if(error){
+      console.error("[devices] error", error);
+      addLog(`[devices] ${error.message||error}`);
+      return;
+    }
+    setDevices(devs||[]);
   }
 
   // refetch combiné
