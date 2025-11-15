@@ -537,7 +537,8 @@ export default function App(){
   }, [authReady]);
 
   async function refetchDevicesOnly(){
-    const { data: devsRaw, error } = await sb.from("devices").select("*");
+    const { data: devsRaw, error } = await sb.from("devices")
+      .select("id,name,master_mac,last_seen,online,created_at,owner_uid");
     if(error){
       console.error("[devices] error", error);
       addLog(`[devices] ${error.message||error}`);
