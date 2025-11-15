@@ -542,15 +542,22 @@ export default function App(){
   }, [authReady]);
 
   async function refetchDevicesOnly(){
-    const { data: devs, error } = await sb.from("devices")
-      .select("id,name,master_mac,last_seen,online,created_at")
-      .order("created_at",{ascending:false});
+    const { data: devsRaw, error } = await sb.from("devices").select("*");
     if(error){
       console.error("[devices] error", error);
       addLog(`[devices] ${error.message||error}`);
       return;
     }
-    setDevices(devs||[]);
+    const devs=[...(devsRaw||[])].sort((a,b)=>{
+      const tsA=a?.created_at?new Date(a.created_at).getTime():0;
+      const tsB=b?.created_at?new Date(b.created_at).getTime():0;
+      return tsB-tsA;
+    });
+    addLog(`[devices] ${devs.length} élément(s) visibles`);
+    if(!devs.length){
+      addLog("[devices] 0 ligne — vérifier RLS / owner_id côté Supabase");
+    }
+    setDevices(devs);
   }
 
   // refetch combiné
