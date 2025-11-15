@@ -339,6 +339,7 @@ export default function App(){
   useEffect(()=>{ try{ localStorage.setItem('journalOpen', journalOpen ? '1':'0'); } catch{} }, [journalOpen]);
 
   const logRef=useRef(null);
+  const pkceHandledRef = useRef(false);
   const addLog=(t)=>setLogs((old)=>[...old.slice(-199), new Date().toLocaleTimeString()+"  "+t]);
 
   const [slaveInfoOpen,setSlaveInfoOpen]=useState({open:false,masterId:"",mac:""});
@@ -475,15 +476,17 @@ export default function App(){
       window.addEventListener('pageshow', onPageShow);
 
       try {
-        // 1) Si on revient du provider OAuth, nettoyer l’URL une fois l’échange auto Supabase fait
+        // 1) Si on revient du provider OAuth, échanger le code PKCE une seule fois (StrictMode friendly)
         const url = new URL(window.location.href);
-        const hasPKCE = url.searchParams.has("code");
+        const hasPKCE = url.searchParams.get("code") && url.searchParams.get("state");
         const hasHashToken = url.hash.includes("access_token=");
-        if (hasPKCE || hasHashToken) {
+        if (!pkceHandledRef.current && (hasPKCE || hasHashToken)) {
+          pkceHandledRef.current = true;
+          await sb.auth.exchangeCodeForSession();
           try { stripOAuthParams(); } catch {}
         }
       } catch (e) {
-        addLog("[auth] url cleanup err: "+(e?.message||e));
+        addLog("[auth] exchange err: "+(e?.message||e));
       }
 
       // 2) Lire la session tout de suite
