@@ -701,8 +701,7 @@ export default function App(){
   function handleLogout(){ sb.auth.signOut(); }
   function handleLogin(){
     try { stripOAuthParams(); } catch {}
-    const base = import.meta.env.BASE_URL || "/";
-    const redirectUrl = new URL(base, window.location.origin).toString();
+    const redirectUrl = `${window.location.origin}${window.location.pathname}`;
     sb.auth.signInWithOAuth({
       provider:"google",
       options:{ redirectTo:redirectUrl, queryParams:{ prompt:"select_account" } }
