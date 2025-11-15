@@ -3,13 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
-export const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false, // on gère l'échange PKCE manuellement dans App.jsx
-  },
-});
+export const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Utilitaire : nettoyer l’URL après OAuth (évite les 404 et les paramètres moches)
 export function stripOAuthParams() {
