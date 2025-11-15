@@ -320,7 +320,6 @@ function LoginScreen({ onLogin }) {
    APP
 ========================================================= */
 let realtimeAttached = false;
-let pkceExchangeHandled = false;
 
 export default function App(){
   const [authReady,setAuthReady]=useState(false);
@@ -476,27 +475,12 @@ export default function App(){
       window.addEventListener('pageshow', onPageShow);
 
       try {
-        // 1) Si on revient du provider OAuth, échanger le code PKCE une seule fois même en StrictMode
         const url = new URL(window.location.href);
-        const pkceCode = url.searchParams.get("code");
-        const hasHashToken = url.hash.includes("access_token=");
-        if (!pkceExchangeHandled && (pkceCode || hasHashToken)) {
-          pkceExchangeHandled = true;
-          try {
-            if (pkceCode) {
-              await sb.auth.exchangeCodeForSession(pkceCode);
-            } else if (hasHashToken) {
-              await sb.auth.exchangeCodeForSession();
-            }
-            try { stripOAuthParams(); } catch {}
-            addLog("[auth] exchange OK");
-          } catch (err) {
-            pkceExchangeHandled = false; // autorise une nouvelle tentative après erreur
-            throw err;
-          }
+        if (url.searchParams.get("code") || url.hash.includes("access_token=")) {
+          addLog("[auth] retour OAuth détecté (Supabase gère l’échange)");
         }
       } catch (e) {
-        addLog("[auth] exchange err: "+(e?.message||e));
+        addLog("[auth] url parse err: "+(e?.message||e));
       }
 
       // 2) Lire la session tout de suite
@@ -505,6 +489,7 @@ export default function App(){
 
       setUser(session?.user ?? null);
       if (session?.user) {
+        try { stripOAuthParams(); } catch {}
         await loadProfile();
         await fullReload();     // ← premières requêtes, JWT présent
         attachRealtime();
