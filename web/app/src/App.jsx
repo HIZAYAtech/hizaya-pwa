@@ -537,11 +537,21 @@ export default function App(){
   }, [authReady]);
 
   async function refetchDevicesOnly(){
+    const { data: sessionRes } = await sb.auth.getSession();
+    const userId = sessionRes?.session?.user?.id;
+    if(!userId){
+      addLog("[devices] pas d'utilisateur → liste vide");
+      setDevices([]);
+      return;
+    }
     const { data: devsRaw, error } = await sb.from("devices")
-      .select("id,name,master_mac,last_seen,online,created_at,owner_uid");
+      .select("id,name,master_mac,last_seen,online,created_at")
+      .eq("owner_uid", userId)
+      .order("created_at",{ascending:false});
     if(error){
       console.error("[devices] error", error);
       addLog(`[devices] ${error.message||error}`);
+      setDevices([]);
       return;
     }
     const devs=[...(devsRaw||[])].sort((a,b)=>{
@@ -551,7 +561,7 @@ export default function App(){
     });
     addLog(`[devices] ${devs.length} élément(s) visibles`);
     if(!devs.length){
-      addLog("[devices] 0 ligne — vérifier RLS / owner_id côté Supabase");
+      addLog("[devices] 0 ligne — vérifier owner_uid / RLS côté Supabase");
     }
     setDevices(devs);
   }
