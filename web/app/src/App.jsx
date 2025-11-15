@@ -478,12 +478,16 @@ export default function App(){
       try {
         // 1) Si on revient du provider OAuth, échanger le code PKCE une seule fois même en StrictMode
         const url = new URL(window.location.href);
-        const hasPKCE = url.searchParams.get("code") && url.searchParams.get("state");
+        const pkceCode = url.searchParams.get("code");
         const hasHashToken = url.hash.includes("access_token=");
-        if (!pkceExchangeHandled && (hasPKCE || hasHashToken)) {
+        if (!pkceExchangeHandled && (pkceCode || hasHashToken)) {
           pkceExchangeHandled = true;
           try {
-            await sb.auth.exchangeCodeForSession();
+            if (pkceCode) {
+              await sb.auth.exchangeCodeForSession(pkceCode);
+            } else if (hasHashToken) {
+              await sb.auth.exchangeCodeForSession();
+            }
             try { stripOAuthParams(); } catch {}
             addLog("[auth] exchange OK");
           } catch (err) {
