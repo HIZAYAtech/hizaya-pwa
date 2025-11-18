@@ -536,6 +536,22 @@ export default function App(){
     return () => clearTimeout(t);
   }, [authReady]);
 
+  // Rafraîchir automatiquement quand l’onglet redevient actif
+  useEffect(() => {
+    if (!user) return;
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === "visible") {
+        fullReload();
+      }
+    };
+    window.addEventListener("focus", handleVisibilityOrFocus);
+    document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+    return () => {
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+    };
+  }, [user]);
+
   async function refetchDevicesOnly(){
     const { data: sessionRes } = await sb.auth.getSession();
     const userId = sessionRes?.session?.user?.id;
