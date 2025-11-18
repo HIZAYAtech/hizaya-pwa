@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { sb, stripOAuthParams } from "./supabaseClient";
 
-/* ====== Const ======--- */
+/* ====== Const ======---- */
 const LIVE_TTL_MS = 25000;          // tolérance pour éviter faux offline pendant actions
 const DEFAULT_IO_PIN = 26;
 const REFETCH_DEBOUNCE_MS = 1200;
