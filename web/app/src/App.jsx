@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { sb, stripOAuthParams } from "./supabaseClient";
 
-/* ====== Const ======---- */
+/* ====== Const ======--- */
 const LIVE_TTL_MS = 25000;          // tolérance pour éviter faux offline pendant actions
 const DEFAULT_IO_PIN = 26;
 const REFETCH_DEBOUNCE_MS = 1200;
@@ -339,6 +339,7 @@ export default function App(){
   useEffect(()=>{ try{ localStorage.setItem('journalOpen', journalOpen ? '1':'0'); } catch{} }, [journalOpen]);
 
   const logRef=useRef(null);
+  const wasHiddenRef = useRef(false);
   const addLog=(t)=>setLogs((old)=>[...old.slice(-199), new Date().toLocaleTimeString()+"  "+t]);
 
   const [slaveInfoOpen,setSlaveInfoOpen]=useState({open:false,masterId:"",mac:""});
@@ -535,6 +536,20 @@ export default function App(){
     const t = setTimeout(() => setAuthReady(true), 3000);
     return () => clearTimeout(t);
   }, [authReady]);
+
+  // Reload complet si l’onglet revient après une mise en veille prolongée
+  useEffect(() => {
+    const handleFrozenTab = () => {
+      if (document.visibilityState === "hidden") {
+        wasHiddenRef.current = true;
+      } else if (document.visibilityState === "visible" && wasHiddenRef.current) {
+        wasHiddenRef.current = false;
+        window.location.reload();
+      }
+    };
+    document.addEventListener("visibilitychange", handleFrozenTab);
+    return () => document.removeEventListener("visibilitychange", handleFrozenTab);
+  }, []);
 
   // Rafraîchir automatiquement quand l’onglet redevient actif
   useEffect(() => {
