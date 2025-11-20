@@ -6,10 +6,12 @@ const LIVE_TTL_MS = 25000;          // tolérance pour éviter faux offline pend
 const DEFAULT_IO_PIN = 26;
 const REFETCH_DEBOUNCE_MS = 1200;
 const BUSY_GRACE_MS = 10000;        // fenêtre "occupé" après action pour l'UI
+const SLAVE_TTL_MS = 60000;         // tolérance d'affichage état slave
 
 /* ====== Helpers ====== */
 function fmtTS(s){ if(!s) return "—"; const d = new Date(s); return d.toLocaleString(); }
 function isLiveDevice(dev){ if(!dev?.last_seen) return false; return Date.now()-new Date(dev.last_seen).getTime() < LIVE_TTL_MS; }
+function isSlaveLive(lastSeen){ if(!lastSeen) return false; return Date.now()-new Date(lastSeen).getTime() < SLAVE_TTL_MS; }
 
 /* ====== UI bits ====== */
 function SubtleButton({children,onClick,disabled,style,className,size="md"}){
@@ -211,8 +213,9 @@ function AccountSettingsModal({ open, onClose, currentName, onSave }) {
 }
 
 /* --- Carte Slave --- */
-function SlaveCard({masterId,mac,friendlyName,pcOn,onInfoClick,onIO,onReset,onMore,actionBarPhase}){
-  const statusLabel = pcOn ? "Ordinateur allumé" : "Ordinateur éteint";
+function SlaveCard({masterId,mac,friendlyName,pcOn,lastSeen,onInfoClick,onIO,onReset,onMore,actionBarPhase}){
+  const live = isSlaveLive(lastSeen);
+  const statusLabel = live ? (pcOn ? "Ordinateur allumé" : "Ordinateur éteint") : "État inconnu (offline)";
   return(
     <div className="slaveCard">
       <div className="infoChip" onClick={onInfoClick} title="Infos / renommer">i</div>
@@ -259,6 +262,7 @@ function MasterCard({
               mac={sl.mac}
               friendlyName={sl.friendly_name}
               pcOn={!!sl.pc_on}
+              lastSeen={sl.last_seen}
               actionBarPhase={slavePhases[sl.mac]||"idle"}
               onInfoClick={()=>openSlaveInfoFor(device.id,sl.mac)}
               onIO={()=>onSlaveIO(device.id,sl.mac)}
@@ -601,13 +605,13 @@ export default function App(){
   // refetch combiné
   async function refetchNodesAndGroups(){
     const { data: rows, error: nErr } = await sb.from("nodes")
-      .select("master_id,slave_mac,friendly_name,pc_on");
+      .select("master_id,slave_mac,friendly_name,pc_on,last_seen");
     if(nErr){ addLog("Err nodes: "+nErr.message); return; }
 
     const map={};
     for(const r of rows||[]){
       if(!map[r.master_id]) map[r.master_id]=[];
-      map[r.master_id].push({ mac:r.slave_mac, friendly_name:r.friendly_name, pc_on:r.pc_on });
+      map[r.master_id].push({ mac:r.slave_mac, friendly_name:r.friendly_name, pc_on:r.pc_on, last_seen:r.last_seen });
     }
     setNodesByMaster(map);
 
