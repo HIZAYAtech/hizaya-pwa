@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import { sb, stripOAuthParams } from "./supabaseClient";
 
 /* ====== Const ======--- */
-const LIVE_TTL_MS = 25000;          // tolérance pour éviter faux offline pendant actions
+const LIVE_TTL_MS = 25000;          // tolérance pour éviter faux offline pendant actions (test mod)
 const DEFAULT_IO_PIN = 26;
 const REFETCH_DEBOUNCE_MS = 1200;
 const BUSY_GRACE_MS = 10000;        // fenêtre "occupé" après action pour l'UI
@@ -213,13 +213,23 @@ function AccountSettingsModal({ open, onClose, currentName, onSave }) {
 }
 
 /* --- Carte Slave --- */
-function SlaveCard({masterId,mac,friendlyName,pcOn,lastSeen,onInfoClick,onIO,onReset,onMore,actionBarPhase}){
+function SlaveCard({masterId,mac,friendlyName,pcOn,lastSeen,isFavorite,onSetFavorite,onInfoClick,onIO,onReset,onMore,actionBarPhase}){
   const live = isSlaveLive(lastSeen);
   const statusLabel = live ? (pcOn ? "Ordinateur allumé" : "Ordinateur éteint") : "État inconnu (offline)";
   return(
     <div className="slaveCard">
-      <div className="infoChip" onClick={onInfoClick} title="Infos / renommer">i</div>
-      <div className="slaveNameMain">{friendlyName||mac}</div>
+      <div className="slaveHeaderRow">
+        <div className="slaveHeaderLeft">
+          <div className="infoChip" onClick={onInfoClick} title="Infos / renommer">i</div>
+          <div className="slaveNameMain">
+            {friendlyName||mac}
+            {isFavorite && <span className="favStar">★</span>}
+          </div>
+        </div>
+        <button className="favBtn" onClick={onSetFavorite}>
+          {isFavorite ? "Favori" : "Définir favori"}
+        </button>
+      </div>
       <div className="slaveSub">{statusLabel}</div>
       <ActionBar phase={actionBarPhase}/>
       <div className="slaveBtnsRow">
@@ -236,6 +246,7 @@ function MasterCard({
   device,slaves,
   onOpenSettings,
   openSlaveInfoFor,onSlaveIO,onSlaveReset,onSlaveMore,
+  onSetSlaveFavorite,
   slavePhases,
   isBusy
 }){
@@ -262,11 +273,13 @@ function MasterCard({
               mac={sl.mac}
               friendlyName={sl.friendly_name}
               pcOn={!!sl.pc_on}
+              isFavorite={!!sl.is_favorite}
               lastSeen={sl.last_seen}
               actionBarPhase={slavePhases[sl.mac]||"idle"}
               onInfoClick={()=>openSlaveInfoFor(device.id,sl.mac)}
               onIO={()=>onSlaveIO(device.id,sl.mac)}
               onReset={()=>onSlaveReset(device.id,sl.mac)}
+              onSetFavorite={()=>onSetSlaveFavorite?.(device.id,sl.mac,sl.friendly_name||sl.mac)}
               onMore={()=>{
                 const label=(slaves||[]).find(s=>s.mac===sl.mac)?.friendly_name || sl.mac;
                 onSlaveMore(device.id, sl.mac, label);
@@ -605,13 +618,13 @@ export default function App(){
   // refetch combiné
   async function refetchNodesAndGroups(){
     const { data: rows, error: nErr } = await sb.from("nodes")
-      .select("master_id,slave_mac,friendly_name,pc_on,last_seen");
+      .select("master_id,slave_mac,friendly_name,pc_on,last_seen,is_favorite");
     if(nErr){ addLog("Err nodes: "+nErr.message); return; }
 
     const map={};
     for(const r of rows||[]){
       if(!map[r.master_id]) map[r.master_id]=[];
-      map[r.master_id].push({ mac:r.slave_mac, friendly_name:r.friendly_name, pc_on:r.pc_on, last_seen:r.last_seen });
+      map[r.master_id].push({ mac:r.slave_mac, friendly_name:r.friendly_name, pc_on:r.pc_on, last_seen:r.last_seen, is_favorite:r.is_favorite });
     }
     setNodesByMaster(map);
 
@@ -673,6 +686,16 @@ export default function App(){
     const { error } = await sb.from("nodes").update({friendly_name:newName}).eq("master_id",masterId).eq("slave_mac",mac);
     if(error) window.alert("Erreur rename slave: "+error.message);
     else { addLog(`Slave ${mac} renommé en ${newName}`); await refetchNodesAndGroups(); }
+  }
+  async function setFavoriteSlave(masterId, slaveMac, friendlyLabel){
+    try{
+      const { error } = await sb.rpc("set_favorite_slave",{ p_master_id: masterId, p_slave_mac: slaveMac });
+      if(error){ addLog(`[fav] erreur: ${error.message}`); return; }
+      addLog(`[fav] ${(friendlyLabel||slaveMac)} devient favori`);
+      await refetchNodesAndGroups();
+    }catch(e){
+      addLog(`[fav] erreur: ${e?.message||e}`);
+    }
   }
   async function sendCmd(masterId,targetMac,action,payload={}){
     markBusy(masterId);
@@ -812,7 +835,7 @@ export default function App(){
   },[groupOnListOpen,groupsData]);
 
   const allSlavesFlat = useMemo(()=>{
-    const arr=[]; for(const mid of Object.keys(nodesByMaster)) for(const sl of nodesByMaster[mid]) arr.push({mac:sl.mac,master_id:mid,friendly_name:sl.friendly_name,pc_on:sl.pc_on});
+    const arr=[]; for(const mid of Object.keys(nodesByMaster)) for(const sl of nodesByMaster[mid]) arr.push({mac:sl.mac,master_id:mid,friendly_name:sl.friendly_name,pc_on:sl.pc_on,is_favorite:sl.is_favorite});
     return arr;
   },[nodesByMaster]);
 
@@ -917,6 +940,7 @@ export default function App(){
                     const lbl=(nodesByMaster[mid]||[]).find(s=>s.mac===mac)?.friendly_name || mac;
                     openSlaveAdvanced(mid,mac,label||lbl);
                   }}
+                  onSetSlaveFavorite={setFavoriteSlave}
                   slavePhases={slavePhases}
                   isBusy={!!busyMasters[dev.id]}
                 />
