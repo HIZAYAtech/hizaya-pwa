@@ -245,6 +245,7 @@ function SlaveCard({masterId,mac,friendlyName,pcOn,lastSeen,isFavorite,onSetFavo
 function MasterCard({
   device,slaves,
   onOpenSettings,
+  onPairSlave,
   openSlaveInfoFor,onSlaveIO,onSlaveReset,onSlaveMore,
   onSetSlaveFavorite,
   slavePhases,
@@ -262,6 +263,7 @@ function MasterCard({
           </div>
         </div>
         <div className="masterActionsRow">
+          <SubtleButton onClick={()=>onPairSlave?.(device.id)}>+ Pairer un slave</SubtleButton>
           <SettingsButton onClick={()=>onOpenSettings(device.id)} />
         </div>
       </div>
@@ -697,6 +699,10 @@ export default function App(){
       addLog(`[fav] erreur: ${e?.message||e}`);
     }
   }
+  async function sendPairCmd(masterId){
+    if(!masterId) return;
+    await sendCmd(masterId,null,"MASTER_PAIR",{});
+  }
   async function sendCmd(masterId,targetMac,action,payload={}){
     markBusy(masterId);
     if(targetMac) setSlavePhases((o)=>({...o,[targetMac]:"queue"}));
@@ -933,6 +939,7 @@ export default function App(){
                   device={dev}
                   slaves={nodesByMaster[dev.id]||[]}
                   onOpenSettings={openMasterSettingsModal}
+                  onPairSlave={sendPairCmd}
                   openSlaveInfoFor={openSlaveInfo}
                   onSlaveIO={(mid,mac)=>sendCmd(mid,mac,"SLV_IO",{pin:DEFAULT_IO_PIN,mode:"OUT",value:1})}
                   onSlaveReset={(mid,mac)=>sendCmd(mid,mac,"SLV_RESET",{})}
