@@ -70,7 +70,7 @@ function ModalShell({open,onClose,children,title}){ if(!open) return null; retur
 ); }
 
 /* --- Modale infos slave --- */
-function SlaveInfoModal({open,onClose,slaveMac,masterId,currentName,onRename,pcOn}){
+function SlaveInfoModal({open,onClose,slaveMac,masterId,currentName,onRename,pcOn,onDetach}){
   const [nameDraft,setNameDraft]=useState(currentName||"");
   useEffect(()=>{ setNameDraft(currentName||""); },[currentName,slaveMac,open]);
   return(
@@ -85,6 +85,24 @@ function SlaveInfoModal({open,onClose,slaveMac,masterId,currentName,onRename,pcO
         <div className="modalInfoRow"><span className="modalInfoKey">Master :</span><span className="modalInfoVal">{masterId||"—"}</span></div>
         <div className="modalInfoRow"><span className="modalInfoKey">PC :</span><span className="modalInfoVal">{pcOn?"allumé":"éteint"}</span></div>
       </div>
+      {onDetach && (
+        <div className="modalSection" style={{ marginTop:16, borderTop:"1px solid rgba(255,255,255,0.1)", paddingTop:12 }}>
+          <div className="modalLabel" style={{ color:"#f88" }}>Détacher ce slave</div>
+          <p className="smallText">Le slave sera retiré de ce master et des groupes. Il faudra le pairer à nouveau pour le réutiliser.</p>
+          <button
+            className="subtleBtn"
+            style={{ background:"rgba(255,0,0,0.1)", borderColor:"rgba(255,0,0,0.4)", marginTop:8 }}
+            onClick={()=>{
+              if(window.confirm("Supprimer/détacher ce slave de ce master ?")){
+                onDetach();
+                onClose();
+              }
+            }}
+          >
+            Supprimer ce slave
+          </button>
+        </div>
+      )}
     </ModalShell>
   );
 }
@@ -699,6 +717,23 @@ export default function App(){
       addLog(`[fav] erreur: ${e?.message||e}`);
     }
   }
+  async function detachSlave(masterId, slaveMac){
+    if(!masterId || !slaveMac) return;
+    try{
+      const { error } = await sb.rpc("detach_slave",{ p_master_id: masterId, p_slave_mac: slaveMac });
+      if(error){
+        addLog(`[slave] erreur détachement ${slaveMac}: ${error.message}`);
+        window.alert("Erreur lors du détachement du slave: "+error.message);
+        return;
+      }
+      addLog(`[slave] détaché: ${slaveMac}`);
+      await refetchNodesAndGroups();
+    }catch(e){
+      const msg=e?.message||e;
+      addLog(`[slave] erreur détachement ${slaveMac}: ${msg}`);
+      window.alert("Erreur lors du détachement du slave: "+msg);
+    }
+  }
   async function sendPairCmd(masterId){
     if(!masterId) return;
     await sendCmd(masterId,null,"MASTER_PAIR",{});
@@ -977,6 +1012,9 @@ export default function App(){
         currentName={currentSlaveInfo?.friendly_name || slaveInfoOpen.mac}
         pcOn={!!currentSlaveInfo?.pc_on}
         onRename={(newName)=>{ doRenameSlave(slaveInfoOpen.masterId,slaveInfoOpen.mac,newName); closeSlaveInfo(); }}
+        onDetach={()=>{
+          detachSlave(slaveInfoOpen.masterId, slaveInfoOpen.mac);
+        }}
       />
       <GroupOnListModal
         open={groupOnListOpen.open}
