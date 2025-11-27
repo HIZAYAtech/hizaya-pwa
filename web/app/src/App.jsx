@@ -277,12 +277,14 @@ function MasterCard({
   const activeNodes = useMemo(()=> (slaves||[]).filter(sl=>sl.status!=="pending"), [slaves]);
   const [pendingNames,setPendingNames]=useState({});
   const [pendingSlots,setPendingSlots]=useState({});
+  const nodeMac = (node)=>node?.slave_mac || node?.mac || "";
 
   useEffect(()=>{
     setPendingNames(prev=>{
       const next={};
       pendingNodes.forEach((node)=>{
-        next[node.mac]=(prev[node.mac] ?? node.friendly_name) || node.mac;
+        const key=nodeMac(node);
+        next[key]=(prev[key] ?? node.friendly_name) || key;
       });
       return next;
     });
@@ -295,9 +297,10 @@ function MasterCard({
       const result={};
       const taken=new Set(usedSlots);
       pendingNodes.forEach((node)=>{
+        const key=nodeMac(node);
         let desired = Number(node.slot);
         if(!Number.isFinite(desired)) desired = null;
-        if(!desired && prev[node.mac]) desired = prev[node.mac];
+        if(!desired && prev[key]) desired = prev[key];
         if(desired && taken.has(desired)){
           desired=null;
         }
@@ -305,7 +308,7 @@ function MasterCard({
           desired = slotOptions.find((s)=>!taken.has(s)) || slotOptions[0];
         }
         taken.add(desired);
-        result[node.mac]=desired;
+        result[key]=desired;
       });
       return result;
     });
@@ -360,28 +363,33 @@ function MasterCard({
               <span>Action</span>
             </div>
             {pendingNodes.map((node)=>(
-              <div key={node.mac} style={{display:"grid", gridTemplateColumns:"1.4fr 0.6fr 0.8fr 1.2fr 0.6fr 0.8fr", gap:8, alignItems:"center"}}>
-                <span style={{fontFamily:"monospace"}}>{node.mac}</span>
+              <div key={nodeMac(node)} style={{display:"grid", gridTemplateColumns:"1.4fr 0.6fr 0.8fr 1.2fr 0.6fr 0.8fr", gap:8, alignItems:"center"}}>
+                <span style={{fontFamily:"monospace"}}>{node.slave_mac || node.mac}</span>
                 <span>{node.rssi ?? "?"}</span>
                 <span>{fmtAgo(node.last_seen)}</span>
                 <input
                   style={{width:"100%", padding:"6px 8px", borderRadius:6, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(0,0,0,0.2)", color:"#fff"}}
-                  value={pendingNames[node.mac]||""}
-                  onChange={(e)=>updatePendingName(node.mac,e.target.value)}
+                  value={pendingNames[nodeMac(node)]||""}
+                  onChange={(e)=>updatePendingName(nodeMac(node),e.target.value)}
                   placeholder="Nom…"
                 />
                 <select
                   style={{width:"100%", padding:"6px 8px", borderRadius:6, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(0,0,0,0.2)", color:"#fff"}}
-                  value={pendingSlots[node.mac]||1}
-                  onChange={(e)=>updatePendingSlot(node.mac,e.target.value)}
+                  value={pendingSlots[nodeMac(node)]||1}
+                  onChange={(e)=>updatePendingSlot(nodeMac(node),e.target.value)}
                 >
                   {[1,2,3,4].map((slot)=>(
                     <option key={slot} value={slot}>{slot}</option>
                   ))}
                 </select>
                 <SubtleButton
-                  onClick={()=>onConfirmPending?.(device.id,node.mac,(pendingNames[node.mac]||"").trim(),pendingSlots[node.mac]||1)}
-                  disabled={!pendingNames[node.mac] || !pendingSlots[node.mac]}
+                  onClick={()=>onConfirmPending?.(
+                    device.id,
+                    node.slave_mac || node.mac,
+                    (pendingNames[nodeMac(node)]||"").trim(),
+                    pendingSlots[nodeMac(node)]||1
+                  )}
+                  disabled={!pendingNames[nodeMac(node)] || !pendingSlots[nodeMac(node)]}
                 >
                   Pairer
                 </SubtleButton>
@@ -760,6 +768,7 @@ export default function App(){
       if(!map[r.master_id]) map[r.master_id]=[];
       map[r.master_id].push({
         mac:r.slave_mac,
+        slave_mac:r.slave_mac,
         friendly_name:r.friendly_name,
         pc_on:r.pc_on,
         last_seen:r.last_seen,
