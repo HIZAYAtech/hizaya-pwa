@@ -263,14 +263,71 @@ function SlaveCard({masterId,mac,friendlyName,pcOn,lastSeen,isFavorite,onSetFavo
 function MasterCard({
   device,slaves,
   onOpenSettings,
-  onPairSlave,
+  onStartPairing,
   openSlaveInfoFor,onSlaveIO,onSlaveReset,onSlaveMore,
   onSetSlaveFavorite,
+  onConfirmPending,
   slavePhases,
-  isBusy
+  isBusy,
+  isPairing
 }){
   const live = isBusy ? true : isLiveDevice(device);
   const statusLabel = isBusy ? "OCCUPÉ" : (live ? "EN LIGNE" : "HORS LIGNE");
+  const pendingNodes = useMemo(()=> (slaves||[]).filter(sl=>sl.status==="pending"), [slaves]);
+  const activeNodes = useMemo(()=> (slaves||[]).filter(sl=>sl.status!=="pending"), [slaves]);
+  const [pendingNames,setPendingNames]=useState({});
+  const [pendingSlots,setPendingSlots]=useState({});
+
+  useEffect(()=>{
+    setPendingNames(prev=>{
+      const next={};
+      pendingNodes.forEach((node)=>{
+        next[node.mac]=(prev[node.mac] ?? node.friendly_name) || node.mac;
+      });
+      return next;
+    });
+  },[pendingNodes]);
+
+  useEffect(()=>{
+    setPendingSlots((prev)=>{
+      const usedSlots = new Set(activeNodes.map(n=>Number(n.slot)).filter((s)=>Number.isFinite(s)));
+      const slotOptions=[1,2,3,4];
+      const result={};
+      const taken=new Set(usedSlots);
+      pendingNodes.forEach((node)=>{
+        let desired = Number(node.slot);
+        if(!Number.isFinite(desired)) desired = null;
+        if(!desired && prev[node.mac]) desired = prev[node.mac];
+        if(desired && taken.has(desired)){
+          desired=null;
+        }
+        if(!desired){
+          desired = slotOptions.find((s)=>!taken.has(s)) || slotOptions[0];
+        }
+        taken.add(desired);
+        result[node.mac]=desired;
+      });
+      return result;
+    });
+  },[pendingNodes, activeNodes]);
+
+  const updatePendingName=(mac,val)=>setPendingNames((o)=>({...o,[mac]:val}));
+  const updatePendingSlot=(mac,val)=>setPendingSlots((o)=>({...o,[mac]:Number(val)||1}));
+
+  const fmtAgo=(ts)=>{
+    if(!ts) return "—";
+    const diff=Math.max(0,Date.now()-new Date(ts).getTime());
+    if(diff<1000) return "à l’instant";
+    const sec=Math.floor(diff/1000);
+    if(sec<60) return `${sec}s`;
+    const min=Math.floor(sec/60);
+    if(min<60) return `${min}min`;
+    const hr=Math.floor(min/60);
+    if(hr<24) return `${hr}h`;
+    const day=Math.floor(hr/24);
+    return `${day}j`;
+  };
+
   return(
     <section className="masterCard">
       <div className="masterTopRow">
@@ -280,14 +337,62 @@ function MasterCard({
             <span className={"onlineBadge "+(live?"onlineYes":"onlineNo")}>{statusLabel}</span>
           </div>
         </div>
-        <div className="masterActionsRow">
-          <SubtleButton onClick={()=>onPairSlave?.(device.id)}>+ Pairer un slave</SubtleButton>
+        <div className="masterActionsRow" style={{gap:8, flexWrap:"wrap"}}>
+          <SubtleButton onClick={()=>onStartPairing?.(device.id)}>Start pairing (30s)</SubtleButton>
           <SettingsButton onClick={()=>onOpenSettings(device.id)} />
         </div>
       </div>
+      {isPairing && (
+        <div className="smallText" style={{marginTop:8, padding:"8px 12px", borderRadius:8, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)"}}>
+          Pairing en cours… la fenêtre se fermera automatiquement dans quelques secondes.
+        </div>
+      )}
+      {!!pendingNodes.length && (
+        <div style={{marginTop:16}}>
+          <div className="sectionSub" style={{marginBottom:8}}>Slaves en attente</div>
+          <div style={{display:"grid", gap:8}}>
+            <div style={{display:"grid", gridTemplateColumns:"1.4fr 0.6fr 0.8fr 1.2fr 0.6fr 0.8fr", gap:8, fontSize:12, opacity:0.7}}>
+              <span>MAC</span>
+              <span>RSSI</span>
+              <span>Vu il y a</span>
+              <span>Nom</span>
+              <span>Slot</span>
+              <span>Action</span>
+            </div>
+            {pendingNodes.map((node)=>(
+              <div key={node.mac} style={{display:"grid", gridTemplateColumns:"1.4fr 0.6fr 0.8fr 1.2fr 0.6fr 0.8fr", gap:8, alignItems:"center"}}>
+                <span style={{fontFamily:"monospace"}}>{node.mac}</span>
+                <span>{node.rssi ?? "?"}</span>
+                <span>{fmtAgo(node.last_seen)}</span>
+                <input
+                  style={{width:"100%", padding:"6px 8px", borderRadius:6, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(0,0,0,0.2)", color:"#fff"}}
+                  value={pendingNames[node.mac]||""}
+                  onChange={(e)=>updatePendingName(node.mac,e.target.value)}
+                  placeholder="Nom…"
+                />
+                <select
+                  style={{width:"100%", padding:"6px 8px", borderRadius:6, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(0,0,0,0.2)", color:"#fff"}}
+                  value={pendingSlots[node.mac]||1}
+                  onChange={(e)=>updatePendingSlot(node.mac,e.target.value)}
+                >
+                  {[1,2,3,4].map((slot)=>(
+                    <option key={slot} value={slot}>{slot}</option>
+                  ))}
+                </select>
+                <SubtleButton
+                  onClick={()=>onConfirmPending?.(device.id,node.mac,(pendingNames[node.mac]||"").trim(),pendingSlots[node.mac]||1)}
+                  disabled={!pendingNames[node.mac] || !pendingSlots[node.mac]}
+                >
+                  Pairer
+                </SubtleButton>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="slavesWrap">
         <div className="slavesGrid">
-          {(slaves||[]).map((sl)=>(
+          {activeNodes.map((sl)=>(
             <SlaveCard key={sl.mac}
               masterId={device.id}
               mac={sl.mac}
@@ -393,6 +498,7 @@ export default function App(){
   const [groupAdvancedOpen, setGroupAdvancedOpen] = useState({ open:false, groupId:"" });
 
   const [busyMasters, setBusyMasters] = useState({});
+  const [pairingMasters, setPairingMasters] = useState({});
   function markBusy(masterId, ms = BUSY_GRACE_MS){
     setBusyMasters(o => ({ ...o, [masterId]: Date.now() + ms }));
     setTimeout(() => {
@@ -400,6 +506,14 @@ export default function App(){
         const n = { ...o }; delete n[masterId]; return n;
       });
     }, ms);
+  }
+  function markPairing(masterId, windowMs = 30000){
+    setPairingMasters(o => ({ ...o, [masterId]: Date.now() + windowMs }));
+    setTimeout(() => {
+      setPairingMasters(o => {
+        const n = { ...o }; delete n[masterId]; return n;
+        });
+    }, windowMs);
   }
 
   const chDevices=useRef(null); const chNodes=useRef(null); const chCmds=useRef(null); const chGroups=useRef(null);
@@ -638,13 +752,22 @@ export default function App(){
   // refetch combiné
   async function refetchNodesAndGroups(){
     const { data: rows, error: nErr } = await sb.from("nodes")
-      .select("master_id,slave_mac,friendly_name,pc_on,last_seen,is_favorite");
+      .select("master_id,slave_mac,friendly_name,pc_on,last_seen,is_favorite,status,rssi,slot");
     if(nErr){ addLog("Err nodes: "+nErr.message); return; }
 
     const map={};
     for(const r of rows||[]){
       if(!map[r.master_id]) map[r.master_id]=[];
-      map[r.master_id].push({ mac:r.slave_mac, friendly_name:r.friendly_name, pc_on:r.pc_on, last_seen:r.last_seen, is_favorite:r.is_favorite });
+      map[r.master_id].push({
+        mac:r.slave_mac,
+        friendly_name:r.friendly_name,
+        pc_on:r.pc_on,
+        last_seen:r.last_seen,
+        is_favorite:r.is_favorite,
+        status:r.status,
+        rssi:r.rssi,
+        slot:r.slot
+      });
     }
     setNodesByMaster(map);
 
@@ -734,9 +857,32 @@ export default function App(){
       window.alert("Erreur lors du détachement du slave: "+msg);
     }
   }
-  async function sendPairCmd(masterId){
+  async function confirmNodePairing(masterId, slaveMac, friendlyLabel, slot){
+    try{
+      const payload={
+        _master_id: masterId,
+        _mac: slaveMac,
+        _name: friendlyLabel || null,
+        _slot: slot || null,
+      };
+      const { error } = await sb.rpc("confirm_node_pairing", payload);
+      if(error){
+        addLog(`[pair] erreur confirm ${slaveMac}: ${error.message}`);
+        window.alert("Erreur lors de la confirmation: "+error.message);
+        return;
+      }
+      addLog(`[pair] confirmé: ${slaveMac} (slot ${slot||"?"})`);
+      await refetchNodesAndGroups();
+    }catch(e){
+      const msg=e?.message||e;
+      addLog(`[pair] erreur confirm ${slaveMac}: ${msg}`);
+      window.alert("Erreur lors de la confirmation: "+msg);
+    }
+  }
+  async function startPairingWindow(masterId, windowMs = 30000){
     if(!masterId) return;
-    await sendCmd(masterId,null,"MASTER_PAIR",{});
+    markPairing(masterId, windowMs);
+    await sendCmd(masterId,null,"SLV_IO",{mode:"PAIRING",window_ms:windowMs});
   }
   async function sendCmd(masterId,targetMac,action,payload={}){
     markBusy(masterId);
@@ -876,7 +1022,22 @@ export default function App(){
   },[groupOnListOpen,groupsData]);
 
   const allSlavesFlat = useMemo(()=>{
-    const arr=[]; for(const mid of Object.keys(nodesByMaster)) for(const sl of nodesByMaster[mid]) arr.push({mac:sl.mac,master_id:mid,friendly_name:sl.friendly_name,pc_on:sl.pc_on,is_favorite:sl.is_favorite});
+    const arr=[];
+    for(const mid of Object.keys(nodesByMaster)){
+      for(const sl of nodesByMaster[mid]){
+        if(sl.status==="pending") continue;
+        arr.push({
+          mac:sl.mac,
+          master_id:mid,
+          friendly_name:sl.friendly_name,
+          pc_on:sl.pc_on,
+          is_favorite:sl.is_favorite,
+          status:sl.status,
+          rssi:sl.rssi,
+          slot:sl.slot
+        });
+      }
+    }
     return arr;
   },[nodesByMaster]);
 
@@ -974,7 +1135,7 @@ export default function App(){
                   device={dev}
                   slaves={nodesByMaster[dev.id]||[]}
                   onOpenSettings={openMasterSettingsModal}
-                  onPairSlave={sendPairCmd}
+                  onStartPairing={startPairingWindow}
                   openSlaveInfoFor={openSlaveInfo}
                   onSlaveIO={(mid,mac)=>sendCmd(mid,mac,"SLV_IO",{pin:DEFAULT_IO_PIN,mode:"OUT",value:1})}
                   onSlaveReset={(mid,mac)=>sendCmd(mid,mac,"SLV_RESET",{})}
@@ -983,8 +1144,10 @@ export default function App(){
                     openSlaveAdvanced(mid,mac,label||lbl);
                   }}
                   onSetSlaveFavorite={setFavoriteSlave}
+                  onConfirmPending={confirmNodePairing}
                   slavePhases={slavePhases}
                   isBusy={!!busyMasters[dev.id]}
+                  isPairing={!!pairingMasters[dev.id]}
                 />
               ))
             )}
