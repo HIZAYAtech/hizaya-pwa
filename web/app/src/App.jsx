@@ -273,8 +273,8 @@ function MasterCard({
 }){
   const live = isBusy ? true : isLiveDevice(device);
   const statusLabel = isBusy ? "OCCUPÉ" : (live ? "EN LIGNE" : "HORS LIGNE");
-  const pendingNodes = useMemo(()=> (slaves||[]).filter(sl=>sl.status==="pending"), [slaves]);
-  const activeNodes = useMemo(()=> (slaves||[]).filter(sl=>sl.status!=="pending"), [slaves]);
+  const pendingNodes = useMemo(()=> (slaves||[]).filter(sl=>sl.status === "pending"), [slaves]);
+  const activeNodes = useMemo(()=> (slaves||[]).filter(sl=>sl.status === "paired"), [slaves]);
   const [pendingNames,setPendingNames]=useState({});
   const [pendingSlots,setPendingSlots]=useState({});
   const nodeMac = (node)=>node?.slave_mac || node?.mac || "";
