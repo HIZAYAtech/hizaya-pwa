@@ -882,7 +882,19 @@ export default function App(){
   async function startPairingWindow(masterId, windowMs = 30000){
     if(!masterId) return;
     markPairing(masterId, windowMs);
-    await sendCmd(masterId,null,"SLV_IO",{mode:"PAIRING",window_ms:windowMs});
+    markBusy(masterId, windowMs);
+    const { error } = await sb.from("commands").upsert({
+      master_id: masterId,
+      target_mac: null,
+      action: "PAIRING",
+      payload: { window_ms: windowMs },
+      status: "queued",
+    },{ onConflict:"master_id,target_mac" });
+    if(error){
+      addLog("[cmd] pairing err: "+error.message);
+      return;
+    }
+    addLog(`[cmd] PAIRING → ${masterId}`);
   }
   async function sendCmd(masterId,targetMac,action,payload={}){
     markBusy(masterId);
