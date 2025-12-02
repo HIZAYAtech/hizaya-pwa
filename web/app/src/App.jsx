@@ -244,8 +244,8 @@ function SlaveCard({masterId,mac,friendlyName,pcOn,lastSeen,isFavorite,onSetFavo
             {isFavorite && <span className="favStar">★</span>}
           </div>
         </div>
-        <button className="favBtn" onClick={onSetFavorite}>
-          {isFavorite ? "Favori" : "Définir favori"}
+        <button className="favBtn" onClick={()=>onSetFavorite?.(isFavorite)}>
+          {isFavorite ? "Retirer favori" : "Définir favori"}
         </button>
       </div>
       <div className="slaveSub">{statusLabel}</div>
@@ -412,7 +412,7 @@ function MasterCard({
               onInfoClick={()=>openSlaveInfoFor(device.id,sl.mac)}
               onIO={()=>onSlaveIO(device.id,sl.mac)}
               onReset={()=>onSlaveReset(device.id,sl.mac)}
-              onSetFavorite={()=>onSetSlaveFavorite?.(device.id,sl.mac,sl.friendly_name||sl.mac)}
+              onSetFavorite={(currentlyFavorite)=>onSetSlaveFavorite?.(device.id,sl.mac,sl.friendly_name||sl.mac,currentlyFavorite)}
               onMore={()=>{
                 const label=(slaves||[]).find(s=>s.mac===sl.mac)?.friendly_name || sl.mac;
                 onSlaveMore(device.id, sl.mac, label);
@@ -839,11 +839,19 @@ export default function App(){
     if(error) window.alert("Erreur rename slave: "+error.message);
     else { addLog(`Slave ${mac} renommé en ${newName}`); await refetchNodesAndGroups(); }
   }
-  async function setFavoriteSlave(masterId, slaveMac, friendlyLabel){
+  async function setFavoriteSlave(masterId, slaveMac, friendlyLabel, currentlyFavorite=false){
     try{
-      const { error } = await sb.rpc("set_favorite_slave",{ p_master_id: masterId, p_slave_mac: slaveMac });
+      const payload={
+        p_master_id: masterId,
+        p_slave_mac: currentlyFavorite ? null : slaveMac
+      };
+      const { error } = await sb.rpc("set_favorite_slave", payload);
       if(error){ addLog(`[fav] erreur: ${error.message}`); return; }
-      addLog(`[fav] ${(friendlyLabel||slaveMac)} devient favori`);
+      if(currentlyFavorite){
+        addLog(`[fav] ${friendlyLabel||slaveMac} retiré des favoris`);
+      }else{
+        addLog(`[fav] ${(friendlyLabel||slaveMac)} devient favori`);
+      }
       await refetchNodesAndGroups();
     }catch(e){
       addLog(`[fav] erreur: ${e?.message||e}`);
