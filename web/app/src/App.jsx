@@ -112,12 +112,16 @@ function GroupOnListModal({open,onClose,members}){
   return(
     <ModalShell open={open} onClose={onClose} title="Machines allumées">
       {(!members||!members.length)&&<div className="modalEmpty">Aucune machine allumée</div>}
-      {(members||[]).map((m)=>(
-        <div key={m.mac} className="modalInfoRow">
-          <span className="modalInfoKey">{m.friendly_name||m.mac}</span>
-          <span className="modalInfoVal">{m.pc_on?"Allumé":"Éteint"}</span>
-        </div>
-      ))}
+      {(members||[]).map((m)=>{
+        const live = isSlaveLive(m.last_seen);
+        const label = live ? (m.pc_on ? "Allumé" : "Éteint") : "État inconnu (offline)";
+        return(
+          <div key={m.mac} className="modalInfoRow">
+            <span className="modalInfoKey">{m.friendly_name||m.mac}</span>
+            <span className="modalInfoVal">{label}</span>
+          </div>
+        );
+      })}
     </ModalShell>
   );
 }
@@ -806,7 +810,7 @@ export default function App(){
     }
     const final=(gs||[]).map((g)=>{
       const mems=membersByGroup[g.id]||[];
-      const onCount=mems.filter((x)=>x.pc_on).length;
+      const onCount=mems.filter((x)=>isSlaveLive(x.last_seen) && x.pc_on).length;
       return { id:g.id, name:g.name, statsOn:onCount, statsTotal:mems.length, members:mems };
     });
     setGroupsData(final);
