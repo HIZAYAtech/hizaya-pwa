@@ -764,11 +764,12 @@ export default function App(){
     if(nErr){ addLog("Err nodes: "+nErr.message); return; }
 
     const map={};
+    const nodesByMac={};
     for(const r of rows||[]){
-      if(!map[r.master_id]) map[r.master_id]=[];
-      map[r.master_id].push({
+      const nodeObj={
         mac:r.slave_mac,
         slave_mac:r.slave_mac,
+        master_id:r.master_id,
         friendly_name:r.friendly_name,
         pc_on:r.pc_on,
         last_seen:r.last_seen,
@@ -776,7 +777,10 @@ export default function App(){
         status:r.status,
         rssi:r.rssi,
         slot:r.slot
-      });
+      };
+      if(!map[r.master_id]) map[r.master_id]=[];
+      map[r.master_id].push(nodeObj);
+      nodesByMac[r.slave_mac]=nodeObj;
     }
     setNodesByMaster(map);
 
@@ -785,21 +789,19 @@ export default function App(){
     const { data: membs, error: mErr } = await sb.from("group_members").select("group_id,slave_mac,master_id");
     if(mErr){ addLog("Err group_members: "+mErr.message); return; }
 
-    const friendlyByMac = {};
-    const onByMac = {};
-    for (const r of rows||[]){
-      friendlyByMac[r.slave_mac] = r.friendly_name || r.slave_mac;
-      onByMac[r.slave_mac] = !!r.pc_on;
-    }
-
     const membersByGroup={};
     for(const gm of membs||[]){
       if(!membersByGroup[gm.group_id]) membersByGroup[gm.group_id]=[];
+      const linkedNode = nodesByMac[gm.slave_mac];
       membersByGroup[gm.group_id].push({
         mac:gm.slave_mac,
-        master_id: gm.master_id || null,
-        friendly_name: friendlyByMac[gm.slave_mac] || gm.slave_mac,
-        pc_on: !!onByMac[gm.slave_mac]
+        master_id: gm.master_id || linkedNode?.master_id || null,
+        friendly_name: linkedNode?.friendly_name || gm.slave_mac,
+        pc_on: linkedNode ? !!linkedNode.pc_on : false,
+        status: linkedNode?.status || "unknown",
+        last_seen: linkedNode?.last_seen || null,
+        rssi: linkedNode?.rssi ?? null,
+        slot: linkedNode?.slot ?? null,
       });
     }
     const final=(gs||[]).map((g)=>{
