@@ -7,6 +7,8 @@ const DEFAULT_IO_PIN = 26;
 const REFETCH_DEBOUNCE_MS = 1200;
 const BUSY_GRACE_MS = 10000;        // fenêtre "occupé" après action pour l'UI
 const SLAVE_TTL_MS = 60000;         // tolérance d'affichage état slave
+const MAX_SLOT_COUNT = 18;
+const SLOT_OPTIONS = Array.from({ length: MAX_SLOT_COUNT }, (_, i) => i + 1);
 const MACHINE_SORT_OPTIONS = [
   { value: "slot", label: "Par slot" },
   { value: "name", label: "Nom" },
@@ -345,7 +347,6 @@ function MasterCard({
   useEffect(()=>{
     setPendingSlots((prev)=>{
       const usedSlots = new Set(activeNodes.map(n=>Number(n.slot)).filter((s)=>Number.isFinite(s)));
-      const slotOptions=[1,2,3,4];
       const result={};
       const taken=new Set(usedSlots);
       pendingNodes.forEach((node)=>{
@@ -357,7 +358,7 @@ function MasterCard({
           desired=null;
         }
         if(!desired){
-          desired = slotOptions.find((s)=>!taken.has(s)) || slotOptions[0];
+          desired = SLOT_OPTIONS.find((s)=>!taken.has(s)) || SLOT_OPTIONS[0];
         }
         taken.add(desired);
         result[key]=desired;
@@ -440,7 +441,7 @@ function MasterCard({
                   value={pendingSlots[nodeMac(node)]||1}
                   onChange={(e)=>updatePendingSlot(nodeMac(node),e.target.value)}
                 >
-                  {[1,2,3,4].map((slot)=>(
+                  {SLOT_OPTIONS.map((slot)=>(
                     <option key={slot} value={slot}>{slot}</option>
                   ))}
                 </select>
