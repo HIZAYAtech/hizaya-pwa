@@ -7,6 +7,11 @@ const DEFAULT_IO_PIN = 26;
 const REFETCH_DEBOUNCE_MS = 1200;
 const BUSY_GRACE_MS = 10000;        // fenêtre "occupé" après action pour l'UI
 const SLAVE_TTL_MS = 60000;         // tolérance d'affichage état slave
+const MACHINE_SORT_OPTIONS = [
+  { value: "slot", label: "Par slot" },
+  { value: "name", label: "Nom" },
+  { value: "recent", label: "Dernier contact" },
+];
 
 /* ====== Helpers ====== */
 function fmtTS(s){ if(!s) return "—"; const d = new Date(s); return d.toLocaleString(); }
@@ -18,6 +23,32 @@ function matchesMachineQuery(node, query){
   const label=String(node?.friendly_name||"").toLowerCase();
   const mac=String(node?.slave_mac||node?.mac||"").toLowerCase();
   return label.includes(q) || mac.includes(q);
+}
+function sortMachines(list, mode="slot"){
+  const arr=[...(list||[])];
+  const labelOf=(node)=>(node?.friendly_name||node?.mac||node?.slave_mac||"").toLowerCase();
+  const slotOf=(node)=>{
+    const val=Number(node?.slot);
+    if(Number.isFinite(val)) return val;
+    return 999;
+  };
+  switch(mode){
+    case "name":
+      arr.sort((a,b)=>labelOf(a).localeCompare(labelOf(b),"fr",{sensitivity:"base"}));
+      break;
+    case "recent":
+      arr.sort((a,b)=>{
+        const ta=a?.last_seen?new Date(a.last_seen).getTime():0;
+        const tb=b?.last_seen?new Date(b.last_seen).getTime():0;
+        return tb-ta || labelOf(a).localeCompare(labelOf(b),"fr",{sensitivity:"base"});
+      });
+      break;
+    case "slot":
+    default:
+      arr.sort((a,b)=>slotOf(a)-slotOf(b) || labelOf(a).localeCompare(labelOf(b),"fr",{sensitivity:"base"}));
+      break;
+  }
+  return arr;
 }
 
 /* ====== UI bits ====== */
@@ -289,7 +320,8 @@ function MasterCard({
   isBusy,
   isPairing,
   searchQuery,
-  masterMatchesSearch
+  masterMatchesSearch,
+  machineSortMode
 }){
   const live = isBusy ? true : isLiveDevice(device);
   const statusLabel = isBusy ? "OCCUPÉ" : (live ? "EN LIGNE" : "HORS LIGNE");
@@ -358,6 +390,7 @@ function MasterCard({
   };
   const filteredPendingNodes = filterNodes(pendingNodes);
   const filteredActiveNodes = filterNodes(activeNodes);
+  const sortedActiveNodes = useMemo(()=>sortMachines(filteredActiveNodes, machineSortMode), [filteredActiveNodes, machineSortMode]);
   const noSearchMatches = !!(normalizedSearch && !masterMatchesSearch && !filteredPendingNodes.length && !filteredActiveNodes.length);
 
   return(
@@ -434,7 +467,7 @@ function MasterCard({
       )}
       <div className="slavesWrap">
         <div className="slavesGrid">
-          {filteredActiveNodes.map((sl)=>(
+          {sortedActiveNodes.map((sl)=>(
             <SlaveCard key={sl.mac}
               masterId={device.id}
               mac={sl.mac}
@@ -539,6 +572,7 @@ export default function App(){
   const [slaveAdvancedOpen, setSlaveAdvancedOpen] = useState({ open:false, masterId:"", mac:"", label:"" });
   const [groupAdvancedOpen, setGroupAdvancedOpen] = useState({ open:false, groupId:"" });
   const [machineSearch,setMachineSearch]=useState("");
+  const [machineSortMode,setMachineSortMode]=useState("slot");
 
   const [busyMasters, setBusyMasters] = useState({});
   const [pairingMasters, setPairingMasters] = useState({});
@@ -1212,6 +1246,19 @@ export default function App(){
                     <button className="clearSearchBtn" onClick={()=>setMachineSearch("")} title="Effacer la recherche">✕</button>
                   )}
                 </div>
+                <div className="sortRow">
+                  <label className="sortLabel" htmlFor="machineSortSelect">Tri :</label>
+                  <select
+                    id="machineSortSelect"
+                    className="sortSelect"
+                    value={machineSortMode}
+                    onChange={(e)=>setMachineSortMode(e.target.value)}
+                  >
+                    {MACHINE_SORT_OPTIONS.map((opt)=>(
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
                 <SubtleButton onClick={askAddMaster}>+ Contrôleur</SubtleButton>
               </div>
             </div>
@@ -1240,6 +1287,7 @@ export default function App(){
                   isPairing={!!pairingMasters[device.id]}
                   searchQuery={normalizedMachineSearch}
                   masterMatchesSearch={masterMatchesSearch}
+                  machineSortMode={machineSortMode}
                 />
               ))
             )}
