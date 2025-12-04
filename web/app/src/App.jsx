@@ -74,32 +74,32 @@ function SlaveInfoModal({open,onClose,slaveMac,masterId,currentName,onRename,pcO
   const [nameDraft,setNameDraft]=useState(currentName||"");
   useEffect(()=>{ setNameDraft(currentName||""); },[currentName,slaveMac,open]);
   return(
-    <ModalShell open={open} onClose={onClose} title="Détails du Slave">
+    <ModalShell open={open} onClose={onClose} title="Détails de la machine">
       <div className="modalSection">
-        <label className="modalLabel">Nom du slave</label>
+        <label className="modalLabel">Nom de la machine</label>
         <input className="modalInput" value={nameDraft} onChange={(e)=>setNameDraft(e.target.value)} placeholder="Nom lisible…" />
         <button className="subtleBtn" style={{marginTop:8}} onClick={()=>onRename(nameDraft)}>Enregistrer</button>
       </div>
       <div className="modalSection">
         <div className="modalInfoRow"><span className="modalInfoKey">MAC :</span><span className="modalInfoVal">{slaveMac||"—"}</span></div>
-        <div className="modalInfoRow"><span className="modalInfoKey">Master :</span><span className="modalInfoVal">{masterId||"—"}</span></div>
+        <div className="modalInfoRow"><span className="modalInfoKey">Contrôleur :</span><span className="modalInfoVal">{masterId||"—"}</span></div>
         <div className="modalInfoRow"><span className="modalInfoKey">PC :</span><span className="modalInfoVal">{pcOn?"allumé":"éteint"}</span></div>
       </div>
       {onDetach && (
         <div className="modalSection" style={{ marginTop:16, borderTop:"1px solid rgba(255,255,255,0.1)", paddingTop:12 }}>
-          <div className="modalLabel" style={{ color:"#f88" }}>Détacher ce slave</div>
-          <p className="smallText">Le slave sera retiré de ce master et des groupes. Il faudra le pairer à nouveau pour le réutiliser.</p>
+          <div className="modalLabel" style={{ color:"#f88" }}>Détacher cette machine</div>
+          <p className="smallText">La machine sera retirée de ce contrôleur et des groupes. Il faudra la pairer à nouveau pour la réutiliser.</p>
           <button
             className="subtleBtn"
             style={{ background:"rgba(255,0,0,0.1)", borderColor:"rgba(255,0,0,0.4)", marginTop:8 }}
             onClick={()=>{
-              if(window.confirm("Supprimer/détacher ce slave de ce master ?")){
+              if(window.confirm("Supprimer/détacher cette machine de ce contrôleur ?")){
                 onDetach();
                 onClose();
               }
             }}
           >
-            Supprimer ce slave
+            Supprimer cette machine
           </button>
         </div>
       )}
@@ -358,7 +358,7 @@ function MasterCard({
       )}
       {!!pendingNodes.length && (
         <div style={{marginTop:16}}>
-          <div className="sectionSub" style={{marginBottom:8}}>Slaves en attente</div>
+          <div className="sectionSub" style={{marginBottom:8}}>Machines en attente</div>
           <div style={{display:"grid", gap:8}}>
             <div style={{display:"grid", gridTemplateColumns:"1.4fr 0.6fr 0.8fr 1.2fr 0.6fr 0.8fr", gap:8, fontSize:12, opacity:0.7}}>
               <span>MAC</span>
@@ -825,12 +825,12 @@ export default function App(){
   }
 
   async function renameMaster(id){
-    const newName=window.prompt("Nouveau nom du master ?",""); if(!newName) return;
+    const newName=window.prompt("Nouveau nom du contrôleur ?",""); if(!newName) return;
     const { error } = await sb.from("devices").update({name:newName}).eq("id",id);
-    if(error) window.alert(error.message); else { addLog(`Master ${id} renommé en ${newName}`); await refetchDevicesOnly(); }
+    if(error) window.alert(error.message); else { addLog(`Contrôleur ${id} renommé en ${newName}`); await refetchDevicesOnly(); }
   }
   async function deleteMaster(id){
-    if(!window.confirm(`Supprimer le master ${id} ?`)) return;
+    if(!window.confirm(`Supprimer le contrôleur ${id} ?`)) return;
     const { data: sessionRes } = await sb.auth.getSession();
     const token=sessionRes?.session?.access_token; if(!token){ window.alert("Non connecté."); return; }
     const r=await fetch(`${sb.supabaseUrl}/functions/v1/release_and_delete`,{
@@ -839,13 +839,13 @@ export default function App(){
       body:JSON.stringify({ master_id:id })
     });
     if(!r.ok){ const txt=await r.text(); addLog("❌ Suppression : "+txt); }
-    else { addLog(`MASTER supprimé : ${id}`); }
+    else { addLog(`Contrôleur supprimé : ${id}`); }
     await fullReload();
   }
   async function doRenameSlave(masterId,mac,newName){
     const { error } = await sb.from("nodes").update({friendly_name:newName}).eq("master_id",masterId).eq("slave_mac",mac);
-    if(error) window.alert("Erreur rename slave: "+error.message);
-    else { addLog(`Slave ${mac} renommé en ${newName}`); await refetchNodesAndGroups(); }
+    if(error) window.alert("Erreur renommage machine: "+error.message);
+    else { addLog(`Machine ${mac} renommée en ${newName}`); await refetchNodesAndGroups(); }
   }
   async function setFavoriteSlave(masterId, slaveMac, friendlyLabel, currentlyFavorite=false){
     try{
@@ -870,16 +870,16 @@ export default function App(){
     try{
       const { error } = await sb.rpc("detach_slave",{ p_master_id: masterId, p_slave_mac: slaveMac });
       if(error){
-        addLog(`[slave] erreur détachement ${slaveMac}: ${error.message}`);
-        window.alert("Erreur lors du détachement du slave: "+error.message);
+        addLog(`[machine] erreur détachement ${slaveMac}: ${error.message}`);
+        window.alert("Erreur lors du détachement de la machine: "+error.message);
         return;
       }
-      addLog(`[slave] détaché: ${slaveMac}`);
+      addLog(`[machine] détachée: ${slaveMac}`);
       await refetchNodesAndGroups();
     }catch(e){
       const msg=e?.message||e;
-      addLog(`[slave] erreur détachement ${slaveMac}: ${msg}`);
-      window.alert("Erreur lors du détachement du slave: "+msg);
+      addLog(`[machine] erreur détachement ${slaveMac}: ${msg}`);
+      window.alert("Erreur lors du détachement de la machine: "+msg);
     }
   }
   async function confirmNodePairing(masterId, slaveMac, friendlyLabel, slot){
@@ -892,16 +892,16 @@ export default function App(){
       };
       const { error } = await sb.rpc("confirm_node_pairing", payload);
       if(error){
-        addLog(`[pair] erreur confirm ${slaveMac}: ${error.message}`);
-        window.alert("Erreur lors de la confirmation: "+error.message);
+        addLog(`[pair] erreur confirmation ${slaveMac}: ${error.message}`);
+        window.alert("Erreur lors de la confirmation de la machine: "+error.message);
         return;
       }
-      addLog(`[pair] confirmé: ${slaveMac} (slot ${slot||"?"})`);
+      addLog(`[pair] confirmée: ${slaveMac} (slot ${slot||"?"})`);
       await refetchNodesAndGroups();
     }catch(e){
       const msg=e?.message||e;
-      addLog(`[pair] erreur confirm ${slaveMac}: ${msg}`);
-      window.alert("Erreur lors de la confirmation: "+msg);
+      addLog(`[pair] erreur confirmation ${slaveMac}: ${msg}`);
+      window.alert("Erreur lors de la confirmation de la machine: "+msg);
     }
   }
   async function startPairingWindow(masterId, windowMs = 30000){
@@ -980,7 +980,7 @@ export default function App(){
     if(!r.ok){ const txt=await r.text(); window.alert("Erreur pair-code: "+txt); return; }
     const { code, expires_at } = await r.json();
     const end=new Date(expires_at).getTime(); const ttlSec=Math.floor((end-Date.now())/1000);
-    window.alert(`Code: ${String(code).padStart(6,"0")} (expire dans ~${ttlSec}s)\nSaisis ce code dans le portail Wi‑Fi du MASTER.`);
+    window.alert(`Code: ${String(code).padStart(6,"0")} (expire dans ~${ttlSec}s)\nSaisis ce code dans le portail Wi‑Fi du contrôleur.`);
   }
   async function askAddGroup(){
     const gname=window.prompt("Nom du nouveau groupe ?",""); if(!gname) return;
@@ -1153,19 +1153,19 @@ export default function App(){
             )}
           </div>
 
-          {/* Masters */}
+          {/* Contrôleurs */}
           <div className="mastersSection">
             <div className="sectionTitleRow" style={{alignItems:"flex-start", justifyContent:"flex-start", paddingLeft:24, paddingRight:12}}>
               <div style={{textAlign:"left", marginRight:"auto"}}>
-                <div className="sectionTitle">Masters</div>
-                <div className="sectionSub">Chaque master pilote ses slaves</div>
+                <div className="sectionTitle">Contrôleurs</div>
+                <div className="sectionSub">Chaque contrôleur pilote ses machines</div>
               </div>
               <div style={{marginLeft:"auto"}}>
-                <SubtleButton onClick={askAddMaster}>+ MASTER</SubtleButton>
+                <SubtleButton onClick={askAddMaster}>+ Contrôleur</SubtleButton>
               </div>
             </div>
             {!devices.length ? (
-              <div className="noGroupsNote smallText">Aucun master</div>
+              <div className="noGroupsNote smallText">Aucun contrôleur</div>
             ):(
               devices.map((dev)=>(
                 <MasterCard key={dev.id}
