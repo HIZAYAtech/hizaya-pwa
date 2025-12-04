@@ -12,6 +12,13 @@ const SLAVE_TTL_MS = 60000;         // tolérance d'affichage état slave
 function fmtTS(s){ if(!s) return "—"; const d = new Date(s); return d.toLocaleString(); }
 function isLiveDevice(dev){ if(!dev?.last_seen) return false; return Date.now()-new Date(dev.last_seen).getTime() < LIVE_TTL_MS; }
 function isSlaveLive(lastSeen){ if(!lastSeen) return false; return Date.now()-new Date(lastSeen).getTime() < SLAVE_TTL_MS; }
+function matchesMachineQuery(node, query){
+  const q=String(query||"").trim().toLowerCase();
+  if(!q) return true;
+  const label=String(node?.friendly_name||"").toLowerCase();
+  const mac=String(node?.slave_mac||node?.mac||"").toLowerCase();
+  return label.includes(q) || mac.includes(q);
+}
 
 /* ====== UI bits ====== */
 function SubtleButton({children,onClick,disabled,style,className,size="md"}){
@@ -275,7 +282,9 @@ function MasterCard({
   onConfirmPending,
   slavePhases,
   isBusy,
-  isPairing
+  isPairing,
+  searchQuery,
+  masterMatchesSearch
 }){
   const live = isBusy ? true : isLiveDevice(device);
   const statusLabel = isBusy ? "OCCUPÉ" : (live ? "EN LIGNE" : "HORS LIGNE");
@@ -337,6 +346,15 @@ function MasterCard({
     return `${day}j`;
   };
 
+  const normalizedSearch=String(searchQuery||"").trim().toLowerCase();
+  const filterNodes = (list)=>{
+    if(!normalizedSearch || masterMatchesSearch) return list;
+    return list.filter((node)=>matchesMachineQuery(node, normalizedSearch));
+  };
+  const filteredPendingNodes = filterNodes(pendingNodes);
+  const filteredActiveNodes = filterNodes(activeNodes);
+  const noSearchMatches = !!(normalizedSearch && !masterMatchesSearch && !filteredPendingNodes.length && !filteredActiveNodes.length);
+
   return(
     <section className="masterCard">
       <div className="masterTopRow">
@@ -356,7 +374,7 @@ function MasterCard({
           Pairing en cours… la fenêtre se fermera automatiquement dans quelques secondes.
         </div>
       )}
-      {!!pendingNodes.length && (
+      {!!filteredPendingNodes.length && (
         <div style={{marginTop:16}}>
           <div className="sectionSub" style={{marginBottom:8}}>Machines en attente</div>
           <div style={{display:"grid", gap:8}}>
@@ -368,7 +386,7 @@ function MasterCard({
               <span>Slot</span>
               <span>Action</span>
             </div>
-            {pendingNodes.map((node)=>(
+            {filteredPendingNodes.map((node)=>(
               <div key={nodeMac(node)} style={{display:"grid", gridTemplateColumns:"1.4fr 0.6fr 0.8fr 1.2fr 0.6fr 0.8fr", gap:8, alignItems:"center"}}>
                 <span style={{fontFamily:"monospace"}}>{node.slave_mac || node.mac}</span>
                 <span>{node.rssi ?? "?"}</span>
@@ -404,9 +422,14 @@ function MasterCard({
           </div>
         </div>
       )}
+      {noSearchMatches && (
+        <div className="noMachinesNote smallText" style={{marginTop:12}}>
+          Aucune machine de ce contrôleur ne correspond à la recherche.
+        </div>
+      )}
       <div className="slavesWrap">
         <div className="slavesGrid">
-          {activeNodes.map((sl)=>(
+          {filteredActiveNodes.map((sl)=>(
             <SlaveCard key={sl.mac}
               masterId={device.id}
               mac={sl.mac}
@@ -510,6 +533,7 @@ export default function App(){
 
   const [slaveAdvancedOpen, setSlaveAdvancedOpen] = useState({ open:false, masterId:"", mac:"", label:"" });
   const [groupAdvancedOpen, setGroupAdvancedOpen] = useState({ open:false, groupId:"" });
+  const [machineSearch,setMachineSearch]=useState("");
 
   const [busyMasters, setBusyMasters] = useState({});
   const [pairingMasters, setPairingMasters] = useState({});
@@ -1058,6 +1082,17 @@ export default function App(){
     return groupsData.find((g)=>g.id===groupOnListOpen.groupId)||null;
   },[groupOnListOpen,groupsData]);
 
+  const normalizedMachineSearch = machineSearch.trim().toLowerCase();
+  const deviceCards = useMemo(()=>{
+    return devices.map((dev)=>{
+      const nodes = nodesByMaster[dev.id]||[];
+      const masterMatches = normalizedMachineSearch ? (`${dev.name||""} ${dev.id}`).toLowerCase().includes(normalizedMachineSearch) : true;
+      const machineMatches = normalizedMachineSearch ? nodes.some((node)=>matchesMachineQuery(node, normalizedMachineSearch)) : true;
+      const visible = masterMatches || machineMatches;
+      return { device:dev, masterMatchesSearch: masterMatches, visible };
+    }).filter((entry)=>entry.visible);
+  },[devices,nodesByMaster,normalizedMachineSearch]);
+
   const allSlavesFlat = useMemo(()=>{
     const arr=[];
     for(const mid of Object.keys(nodesByMaster)){
@@ -1160,17 +1195,30 @@ export default function App(){
                 <div className="sectionTitle">Contrôleurs</div>
                 <div className="sectionSub">Chaque contrôleur pilote ses machines</div>
               </div>
-              <div style={{marginLeft:"auto"}}>
+              <div style={{marginLeft:"auto", display:"flex", flexDirection:"column", gap:8}}>
+                <div className="searchRow">
+                  <input
+                    className="searchInput"
+                    value={machineSearch}
+                    onChange={(e)=>setMachineSearch(e.target.value)}
+                    placeholder="Rechercher une machine ou un contrôleur…"
+                  />
+                  {machineSearch && (
+                    <button className="clearSearchBtn" onClick={()=>setMachineSearch("")} title="Effacer la recherche">✕</button>
+                  )}
+                </div>
                 <SubtleButton onClick={askAddMaster}>+ Contrôleur</SubtleButton>
               </div>
             </div>
-            {!devices.length ? (
-              <div className="noGroupsNote smallText">Aucun contrôleur</div>
+            {!deviceCards.length ? (
+              <div className="noGroupsNote smallText">
+                {normalizedMachineSearch ? "Aucune machine ne correspond à cette recherche" : "Aucun contrôleur"}
+              </div>
             ):(
-              devices.map((dev)=>(
-                <MasterCard key={dev.id}
-                  device={dev}
-                  slaves={nodesByMaster[dev.id]||[]}
+              deviceCards.map(({device, masterMatchesSearch})=>(
+                <MasterCard key={device.id}
+                  device={device}
+                  slaves={nodesByMaster[device.id]||[]}
                   onOpenSettings={openMasterSettingsModal}
                   onStartPairing={startPairingWindow}
                   openSlaveInfoFor={openSlaveInfo}
@@ -1183,8 +1231,10 @@ export default function App(){
                   onSetSlaveFavorite={setFavoriteSlave}
                   onConfirmPending={confirmNodePairing}
                   slavePhases={slavePhases}
-                  isBusy={!!busyMasters[dev.id]}
-                  isPairing={!!pairingMasters[dev.id]}
+                  isBusy={!!busyMasters[device.id]}
+                  isPairing={!!pairingMasters[device.id]}
+                  searchQuery={normalizedMachineSearch}
+                  masterMatchesSearch={masterMatchesSearch}
                 />
               ))
             )}
