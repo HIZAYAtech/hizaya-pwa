@@ -243,13 +243,15 @@ function SlaveCard({masterId,mac,friendlyName,pcOn,lastSeen,isFavorite,onSetFavo
       <div className="slaveHeaderRow">
         <div className="slaveHeaderLeft">
           <div className="infoChip" onClick={onInfoClick} title="Infos / renommer">i</div>
-          <div className="slaveNameMain">
-            {friendlyName||mac}
-            {isFavorite && <span className="favStar">★</span>}
-          </div>
+          <div className="slaveNameMain">{friendlyName||mac}</div>
         </div>
-        <button className="favBtn" onClick={()=>onSetFavorite?.(isFavorite)}>
-          {isFavorite ? "Retirer favori" : "Définir favori"}
+        <button
+          className={`favStarBtn ${isFavorite ? "favStarOn" : "favStarOff"}`}
+          onClick={()=>onSetFavorite?.(isFavorite)}
+          aria-label={isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+          title={isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+        >
+          ★
         </button>
       </div>
       <div className="slaveSub">{statusLabel}</div>
