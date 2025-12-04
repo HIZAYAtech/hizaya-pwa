@@ -77,9 +77,13 @@ function ModalShell({open,onClose,children,title}){ if(!open) return null; retur
 ); }
 
 /* --- Modale infos slave --- */
-function SlaveInfoModal({open,onClose,slaveMac,masterId,currentName,onRename,pcOn,onDetach}){
+function SlaveInfoModal({open,onClose,slaveMac,masterId,currentName,onRename,pcOn,lastSeen,onDetach}){
   const [nameDraft,setNameDraft]=useState(currentName||"");
   useEffect(()=>{ setNameDraft(currentName||""); },[currentName,slaveMac,open]);
+  const statusLabel = isSlaveLive(lastSeen)
+    ? (pcOn ? "Ordinateur allumé" : "Ordinateur éteint")
+    : "État inconnu (offline)";
+  const lastSeenLabel = lastSeen ? fmtTS(lastSeen) : "jamais";
   return(
     <ModalShell open={open} onClose={onClose} title="Détails de la machine">
       <div className="modalSection">
@@ -90,7 +94,8 @@ function SlaveInfoModal({open,onClose,slaveMac,masterId,currentName,onRename,pcO
       <div className="modalSection">
         <div className="modalInfoRow"><span className="modalInfoKey">MAC :</span><span className="modalInfoVal">{slaveMac||"—"}</span></div>
         <div className="modalInfoRow"><span className="modalInfoKey">Contrôleur :</span><span className="modalInfoVal">{masterId||"—"}</span></div>
-        <div className="modalInfoRow"><span className="modalInfoKey">PC :</span><span className="modalInfoVal">{pcOn?"allumé":"éteint"}</span></div>
+        <div className="modalInfoRow"><span className="modalInfoKey">Statut :</span><span className="modalInfoVal">{statusLabel}</span></div>
+        <div className="modalInfoRow"><span className="modalInfoKey">Dernier contact :</span><span className="modalInfoVal">{lastSeenLabel}</span></div>
       </div>
       {onDetach && (
         <div className="modalSection" style={{ marginTop:16, borderTop:"1px solid rgba(255,255,255,0.1)", paddingTop:12 }}>
@@ -1261,6 +1266,7 @@ export default function App(){
         masterId={slaveInfoOpen.masterId}
         currentName={currentSlaveInfo?.friendly_name || slaveInfoOpen.mac}
         pcOn={!!currentSlaveInfo?.pc_on}
+        lastSeen={currentSlaveInfo?.last_seen}
         onRename={(newName)=>{ doRenameSlave(slaveInfoOpen.masterId,slaveInfoOpen.mac,newName); closeSlaveInfo(); }}
         onDetach={()=>{
           detachSlave(slaveInfoOpen.masterId, slaveInfoOpen.mac);
