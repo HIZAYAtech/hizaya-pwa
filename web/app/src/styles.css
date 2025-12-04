@@ -103,7 +103,7 @@ html,body,#root{ margin:0; padding:0; background:var(--bg-page); color:var(--tex
   width:32px; height:32px; display:flex; align-items:center; justify-content:center; transition:color var(--transition-fast), background var(--transition-fast), transform var(--transition-fast); }
 .favStarBtn:hover{ background:rgba(0,0,0,0.25); }
 .favStarBtn:active{ transform:scale(0.9); }
-.favStarOn{ color:#facc15; text-shadow:0 0 6px rgba(250,204,21,0.7); }
+.favStarOn{ color:#fff; text-shadow:none; }
 .favStarOff{ color:rgba(255,255,255,0.35); }
 
 /* Action bar */
