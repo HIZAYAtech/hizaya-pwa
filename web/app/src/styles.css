@@ -74,6 +74,10 @@ html,body,#root{ margin:0; padding:0; background:var(--bg-page); color:var(--tex
 .searchInput:focus{ border-color:rgba(255,255,255,0.45); }
 .clearSearchBtn{ width:32px; height:32px; border-radius:9999px; border:1px solid rgba(255,255,255,0.25); background:rgba(0,0,0,0.4); color:var(--text-main); cursor:pointer; }
 .clearSearchBtn:hover{ background:rgba(0,0,0,0.55); }
+.sortRow{ display:flex; align-items:center; gap:8px; }
+.sortLabel{ font-size:12px; color:var(--text-soft); }
+.sortSelect{ background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.25); border-radius:9999px; color:var(--text-main); font-size:12px; padding:6px 24px 6px 12px; appearance:none; }
+.sortSelect:focus{ border-color:rgba(255,255,255,0.45); outline:none; }
 .noMachinesNote{ color:var(--text-soft); text-align:left; }
 
 /* Masters */
